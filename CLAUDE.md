@@ -4,7 +4,7 @@ Portfolio project (target: Twine Security, Backend Engineer – Agentic AI). Bef
 
 ## Status
 - Week 1 done: synthetic org generator, read-only evidence tools, naive baseline (breaks 6 of 10 risky cases). 7 tests pass.
-- Week 2 in progress (plan: `docs/week-2.html`). PR 2.1 (tooling + Pydantic models) merged. PR 2.2 (`EvidenceSource`, `SyntheticSource`) merged; review fixes in a follow-up: lists paged with `next_offset` instead of cut, usage window clamped to >= 90 days, consumer rows carry `target`. 37 tests. Next: `LLMClient` + `FakeLLM`, the investigator loop, the bench.
+- Week 2 in progress (plan: `docs/week-2.html`). PR 2.1 (models) and PR 2.2 (`EvidenceSource`, `SyntheticSource`) merged, with review fixes (#7): lists paged with `next_offset` instead of cut, usage window clamped to >= 90 days, consumer rows carry `target`. PR 2.3 (`src/cia/llm.py`: `LLMClient`, provider-neutral messages, `FakeLLM`, `BedrockClient` Converse mapping) in review: 48 tests. Next: PR 2.4 investigator loop, PR 2.5 bench.
 
 ## Commands
 - `make seed` / `make test` / `make lint` / `make baseline`

@@ -248,7 +248,7 @@ svg.d{display:block;width:100%;height:auto}
     <div><dt>Output: one verdict, with confidence</dt><dd class="vs"><span class="v v-safe">safe_to_delete</span><span class="v v-disable">disable_first</span><span class="v v-ask">ask_owner</span></dd></div>
     <div><dt>Hard gate</dt><dd><b>0</b> unsafe-delete recommendations. Recall ≥ 90%<span class="target">target</span> precision ≥ 80%<span class="target">target</span></dd></div>
   </dl>
-  <div class="note"><p><b>Status, 2026-10-16.</b> Week 1 is done (synthetic org, read-only tools, baseline). Week 2, the investigator loop, is in progress: the Pydantic models are merged (PR 2.1) and the evidence source interface is in review (PR 2.2, 24 tests); <a href="week-2.html">read the plan</a>. Numbers marked <span class="target">target</span> are goals, not results.</p></div>
+  <div class="note"><p><b>Status, 2026-10-17.</b> Week 1 is done (synthetic org, read-only tools, baseline). Week 2, the investigator loop, is in progress: the models and the evidence source interface are merged (PR 2.1, 2.2) and the LLM client is in review (PR 2.3, 48 tests); <a href="week-2.html">read the plan</a>. Numbers marked <span class="target">target</span> are goals, not results.</p></div>
 </section>
 
 <section id="system" class="wide">
@@ -459,8 +459,8 @@ svg.d{display:block;width:100%;height:auto}
       <tr><td class="n"><a href="https://github.com/odedgol/change-impact-agent/pull/3">#3</a></td><td><code>docs/hub-ci-workflow</code></td><td>CI, PR workflow, docs hub</td><td>CI, review</td><td><span class="st st-done">merged</span></td></tr>
       <tr><td class="n">2.1</td><td><code>w2/tooling-models</code></td><td>Python 3.12, pydantic, ruff; <code>models.py</code></td><td><code>make lint</code>, <code>test_models.py</code></td><td><span class="st st-done">merged</span></td></tr>
       <tr><td class="n">2.2</td><td><code>w2/evidence-source</code></td><td><code>sources.py</code>, alias, paging, usage window clamp</td><td><code>test_sources.py</code></td><td><span class="st st-done">merged</span></td></tr>
-      <tr><td class="n">2.2a</td><td><code>fix/sources-review</code></td><td>Review fixes: paging, window clamp, <code>target</code> on rows</td><td><code>test_sources.py</code> (19)</td><td><span class="st st-now">in review</span></td></tr>
-      <tr><td class="n">2.3</td><td><code>w2/llm-client</code></td><td>Interface, <code>FakeLLM</code>, Bedrock mapping</td><td><code>test_llm_fake.py</code>, <code>test_bedrock_mapping.py</code></td><td><span class="st">to do</span></td></tr>
+      <tr><td class="n"><a href="https://github.com/odedgol/change-impact-agent/pull/7">2.2a</a></td><td><code>fix/sources-review</code></td><td>Review fixes: paging, window clamp, <code>target</code> on rows</td><td><code>test_sources.py</code> (19)</td><td><span class="st st-done">merged</span></td></tr>
+      <tr><td class="n">2.3</td><td><code>w2/llm-client</code></td><td>Interface, <code>FakeLLM</code>, Bedrock mapping</td><td><code>test_llm_fake.py</code>, <code>test_bedrock_mapping.py</code></td><td><span class="st st-now">in review</span></td></tr>
       <tr><td class="n">2.4</td><td><code>w2/investigator</code></td><td>Loop, step cap, citation check, retry</td><td><code>test_investigator.py</code></td><td><span class="st">to do</span></td></tr>
       <tr><td class="n">2.5</td><td><code>w2/bench-results</code></td><td><code>bench.py</code>, results on the plan</td><td><code>unsafe_deletes: 0</code></td><td><span class="st">to do</span></td></tr>
     </tbody>

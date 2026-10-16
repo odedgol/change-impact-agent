@@ -269,7 +269,7 @@ ul.check ul{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}
   <h1>Week 2: investigator loop</h1>
   <p class="lead">Two swappable interfaces, a tool-calling loop, and a structured report where every finding cites evidence ids that code verifies.</p>
   <dl class="contract">
-    <div><dt>Status</dt><dd><span class="st st-now">active</span> · steps 1–2 merged (PR 2.1), step 3 in review (PR 2.2) · updated 2026-10-16</dd></div>
+    <div><dt>Status</dt><dd><span class="st st-now">active</span> · steps 1–3 merged (PR 2.1, 2.2), step 4 in review (PR 2.3) · updated 2026-10-17</dd></div>
     <div><dt>Delivers</dt><dd><code>investigate(request) -&gt; RiskReport</code></dd></div>
     <div><dt>Done when</dt><dd><code>make bench-fake</code> prints <code>unsafe_deletes: 0</code></dd></div>
   </dl>
@@ -312,6 +312,7 @@ ul.check ul{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}
       <tr><td class="n">Q8</td><td>Retry on rejected citations?</td><td>Yes, once. <code>rejected_ids</code> go back to the model; the retry counts against the cap; then Q7 applies</td></tr>
       <tr><td class="n">Paging</td><td>What if a tool returns too many rows?</td><td>Never cut. Sources return full ordered lists; the model gets 50-row pages with <code>total</code> and <code>next_offset</code> and can ask for the next page. A cut list could hide the one row that blocks a delete (review of #5)</td></tr>
       <tr><td class="n">Window</td><td>Can the model ask for a short usage window?</td><td>It can ask, but code clamps the window to 90–3650 days, so a nightly or monthly job never looks dormant</td></tr>
+      <tr><td class="n">Msgs</td><td>Whose message format does the loop use?</td><td>Its own provider-neutral types; each client maps them (Bedrock Converse now, an OpenAI-compatible endpoint for a private cloud later)</td></tr>
       <tr><td class="n">PR</td><td>How does the work land?</td><td>Five small PRs into <code>main</code>, each tested and reviewed (<a href="index.html#workflow">PR workflow</a>)</td></tr>
     </tbody>
   </table></div>
@@ -352,7 +353,7 @@ ul.check ul{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}
     <li><span><span class="step-file">pyproject.toml · Makefile · ci.yml</span>Python 3.12, pydantic, ruff config; <code>make lint</code>, also run in CI. <code>bench-fake</code> and <code>bench-bedrock</code> targets arrive with <code>bench.py</code> in PR 2.5.</span><span class="step-pr done">PR 2.1 · merged</span></li>
     <li><span><span class="step-file">src/cia/models.py</span><code>ChangeRequest</code>, <code>Evidence</code>, <code>Finding</code> (≥ 1 evidence id), <code>RiskReport</code>.</span><span class="step-pr done">PR 2.1 · merged</span></li>
     <li><span><span class="step-file">src/cia/sources.py · tools.py</span><code>EvidenceSource</code> Protocol; <code>SyntheticSource</code> moved here, <code>EvidenceTools</code> kept as an alias. Lists come back complete and ordered; <code>paginate</code> serves them 50 rows at a time with <code>next_offset</code>. Usage windows are clamped to at least 90 days.</span><span class="step-pr done">PR 2.2 · merged</span></li>
-    <li><span><span class="step-file">src/cia/llm.py</span><code>LLMClient</code>, <code>FakeLLM(script)</code>, <code>BedrockClient</code> mapping to Converse; lazy boto3.</span><span class="step-pr">PR 2.3</span></li>
+    <li><span><span class="step-file">src/cia/llm.py</span><code>LLMClient</code> Protocol over provider-neutral messages (<code>UserText</code>, <code>AssistantTurn</code>, <code>ToolResults</code>); <code>FakeLLM(script)</code> records every call; <code>BedrockClient</code> maps to Converse <code>toolConfig</code> / <code>toolUse</code> / <code>toolResult</code>. <code>boto3</code> loads only for a real Bedrock run.</span><span class="step-pr done">PR 2.3 · in review</span></li>
     <li><span><span class="step-file">src/cia/investigator.py</span>Loop until <code>submit_report</code> or the cap; citation check with one retry.</span><span class="step-pr">PR 2.4</span></li>
     <li><span><span class="step-file">src/cia/bench.py</span><code>--llm fake|bedrock</code>; prints <code>unsafe_deletes</code>, accuracy, recall, precision. Fake mode is a plumbing check, not a quality claim.</span><span class="step-pr">PR 2.5</span></li>
     <li><span><span class="step-file">tests/</span>The tests under Validation; <code>ruff check</code> clean.</span><span class="step-pr">each PR</span></li>
@@ -364,10 +365,10 @@ ul.check ul{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}
   <h2>Validation</h2>
   <p>Each item is provable by a command or a test. CI runs <code>make test</code> and <code>make lint</code> on every PR; <code>make bench-fake</code> joins in PR 2.5.</p>
   <ul class="check">
-    <li class="done"><span><code>make test</code> passes; the 7 week-1 tests are unchanged. <em>37 passed after the PR 2.2 review fixes.</em></span></li>
+    <li class="done"><span><code>make test</code> passes; the 7 week-1 tests are unchanged. <em>48 passed after PR 2.3.</em></span></li>
     <li class="done"><span><code>make lint</code> exits 0, in CI from PR 2.1.</span></li>
     <li class="done"><span><code>test_models.py</code>: empty <code>evidence_ids</code> and an invalid verdict both raise; also bad confidence, unknown fields, malformed evidence ids, JSON parsing and immutability (11 tests).</span></li>
-    <li><span><code>test_llm_fake.py</code>: scripted turns come back in order; an empty script raises.</span></li>
+    <li class="done"><span><code>test_llm_fake.py</code>: scripted turns come back in order, calls are recorded, an exhausted script raises (4 tests).</span></li>
     <li><span><code>test_investigator.py</code>:<ul>
       <li>tool calls are dispatched and logged with unique ids;</li>
       <li>an unknown id is dropped and counted;</li>
@@ -376,7 +377,7 @@ ul.check ul{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}
       <li>the step cap returns <span class="v v-ask">ask_owner</span>, never a delete;</li>
       <li>an unknown tool name returns a tool error, no crash.</li></ul></span></li>
     <li class="done"><span><code>test_sources.py</code>: <code>SyntheticSource</code> matches <code>EvidenceSource</code> by name and signature; DELETE and UPDATE raise <code>OperationalError</code>; paging returns every row; short usage windows are clamped; consumers of owned accounts name their target (19 tests).</span></li>
-    <li><span><code>test_bedrock_mapping.py</code>: Converse mapping with a stubbed client, no network.</span></li>
+    <li class="done"><span><code>test_bedrock_mapping.py</code>: Converse request, response, tool-result and error mapping with a stubbed client, no network or AWS (7 tests).</span></li>
     <li><span><code>make bench-fake</code> prints <code>unsafe_deletes: 0</code> on the 500-identity org.</span></li>
     <li><span><span class="opt">optional</span><code>make bench-bedrock</code> completes the 20 cases; result recorded here, no target claimed.</span></li>
   </ul>
