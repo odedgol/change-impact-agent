@@ -13,6 +13,7 @@ Portfolio project (target: Twine Security, Backend Engineer – Agentic AI). Bef
 - Simulate the data tools return, not the tools. One `EvidenceSource` interface (`SyntheticSource` now; `AwsSource`/`KeycloakSource` optional) and one `LLMClient` interface (`BedrockClient`, `FakeLLM`).
 - Evidence tools are read-only (SQLite `mode=ro`). Guardrails live in code, not in the prompt.
 - Executor: dry-run, disable-first, undo, idempotency; append-only audit log.
+- Cloud-agnostic: AWS is one deployment target, never a dependency; the design must move to a private cloud. Cloud services sit behind an interface or open protocol (`LLMClient`, `EvidenceSource`, `AuditSink`, Postgres SQL, Temporal, OCI containers). `boto3` is imported only inside adapter classes, and each adapter has a non-AWS sibling or a fake. Mapping: `docs/index.html#portable`.
 - Stack: Python 3.12+, Pydantic v2, FastAPI, boto3 Bedrock Converse, Temporal (approval signal; LLM/DB calls in activities), Postgres later, pytest, Ruff.
 - Hard eval gate: 0 unsafe-delete recommendations. Targets (recall >= 90%, precision >= 80%) are proposals, not proven.
 

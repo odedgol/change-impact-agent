@@ -227,6 +227,7 @@ svg.d{display:block;width:100%;height:auto}
   <a href="#roadmap">Roadmap</a>
   <a href="#sprints">Sprints and PRs</a>
   <a href="#stack">Tech stack</a>
+  <a class="sub" href="#portable">Cloud-agnostic</a>
   <a href="#workflow">PR workflow</a>
   <h4>Plans</h4>
   <a href="week-2.html">Week 2: investigator loop</a>
@@ -476,9 +477,26 @@ svg.d{display:block;width:100%;height:auto}
       <tr><td>Orchestration</td><td>Temporal</td><td>A durable wait for approval that can last days; LLM and DB calls run as activities</td><td class="n">week 3</td></tr>
       <tr><td>Data</td><td>SQLite read-only → Postgres + pgvector</td><td>Read-only enforced by the engine; pgvector for the doc index</td><td class="n">now → wk 4</td></tr>
       <tr><td>API</td><td>FastAPI</td><td>Takes change requests, serves reports, shares the Pydantic models</td><td class="n">later</td></tr>
-      <tr><td>AWS</td><td>ECS Fargate, RDS, Bedrock, S3 Object Lock</td><td>Object Lock keeps the audit log append-only</td><td class="n">later</td></tr>
+      <tr><td>Deployment</td><td>Containers on any runtime</td><td>AWS is one target, private cloud another; nothing in the code needs either</td><td class="n">later</td></tr>
     </tbody>
   </table></div>
+
+  <h3 id="portable">Cloud-agnostic by design</h3>
+  <p>The code depends on interfaces and open protocols, never on a cloud's own API. Moving from AWS to a private cloud means changing configuration and one adapter class, not the agent.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Concern</th><th>Seam in the code</th><th>On AWS</th><th>On a private cloud</th></tr></thead>
+    <tbody>
+      <tr><td>LLM</td><td><code>LLMClient</code></td><td><code>BedrockClient</code> (Claude)</td><td><code>OpenAICompatClient</code> to vLLM or Ollama, or the Anthropic API if egress is allowed</td></tr>
+      <tr><td>Identity evidence</td><td><code>EvidenceSource</code></td><td><code>AwsSource</code> (IAM, CloudTrail)</td><td><code>KeycloakSource</code>, LDAP or Active Directory</td></tr>
+      <tr><td>Approval workflow</td><td>Temporal (open source)</td><td>Temporal on ECS or Temporal Cloud</td><td>Self-hosted Temporal on Kubernetes</td></tr>
+      <tr><td>Database</td><td>Postgres + pgvector (plain SQL)</td><td>RDS</td><td>Postgres on Kubernetes or a VM</td></tr>
+      <tr><td>Audit log</td><td><code>AuditSink</code></td><td>S3 with Object Lock</td><td>MinIO with object locking, or an append-only Postgres table with a hash chain</td></tr>
+      <tr><td>Compute</td><td>OCI container image</td><td>ECS Fargate</td><td>Kubernetes</td></tr>
+      <tr><td>Secrets</td><td>Environment variables</td><td>Secrets Manager</td><td>Vault</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note warn"><p><b>The one real trade-off:</b> Claude isn't self-hostable. A private cloud with no internet access runs an open-weight model instead, so the benchmark is re-run per model and the 0-unsafe-deletes gate applies to each one separately.</p></div>
+  <p style="margin-top:16px">Rule for every PR: no <code>boto3</code> import outside an adapter class (<code>BedrockClient</code>, <code>AwsSource</code>, the S3 <code>AuditSink</code>). Each adapter has a non-AWS sibling or a fake for tests.</p>
 </section>
 
 <section id="workflow" class="doc">
