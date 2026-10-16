@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<script>try{var t=localStorage.getItem("cia-theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
 <title>Change Impact Agent Docs</title>
 <meta name="description" content="An agent that investigates what could break before an IAM identity or permission change, and a reversible executor that acts only after human approval.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -339,15 +340,15 @@ svg.d{display:block;width:100%;height:auto}
           <path class="e" d="M390 88H426" marker-end="url(#a2)"/>
           <rect class="guard" x="405" y="208" width="178" height="62" rx="8"/><text class="h" x="421" y="234">Drop bad finding</text><text class="s" x="421" y="253">safe_to_delete → ask_owner</text>
           <path class="e" d="M480 138V204" marker-end="url(#a2)"/><text class="l" x="488" y="176">no</text>
-          <path class="e dash" d="M430 208V160H372V122" marker-end="url(#a2)"/><text class="l" x="376" y="150">retry ×1 (Q8)</text>
+          <path class="e" d="M430 208V160H372V122" marker-end="url(#a2)"/><text class="l" x="376" y="150">retry ×1 (Q8)</text>
           <path class="e" d="M583 238H660V122" marker-end="url(#a2)"/><text class="l" x="590" y="230">downgraded</text></g>
 
         <g data-step="4"><rect class="node" x="590" y="58" width="150" height="60" rx="8"/><text class="h" x="606" y="84">RiskReport</text><text class="s" x="606" y="103">verdict · confidence</text>
           <path class="e" d="M530 88H586" marker-end="url(#a2)"/><text class="l" x="546" y="80">yes</text></g>
 
-        <g data-step="5"><path class="guard" d="M858 38L908 88L858 138L808 88Z"/><text class="h" x="858" y="84" text-anchor="middle">Human</text><text class="s" x="858" y="101" text-anchor="middle">approves?</text>
+        <g data-step="5"><path class="guard later" d="M858 38L908 88L858 138L808 88Z"/><text class="h" x="858" y="84" text-anchor="middle">Human</text><text class="s" x="858" y="101" text-anchor="middle">approves?</text>
           <path class="e" d="M740 88H804" marker-end="url(#a2)"/>
-          <rect class="node" x="790" y="208" width="150" height="62" rx="8"/><text class="h" x="806" y="234">Stop</text><text class="s" x="806" y="253">owner is asked</text>
+          <rect class="node later" x="790" y="208" width="150" height="62" rx="8"/><text class="h" x="806" y="234">Stop</text><text class="s" x="806" y="253">owner is asked</text>
           <path class="e" d="M858 138V204" marker-end="url(#a2)"/><text class="l" x="866" y="176">no</text></g>
 
         <g data-step="6"><rect class="tool later" x="972" y="58" width="160" height="60" rx="8"/><text class="h" x="988" y="84">Executor</text><text class="s" x="988" y="103">dry-run · disable first</text>
@@ -355,7 +356,7 @@ svg.d{display:block;width:100%;height:auto}
           <rect class="tool later" x="972" y="208" width="160" height="62" rx="8"/><text class="h" x="988" y="234">Delete or restore</text><text class="s" x="988" y="253">after a quiet period</text>
           <path class="e" d="M1052 118V204" marker-end="url(#a2)"/><text class="l" x="1060" y="166">quiet period</text></g>
 
-        <text class="s" x="30" y="350">Solid: built in week 2. Dashed: week 3 or proposed. Red shapes are gates enforced by code or by a person.</text>
+        <text class="s" x="30" y="350">Solid boxes and arrows: week 2. Dashed boxes: week 3. Dashed outlines mark zones. Red shapes are gates enforced by code or by a person.</text>
       </svg>
     </div>
     <p class="say" id="say" aria-live="polite"><b>Whole loop.</b> Pick a step to see what happens there and which guardrail applies.</p>
@@ -521,7 +522,8 @@ svg.d{display:block;width:100%;height:auto}
   </table></div>
 <pre><code>git switch main &amp;&amp; git pull &amp;&amp; git switch -c w2/tooling-models
 make test
-git push -u origin HEAD &amp;&amp; gh pr create --draft --fill-first
+git push -u origin HEAD &amp;&amp; gh pr create --draft --title "..." --body-file .github/pull_request_template.md
+gh pr edit --body-file my-description.md   # fill in the template first
 gh pr checks --watch
 gh pr merge --squash --delete-branch</code></pre>
 </section>
@@ -546,7 +548,14 @@ gh pr merge --squash --delete-branch</code></pre>
 <section id="launch" class="doc">
   <h2><a class="anchor" href="#launch">Skills and launch plan</a></h2>
   <p>Skills are extracted only after the code works and is tested, starting with <b>agentic-evals</b> (<code>bench/</code>). Then read-only-tools, human-approval-workflow, reversible-executor and synthetic-org-generator.</p>
-  <p>Launch: the README opens with the result ("a naive rule deletes 6 of 10 risky accounts; the agent doesn't"), a replayable <code>docs/demo.html</code>, a 2-minute video, and a post with the design choices and what still fails. Nothing unmeasured is claimed.</p>
+  <h3>LinkedIn flagship plan</h3>
+  <ul>
+    <li>The README opens with the problem and the result: "A naive rule deletes 6 of 10 risky accounts. The agent doesn't."</li>
+    <li>One command runs everything: <code>make seed</code>, <code>make test</code>, <code>make baseline</code>.</li>
+    <li>A replayable <code>docs/demo.html</code> (request → evidence → report → approval → reversible action) plus a video of about 2 minutes.</li>
+    <li>The post: the hook number, why it matters in IAM, three design choices (guardrails in code, mandatory evidence, reversible executor), results including what still fails, and a link to the repo.</li>
+    <li>Nothing unmeasured is claimed, and no comparison to Twine's product.</li>
+  </ul>
 </section>
 
 <p class="foot doc">Owner Oded Goldberg · updated 2026-10-16 · source in <code>docs/index.html</code></p>
@@ -556,7 +565,6 @@ gh pr merge --squash --delete-branch</code></pre>
 <script>
 (function(){
   var root=document.documentElement,key="cia-theme";
-  try{var t=localStorage.getItem(key);if(t)root.setAttribute("data-theme",t)}catch(e){}
   document.getElementById("theme").addEventListener("click",function(){
     var dark=root.getAttribute("data-theme")==="dark"||(!root.getAttribute("data-theme")&&matchMedia("(prefers-color-scheme: dark)").matches);
     var next=dark?"light":"dark";root.setAttribute("data-theme",next);try{localStorage.setItem(key,next)}catch(e){}

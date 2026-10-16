@@ -1,0 +1,35 @@
+name: PR description
+
+# The PR body must say what changed, how to test it, and which docs page explains it.
+# Separate from CI so editing the description re-runs only this check.
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: pr-description-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  pr-description:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR description
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          body=$(printf '%s\n' "$BODY" | tr -d '\r' | sed -e 's/<!--.*-->//')
+          section() { printf '%s\n' "$body" | awk -v h="$1" 'tolower($0) ~ "^## +" h {on=1; next} /^## /{on=0} on'; }
+          fail=0
+          if ! section "what changed" | grep -qE '^\s*[-*] +[^ ].{3,}'; then
+            echo "::error::'## What changed' needs at least one filled-in bullet."; fail=1
+          fi
+          if ! section "how to test" | grep -qE '[a-z]'; then
+            echo "::error::'## How to test' needs the commands a reviewer runs."; fail=1
+          fi
+          if ! printf '%s\n' "$body" | grep -qE 'docs/[A-Za-z0-9._-]+\.html'; then
+            echo "::error::Link the docs page for this change, e.g. docs/week-2.html."; fail=1
+          fi
+          exit $fail

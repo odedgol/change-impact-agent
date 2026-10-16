@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<script>try{var t=localStorage.getItem("cia-theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
 <title>Week 2 Plan</title>
 <meta name="description" content="Plan 001: the investigator tool loop, LLMClient interfaces and the RiskReport with a citation check.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -357,7 +358,7 @@ ul.check ul{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}
 
 <section id="validation" class="doc">
   <h2>Validation</h2>
-  <p>Each item is provable by a command or a test. CI runs them on every PR.</p>
+  <p>Each item is provable by a command or a test. CI runs <code>make test</code> on every PR today; <code>make lint</code> joins in PR 2.1 and <code>make bench-fake</code> in PR 2.5.</p>
   <ul class="check">
     <li><span><code>make test</code> passes; the 7 week-1 tests are unchanged.</span></li>
     <li><span><code>make lint</code> exits 0.</span></li>
@@ -403,7 +404,6 @@ ul.check ul{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}
 <script>
 (function(){
   var root=document.documentElement,key="cia-theme";
-  try{var t=localStorage.getItem(key);if(t)root.setAttribute("data-theme",t)}catch(e){}
   document.getElementById("theme").addEventListener("click",function(){
     var dark=root.getAttribute("data-theme")==="dark"||(!root.getAttribute("data-theme")&&matchMedia("(prefers-color-scheme: dark)").matches);
     var next=dark?"light":"dark";root.setAttribute("data-theme",next);try{localStorage.setItem(key,next)}catch(e){}
