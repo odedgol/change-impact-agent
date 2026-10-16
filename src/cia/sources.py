@@ -6,10 +6,11 @@ can implement the same five methods later without touching the agent.
 Every source is read-only. ``SyntheticSource`` opens SQLite with ``mode=ro``,
 so even a buggy or manipulated tool call cannot change state.
 
-List results are capped so one request can't flood the model's context. A cap
-never hides data silently: a truncated list ends with a ``truncated`` marker
-that says how many rows were left out, so the investigator can't mistake a cut
-list for a complete one.
+Sources return complete, deterministically ordered lists. Nothing is cut here:
+a cut list can hide the one row that blocks a delete (an old "do not remove"
+ticket, a consumer of an owned service account). Keeping the model's context
+small is the caller's job, through ``paginate``, which always says how to fetch
+the next page.
 """
 from __future__ import annotations
 
@@ -19,8 +20,10 @@ from typing import Protocol, runtime_checkable
 
 from .generator import NOW
 
-MAX_ROWS = 50
+PAGE_SIZE = 50
 MAX_CALLERS = 20
+MIN_USAGE_DAYS = 90  # a shorter window can make a nightly or monthly job look dormant
+MAX_USAGE_DAYS = 3650
 
 
 @runtime_checkable
@@ -32,18 +35,22 @@ class EvidenceSource(Protocol):
     def get_owner(self, identity_id: str) -> dict | None: ...
 
 
-def cap_rows(rows: list[dict], max_rows: int) -> list[dict]:
-    if len(rows) <= max_rows:
-        return rows
-    return rows[:max_rows] + [{"truncated": True, "omitted": len(rows) - max_rows}]
+def paginate(rows: list[dict], offset: int = 0, limit: int = PAGE_SIZE) -> dict:
+    """One page of a list, with the total and the offset of the next page (None on the last page)."""
+    if offset < 0 or limit < 1:
+        raise ValueError(f"offset must be >= 0 and limit >= 1 (got offset={offset}, limit={limit})")
+    end = offset + limit
+    return {"rows": rows[offset:end], "total": len(rows), "offset": offset,
+            "next_offset": end if end < len(rows) else None}
 
 
 class SyntheticSource:
-    def __init__(self, db_path: str, now: datetime = NOW, max_rows: int = MAX_ROWS, max_callers: int = MAX_CALLERS):
+    def __init__(self, db_path: str, now: datetime = NOW, max_callers: int = MAX_CALLERS):
+        if max_callers < 1:
+            raise ValueError(f"max_callers must be >= 1 (got {max_callers})")
         self._db = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
         self._db.row_factory = sqlite3.Row
         self.now = now
-        self.max_rows = max_rows
         self.max_callers = max_callers
 
     def _rows(self, sql: str, *args) -> list[dict]:
@@ -54,30 +61,37 @@ class SyntheticSource:
         return rows[0] if rows else None
 
     def get_usage(self, identity_id: str, days: int = 90) -> dict:
-        since = (self.now - timedelta(days=days)).isoformat(timespec="seconds")
-        events = self._rows(
-            "SELECT ts, resource, caller FROM usage_events WHERE identity_id = ? AND ts >= ? ORDER BY ts DESC",
+        """Usage in the window, aggregated in SQL. The window is clamped to [90, 3650] days, and the
+        result reports the window actually used."""
+        window = min(max(int(days), MIN_USAGE_DAYS), MAX_USAGE_DAYS)
+        since = (self.now - timedelta(days=window)).isoformat(timespec="seconds")
+        callers = self._rows(
+            "SELECT caller, COUNT(*) AS n, MAX(ts) AS last FROM usage_events "
+            "WHERE identity_id = ? AND ts >= ? GROUP BY caller ORDER BY n DESC, caller",
             identity_id, since,
         )
-        counts: dict[str, int] = {}
-        for e in events:
-            counts[e["caller"]] = counts.get(e["caller"], 0) + 1
-        top = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[: self.max_callers]
-        return {"window_days": days, "event_count": len(events),
-                "last_seen": events[0]["ts"] if events else None, "callers": dict(top),
-                "callers_omitted": len(counts) - len(top)}
+        top = callers[: self.max_callers]
+        return {"window_days": window, "event_count": sum(c["n"] for c in callers),
+                "last_seen": max((c["last"] for c in callers), default=None),
+                "callers": {c["caller"]: c["n"] for c in top}, "callers_omitted": len(callers) - len(top)}
 
     def get_dependencies(self, identity_id: str) -> list[dict]:
-        """Things that point at this identity, plus the consumers of accounts it owns."""
-        direct = self._rows("SELECT source, kind, detail FROM dependencies WHERE target_id = ?", identity_id)
-        for d in list(direct):
-            if d["kind"] == "owner_of":
-                direct += self._rows("SELECT source, kind, detail FROM dependencies WHERE target_id = ?", d["source"])
-        return cap_rows(direct, self.max_rows)
+        """Things that point at this identity, plus the consumers of accounts it owns.
+
+        ``target`` names the identity each row points at, so a consumer of an owned
+        service account is never mistaken for a direct dependency.
+        """
+        return self._rows(
+            "SELECT source, kind, detail, target_id AS target FROM dependencies "
+            "WHERE target_id = ?1 OR target_id IN "
+            "  (SELECT source FROM dependencies WHERE target_id = ?1 AND kind = 'owner_of') "
+            "ORDER BY target_id = ?1 DESC, target_id, kind, source",
+            identity_id,
+        )
 
     def get_tickets(self, identity_id: str) -> list[dict]:
-        rows = self._rows("SELECT id, ts, author, text FROM tickets WHERE identity_id = ? ORDER BY ts DESC", identity_id)
-        return cap_rows(rows, self.max_rows)
+        return self._rows("SELECT id, ts, author, text FROM tickets WHERE identity_id = ? ORDER BY ts DESC, id",
+                          identity_id)
 
     def get_owner(self, identity_id: str) -> dict | None:
         ident = self.get_identity(identity_id)

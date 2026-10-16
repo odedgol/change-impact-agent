@@ -418,7 +418,8 @@ svg.d{display:block;width:100%;height:auto}
     <li><b>Citation check</b><span>Unknown ids drop the finding; a <span class="v v-safe">safe_to_delete</span> with any rejection becomes <span class="v v-ask">ask_owner</span>. One retry first (Q8).</span></li>
     <li><b>Step cap</b><span>8 tool calls; hitting the cap returns <span class="v v-ask">ask_owner</span>, never a delete.</span></li>
     <li><b>Read-only tools</b><span>SQLite opened with <code>mode=ro</code>: a write fails in the engine, whatever the prompt says.</span></li>
-    <li><b>Row caps never hide data</b><span>Lists are capped at 50 rows; a cut list ends with a <code>truncated</code> marker, so the agent never mistakes a partial list for a complete one.</span></li>
+    <li><b>Lists are paged, never cut</b><span>The model sees 50 rows at a time with <code>total</code> and <code>next_offset</code>, and can fetch the rest. A cut list could hide an old "do not remove" ticket.</span></li>
+    <li><b>Usage window of at least 90 days</b><span>Code clamps the window the model asks for, so a nightly or monthly job can't look dormant.</span></li>
     <li><b>Human approval, disable first</b><span>Nothing runs without a person. The executor dry-runs, disables, waits, and can undo. Week 3.</span></li>
   </ul>
   <h3>How it's measured</h3>
@@ -430,7 +431,7 @@ svg.d{display:block;width:100%;height:auto}
       <tr><td>Invented evidence</td><td>Code checks every cited id against the tool log</td><td>Citations rejected per version</td></tr>
       <tr><td>Prompt injection in tickets or docs</td><td>Read-only tools; search terms only from cited evidence; red-team cases</td><td>Verdicts changed by injection</td></tr>
       <tr><td>Evidence that never names the account</td><td>Doc index with multi-round search; docs are leads, confirmed elsewhere</td><td>Recall on <code>doc_only_dependency</code></td></tr>
-      <tr><td>Scale (20k identities)</td><td>Tools return summaries with row caps</td><td>Latency and cost per request</td></tr>
+      <tr><td>Scale (20k identities)</td><td>Usage aggregated in SQL; lists paged, never cut</td><td>Latency and cost per request</td></tr>
       <tr><td>Alert fatigue</td><td>Precision gate and confidence calibration</td><td>Precision, calibration error</td></tr>
     </tbody>
   </table></div>
@@ -457,7 +458,8 @@ svg.d{display:block;width:100%;height:auto}
       <tr><td class="n"><a href="https://github.com/odedgol/change-impact-agent/pull/2">#2</a></td><td><code>feat/week2-investigator</code></td><td>Week-2 plan</td><td>review</td><td><span class="st st-done">merged</span></td></tr>
       <tr><td class="n"><a href="https://github.com/odedgol/change-impact-agent/pull/3">#3</a></td><td><code>docs/hub-ci-workflow</code></td><td>CI, PR workflow, docs hub</td><td>CI, review</td><td><span class="st st-done">merged</span></td></tr>
       <tr><td class="n">2.1</td><td><code>w2/tooling-models</code></td><td>Python 3.12, pydantic, ruff; <code>models.py</code></td><td><code>make lint</code>, <code>test_models.py</code></td><td><span class="st st-done">merged</span></td></tr>
-      <tr><td class="n">2.2</td><td><code>w2/evidence-source</code></td><td><code>sources.py</code>, alias, row caps with truncation marker</td><td><code>test_sources.py</code></td><td><span class="st st-now">in review</span></td></tr>
+      <tr><td class="n">2.2</td><td><code>w2/evidence-source</code></td><td><code>sources.py</code>, alias, paging, usage window clamp</td><td><code>test_sources.py</code></td><td><span class="st st-done">merged</span></td></tr>
+      <tr><td class="n">2.2a</td><td><code>fix/sources-review</code></td><td>Review fixes: paging, window clamp, <code>target</code> on rows</td><td><code>test_sources.py</code> (19)</td><td><span class="st st-now">in review</span></td></tr>
       <tr><td class="n">2.3</td><td><code>w2/llm-client</code></td><td>Interface, <code>FakeLLM</code>, Bedrock mapping</td><td><code>test_llm_fake.py</code>, <code>test_bedrock_mapping.py</code></td><td><span class="st">to do</span></td></tr>
       <tr><td class="n">2.4</td><td><code>w2/investigator</code></td><td>Loop, step cap, citation check, retry</td><td><code>test_investigator.py</code></td><td><span class="st">to do</span></td></tr>
       <tr><td class="n">2.5</td><td><code>w2/bench-results</code></td><td><code>bench.py</code>, results on the plan</td><td><code>unsafe_deletes: 0</code></td><td><span class="st">to do</span></td></tr>
