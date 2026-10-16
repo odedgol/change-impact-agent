@@ -18,7 +18,8 @@ def naive_verdict(tools: EvidenceTools, identity_id: str) -> str:
 
 def run(db: str, truth_path: str) -> dict:
     tools = EvidenceTools(db)
-    truth = json.load(open(truth_path))
+    with open(truth_path) as f:
+        truth = json.load(f)
     broken, by_type = 0, Counter()
     for c in truth["cases"]:
         v = naive_verdict(tools, c["identity_id"])

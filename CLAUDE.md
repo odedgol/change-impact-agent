@@ -4,10 +4,10 @@ Portfolio project (target: Twine Security, Backend Engineer – Agentic AI). Bef
 
 ## Status
 - Week 1 done: synthetic org generator, read-only evidence tools, naive baseline (breaks 6 of 10 risky cases). 7 tests pass.
-- Next (week 2): `LLMClient` interface + `FakeLLM`, then the investigator tool-calling loop over Bedrock Converse, structured Pydantic `RiskReport` (every finding cites evidence ids).
+- Week 2 in progress (plan: `docs/week-2.html`). PR 2.1 (tooling + Pydantic models in `src/cia/models.py`) in review: 18 tests, `make lint` in CI. Next: PR 2.2 `EvidenceSource`/`SyntheticSource`, then `LLMClient` + `FakeLLM`, the investigator loop, the bench.
 
 ## Commands
-- `make seed` / `make test` / `make baseline`
+- `make seed` / `make test` / `make lint` / `make baseline`
 
 ## Design rules
 - Simulate the data tools return, not the tools. One `EvidenceSource` interface (`SyntheticSource` now; `AwsSource`/`KeycloakSource` optional) and one `LLMClient` interface (`BedrockClient`, `FakeLLM`).
@@ -21,4 +21,5 @@ Portfolio project (target: Twine Security, Backend Engineer – Agentic AI). Bef
 - Plans, specs, design notes, weekly plans and results live in `docs/*.html`: self-contained single files (inline CSS/JS/SVG, light and dark theme, readable at phone width, no build step).
 - Only `README.md` and `CLAUDE.md` stay Markdown (GitHub and Claude Code read them as Markdown).
 - Before coding each week, write `docs/week-N.html` (plan, diagram, acceptance checks); update it when done. Keep each page short and visual; tables and diagrams over prose.
+- **Every change updates the docs in the same PR (mandatory).** Before committing, find each `docs/*.html` section the change affects and update it: the week plan (step status, validation checks ticked, decisions), the hub (`docs/index.html`: sprints and PR table, roadmap status, tech stack, PR workflow gates, overview status), and the status lines in `CLAUDE.md`. A PR whose docs are stale is not done.
 - Docs hub: `docs/index.html` (overview, system diagram, agentic workflow, guardrails, roadmap, sprints and PRs, tech stack, PR workflow, requirements). Week plans: `docs/week-N.html`, same shell and sidebar.
