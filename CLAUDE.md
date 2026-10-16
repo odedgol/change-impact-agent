@@ -4,8 +4,8 @@ Portfolio project (target: Twine Security, Backend Engineer – Agentic AI). Bef
 
 ## Status
 - Week 1 done: synthetic org generator, read-only evidence tools, naive baseline (breaks 6 of 10 risky cases). 7 tests pass.
-- Week 2 in progress (plan: `docs/week-2.html`). PR 2.1 (models) and PR 2.2 (`EvidenceSource`, `SyntheticSource`) merged, with review fixes (#7): lists paged with `next_offset` instead of cut, usage window clamped to >= 90 days, consumer rows carry `target`. PR 2.3 (`src/cia/llm.py`: `LLMClient`, provider-neutral messages, `FakeLLM`, `BedrockClient` Converse mapping) in review: 48 tests. Next: PR 2.4 investigator loop, PR 2.5 bench.
-- Refactor R1 (`refactor/case-commands`): planted case types in `generator.py` are commands (one class with `execute(org, target)` each, in `COMMANDS`; `CASE_TYPES`/`EXPECTED` derived). New types go at the end. `tests/test_generator_golden.py` pins the org hash: change it only on purpose, with the reason in the PR. 50 tests.
+- Week 2 in progress (plan: `docs/week-2.html`). PR 2.1 (models) and PR 2.2 (`EvidenceSource`, `SyntheticSource`) merged, with review fixes (#7): lists paged with `next_offset` instead of cut, usage window clamped to >= 90 days, consumer rows carry `target`. PR 2.3 (`src/cia/llm.py`: `LLMClient`, provider-neutral messages, `FakeLLM`, `BedrockClient` Converse mapping) merged. Next: PR 2.4 investigator loop (with a `--events` JSON-lines stream), PR 2.5 bench, PR 2.6 Rust terminal UI (`tui/`, ratatui) and `make smoke`.
+- Refactor R1 merged (#9): planted case types in `generator.py` are commands (one class with `execute(org, target)` each, in `COMMANDS`; `CASE_TYPES`/`EXPECTED` derived). New types go at the end. `tests/test_generator_golden.py` pins the org hash: change it only on purpose, with the reason in the PR. 50 tests.
 
 ## Commands
 - `make seed` / `make test` / `make lint` / `make baseline`
@@ -15,6 +15,7 @@ Portfolio project (target: Twine Security, Backend Engineer – Agentic AI). Bef
 - Evidence tools are read-only (SQLite `mode=ro`). Guardrails live in code, not in the prompt.
 - Executor: dry-run, disable-first, undo, idempotency; append-only audit log.
 - Cloud-agnostic: AWS is one deployment target, never a dependency; the design must move to a private cloud. Cloud services sit behind an interface or open protocol (`LLMClient`, `EvidenceSource`, `AuditSink`, Postgres SQL, Temporal, OCI containers). `boto3` is imported only inside adapter classes, and each adapter has a non-AWS sibling or a fake. Mapping: `docs/index.html#portable`.
+- Terminal UI: Rust (ratatui) in `tui/`, a separate binary that only reads the investigator's JSON-lines events; it never imports the agent.
 - Stack: Python 3.12+, Pydantic v2, FastAPI, boto3 Bedrock Converse, Temporal (approval signal; LLM/DB calls in activities), Postgres later, pytest, Ruff.
 - Hard eval gate: 0 unsafe-delete recommendations. Targets (recall >= 90%, precision >= 80%) are proposals, not proven.
 
