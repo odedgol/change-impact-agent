@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Week 2 Investigator Plan</title>
+<style>
+:root{--bg:#fafaf7;--fg:#1c1c1a;--mut:#62625c;--line:#d8d8d0;--acc:#1f6feb;--tint:#eef3fd;--warn:#b42318;--ok:#1a7f37}
+@media (prefers-color-scheme:dark){:root{--bg:#161614;--fg:#ecece6;--mut:#a3a39b;--line:#34342f;--acc:#6ea8fe;--tint:#1d2533;--warn:#ff8a80;--ok:#56d364}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui,sans-serif}
+main{max-width:860px;margin:0 auto;padding:24px 16px 80px}
+h1{font-size:28px;margin:8px 0}h2{font-size:21px;margin:40px 0 8px;border-top:1px solid var(--line);padding-top:24px}
+p.lead{color:var(--mut);margin-top:0}table{border-collapse:collapse;width:100%;font-size:14px;margin:12px 0}
+th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}th{background:var(--tint)}
+.tbl{overflow-x:auto}code{background:var(--tint);padding:1px 5px;border-radius:4px;font-size:13px;overflow-wrap:anywhere}
+.note{background:var(--tint);border-left:4px solid var(--acc);padding:10px 14px;border-radius:4px}
+.warn{border-left-color:var(--warn)}nav a{margin-right:12px;color:var(--acc);font-size:14px;white-space:nowrap}
+.meta{display:flex;flex-wrap:wrap;gap:8px 20px;font-size:14px;color:var(--mut);margin:8px 0 12px}
+.meta b{color:var(--fg)}.badge{color:var(--ok);font-weight:600}
+ul.check{list-style:none;padding-left:0}ul.check li{padding:3px 0 3px 28px;position:relative}
+ul.check li::before{content:"";position:absolute;left:0;top:7px;width:16px;height:16px;border:1.5px solid var(--mut);border-radius:3px}
+ul.check ul{margin:4px 0}ol li,ul li{margin:3px 0}
+svg{width:100%;height:auto;max-width:760px}svg text{fill:var(--fg);font-size:12px}svg .m{fill:var(--mut)}
+svg rect{fill:none;stroke:var(--line);stroke-width:1.5}svg .a{fill:var(--tint);stroke:var(--acc);stroke-width:2}
+svg .g{stroke:var(--warn);stroke-width:2}svg path{fill:none;stroke:var(--mut);stroke-width:1.3}
+svg .ah{fill:var(--mut);stroke:none}
+</style>
+</head>
+<body><main>
+<p><a href="plan.html" style="color:var(--acc);font-size:14px">&larr; Full plan</a></p>
+<h1>Week 2: investigator loop and RiskReport</h1>
+<div class="meta">
+  <span>Status: <b class="badge">active</b></span>
+  <span>Owner: <b>Oded Goldberg</b></span>
+  <span>Last updated: <b>2026-10-16</b></span>
+  <span>Branch: <code>feat/week2-investigator</code></span>
+</div>
+<p class="lead">Week 1 shipped the synthetic org, read-only tools and a naive baseline that breaks 6 of 10 risky cases. Week 2 adds the agent: two swappable interfaces, a tool-calling loop, and a structured report where every finding cites evidence ids that code verifies.</p>
+<nav><a href="#goal">Goal</a><a href="#scope">Scope</a><a href="#assumptions">Assumptions</a><a href="#questions">Open Questions</a><a href="#steps">Steps</a><a href="#validation">Validation</a><a href="#risks">Risks</a><a href="#rollout">Rollout Order</a><a href="#rollback">Rollback</a></nav>
+
+<h2 id="goal">Goal</h2>
+<p><code>investigate(request) -&gt; RiskReport</code> runs a tool-calling loop over an <code>LLMClient</code> and returns <code>safe_to_delete</code>, <code>disable_first</code> or <code>ask_owner</code> with a confidence. Every finding cites evidence ids that exist in that run's tool log. Proven end-to-end with <code>FakeLLM</code>, plus one smoke run on Bedrock.</p>
+
+<svg viewBox="0 0 760 250" role="img" aria-label="Investigator loop: request, investigator calling LLM and evidence source, evidence log with ids, citation check, risk report">
+  <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" class="ah"/></marker></defs>
+  <rect x="10" y="95" width="120" height="50" rx="6"/><text x="70" y="117" text-anchor="middle">ChangeRequest</text><text x="70" y="133" text-anchor="middle" class="m">identity, action</text>
+  <rect x="190" y="85" width="150" height="70" rx="6" class="a"/><text x="265" y="112" text-anchor="middle">Investigator</text><text x="265" y="128" text-anchor="middle" class="m">loop, max 8 tool calls</text><text x="265" y="143" text-anchor="middle" class="m">assigns evidence ids</text>
+  <rect x="190" y="10" width="150" height="46" rx="6"/><text x="265" y="30" text-anchor="middle">LLMClient</text><text x="265" y="46" text-anchor="middle" class="m">FakeLLM / BedrockClient</text>
+  <rect x="190" y="190" width="150" height="46" rx="6"/><text x="265" y="210" text-anchor="middle">EvidenceSource</text><text x="265" y="226" text-anchor="middle" class="m">SyntheticSource (ro)</text>
+  <rect x="400" y="95" width="130" height="50" rx="6"/><text x="465" y="117" text-anchor="middle">Evidence log</text><text x="465" y="133" text-anchor="middle" class="m">ev-deps-3 …</text>
+  <rect x="580" y="20" width="170" height="50" rx="6" class="g"/><text x="665" y="42" text-anchor="middle">Citation check</text><text x="665" y="58" text-anchor="middle" class="m">unknown id → drop</text>
+  <rect x="580" y="170" width="170" height="50" rx="6" class="a"/><text x="665" y="192" text-anchor="middle">RiskReport</text><text x="665" y="208" text-anchor="middle" class="m">verdict, findings + ids</text>
+  <path d="M130,120H186" marker-end="url(#ar)"/>
+  <path d="M250,85V60" marker-end="url(#ar)"/><path d="M280,56V81" marker-end="url(#ar)"/>
+  <text x="200" y="74" class="m">tool calls</text><text x="287" y="74" class="m">results</text>
+  <path d="M250,155V186" marker-end="url(#ar)"/><path d="M280,190V159" marker-end="url(#ar)"/>
+  <path d="M340,120H396" marker-end="url(#ar)"/>
+  <path d="M530,110L578,55" marker-end="url(#ar)"/><text x="490" y="78" class="m">submit_report</text>
+  <path d="M665,70V166" marker-end="url(#ar)"/>
+</svg>
+<p class="note">Evidence ids are assigned by code, never by the model. A report can only cite what a tool actually returned in this run.</p>
+
+<h2 id="scope">Scope</h2>
+<div class="tbl"><table>
+<tr><th>In</th><th>Out (week 3+)</th></tr>
+<tr><td>
+<code>EvidenceSource</code> Protocol; <code>SyntheticSource</code> = today's <code>EvidenceTools</code><br>
+<code>LLMClient</code> Protocol; <code>FakeLLM</code>, <code>BedrockClient</code> (boto3 Converse)<br>
+<code>Investigator</code>: loop, step cap, tool dispatch, tool log, report parsing<br>
+Pydantic v2: <code>ChangeRequest</code>, <code>Evidence</code>, <code>Finding</code>, <code>RiskReport</code> + citation check<br>
+<code>cia.bench</code>: agent vs ground truth<br>
+Deps: <code>pydantic</code>, <code>ruff</code>; <code>boto3</code> as extra <code>[bedrock]</code>
+</td><td>Guardrails beyond the citation check, Temporal, executor, audit log, FastAPI, Postgres, red-team cases</td></tr>
+</table></div>
+
+<h2 id="assumptions">Assumptions</h2>
+<ul>
+<li>Generator and ground truth are unchanged; the 7 week-1 tests stay green.</li>
+<li>Unit tests and CI never call Bedrock; <code>FakeLLM</code> covers the loop.</li>
+<li>Bedrock access exists in your AWS account, for the smoke run only.</li>
+<li>Tools stay read-only (<code>mode=ro</code>); no write path is added.</li>
+</ul>
+
+<h2 id="questions">Open Questions</h2>
+<p class="note">All resolved 2026-10-16: the recommended answer was accepted for each.</p>
+<div class="tbl"><table>
+<tr><th>#</th><th>Question</th><th>Answer</th></tr>
+<tr><td>1</td><td>Where do plans live?</td><td><code>docs/*.html</code>, per <code>CLAUDE.md</code>. <code>.plan/</code> removed; <code>writing-plans</code> skill updated to write HTML.</td></tr>
+<tr><td>2</td><td>Evidence id format</td><td><code>ev-&lt;tool&gt;-&lt;n&gt;</code> per run (e.g. <code>ev-deps-3</code>), assigned by the Investigator</td></tr>
+<tr><td>3</td><td>Rename <code>EvidenceTools</code> → <code>SyntheticSource</code>?</td><td>Yes, with alias <code>EvidenceTools = SyntheticSource</code></td></tr>
+<tr><td>4</td><td>Python floor</td><td><code>&gt;=3.12</code></td></tr>
+<tr><td>5</td><td>Bedrock model</td><td>Claude Sonnet 5.5 via env <code>CIA_BEDROCK_MODEL_ID</code>, temperature 0, region from env</td></tr>
+<tr><td>6</td><td>Step cap</td><td>8 tool calls; on cap → <code>ask_owner</code>, confidence <code>low</code></td></tr>
+<tr><td>7</td><td>Bad citations</td><td>Drop findings with unknown ids, count in <code>rejected_citations</code>; <code>safe_to_delete</code> with any rejection → <code>ask_owner</code></td></tr>
+</table></div>
+
+<h2 id="steps">Steps</h2>
+<div class="tbl"><table>
+<tr><th>#</th><th>File</th><th>Change</th></tr>
+<tr><td>1</td><td><code>pyproject.toml</code>, <code>Makefile</code></td><td>Python <code>&gt;=3.12</code>; <code>pydantic&gt;=2</code>; extras <code>dev=[pytest, ruff]</code>, <code>bedrock=[boto3]</code>; <code>[tool.ruff]</code>; targets <code>lint</code>, <code>bench-fake</code>, <code>bench-bedrock</code></td></tr>
+<tr><td>2</td><td><code>src/cia/models.py</code></td><td><code>ChangeRequest</code>, <code>Evidence(id, tool, args, result)</code>, <code>Finding(kind, summary, evidence_ids ≥1, confidence)</code>, <code>RiskReport(request_id, verdict, confidence, findings, rejected_citations)</code></td></tr>
+<tr><td>3</td><td><code>src/cia/sources.py</code></td><td><code>EvidenceSource</code> Protocol; move <code>EvidenceTools</code> here as <code>SyntheticSource</code>, re-export from <code>tools.py</code>; row caps on lists</td></tr>
+<tr><td>4</td><td><code>src/cia/llm.py</code></td><td><code>LLMClient</code>, <code>LLMTurn</code>, <code>ToolSpec</code>; <code>FakeLLM(script)</code>; <code>BedrockClient</code> mapping to Converse <code>toolConfig</code>/<code>toolUse</code>/<code>toolResult</code>; lazy <code>boto3</code> import</td></tr>
+<tr><td>5</td><td><code>src/cia/investigator.py</code></td><td>System prompt, tool specs, loop until <code>submit_report</code> or cap, parse <code>RiskReport</code>, citation check</td></tr>
+<tr><td>6</td><td><code>src/cia/bench.py</code></td><td><code>--llm fake|bedrock</code>; prints <code>unsafe_deletes</code>, accuracy, recall, precision, tool calls/case. Fake mode = <code>ScriptedPolicyLLM</code>: a plumbing check, not a quality claim</td></tr>
+<tr><td>7</td><td><code>tests/</code></td><td>Tests below; <code>ruff check</code> clean</td></tr>
+<tr><td>8</td><td><code>docs/</code>, <code>CLAUDE.md</code></td><td>Record results here; update <code>CLAUDE.md</code> status and the roadmap row in <code>docs/plan.html</code>; mark this page done</td></tr>
+</table></div>
+
+<h2 id="validation">Validation</h2>
+<ul class="check">
+<li><code>make test</code> passes; the 7 week-1 tests still pass unchanged.</li>
+<li><code>make lint</code> (<code>ruff check src tests</code>) exits 0.</li>
+<li><code>tests/test_models.py</code>: empty <code>evidence_ids</code> raises <code>ValidationError</code>; invalid verdict raises.</li>
+<li><code>tests/test_llm_fake.py</code>: <code>FakeLLM</code> returns scripted turns in order and raises when the script runs out.</li>
+<li><code>tests/test_investigator.py</code>:
+  <ul>
+  <li>tool calls are dispatched and logged with unique evidence ids;</li>
+  <li>a finding citing an unknown id is dropped and counted;</li>
+  <li><code>safe_to_delete</code> with a rejected citation → <code>ask_owner</code>;</li>
+  <li>step cap → <code>ask_owner</code>, never <code>safe_to_delete</code>;</li>
+  <li>an unknown tool name returns a tool error and does not crash.</li>
+  </ul></li>
+<li><code>tests/test_sources.py</code>: <code>SyntheticSource</code> satisfies <code>EvidenceSource</code>; DELETE still raises <code>OperationalError</code>.</li>
+<li><code>tests/test_bedrock_mapping.py</code>: Converse request/response mapping with a stubbed client (no network).</li>
+<li><code>make bench-fake</code> prints <code>unsafe_deletes: 0</code> on the 500-identity org.</li>
+<li>Optional, manual: <code>make bench-bedrock</code> completes all 20 cases; result recorded on this page (no target claimed).</li>
+</ul>
+
+<h2 id="risks">Risks</h2>
+<div class="tbl"><table>
+<tr><th>Risk</th><th>Mitigation</th></tr>
+<tr><td>Model invents evidence ids</td><td>Ids assigned in code; citation check drops unknown ids</td></tr>
+<tr><td>Model never calls <code>submit_report</code></td><td>Step cap with fail-safe <code>ask_owner</code></td></tr>
+<tr><td><code>ScriptedPolicyLLM</code> mistaken for agent quality</td><td>Fake runs labelled "plumbing"; only Bedrock numbers count as results</td></tr>
+<tr><td>Converse API shape drift</td><td>Mapping isolated in <code>BedrockClient</code>, stub-tested; check current docs before coding</td></tr>
+<tr><td>Ticket text as prompt injection</td><td>Tools read-only now; red-team cases in week 4</td></tr>
+<tr><td>Rename breaks week-1 code</td><td>Alias <code>EvidenceTools = SyntheticSource</code></td></tr>
+</table></div>
+
+<h2 id="rollout">Rollout Order</h2>
+<p>1 deps → 2 models → 3 sources → 4 llm (fake first, Bedrock last) → 5 investigator → 6 bench → 7 tests and lint green → 8 docs. One commit per step on <code>feat/week2-investigator</code>, branched from <code>feat/week1-synthetic-org</code>.</p>
+
+<h2 id="rollback">Rollback</h2>
+<p>All work is additive on its own branch: delete the branch or <code>git revert</code> the step commits. The <code>EvidenceTools</code> alias keeps week-1 callers working at every step. No data migration, nothing deployed.</p>
+</main></body></html>
