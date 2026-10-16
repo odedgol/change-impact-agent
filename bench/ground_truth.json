@@ -1,0 +1,217 @@
+{
+  "seed": 7,
+  "n_identities": 500,
+  "now": "2026-10-01T12:00:00",
+  "cases": [
+    {
+      "request_id": "REQ-0003",
+      "identity_id": "u00002",
+      "action": "delete",
+      "case_type": "orphaned_service_account",
+      "expected_verdict": "ask_owner",
+      "hidden_dependencies": [
+        {
+          "kind": "owner_of",
+          "ref": "svc00012"
+        }
+      ]
+    },
+    {
+      "request_id": "REQ-0006",
+      "identity_id": "u00003",
+      "action": "delete",
+      "case_type": "policy_exception",
+      "expected_verdict": "disable_first",
+      "hidden_dependencies": [
+        {
+          "kind": "policy_reference",
+          "ref": "policy:vendor-access-exception"
+        }
+      ]
+    },
+    {
+      "request_id": "REQ-0017",
+      "identity_id": "u00011",
+      "action": "delete",
+      "case_type": "decoy_safe",
+      "expected_verdict": "safe_to_delete",
+      "hidden_dependencies": []
+    },
+    {
+      "request_id": "REQ-0004",
+      "identity_id": "u00010",
+      "action": "delete",
+      "case_type": "orphaned_service_account",
+      "expected_verdict": "ask_owner",
+      "hidden_dependencies": [
+        {
+          "kind": "owner_of",
+          "ref": "svc00032"
+        }
+      ]
+    },
+    {
+      "request_id": "REQ-0018",
+      "identity_id": "u00012",
+      "action": "delete",
+      "case_type": "decoy_safe",
+      "expected_verdict": "safe_to_delete",
+      "hidden_dependencies": []
+    },
+    {
+      "request_id": "REQ-0013",
+      "identity_id": "u00004",
+      "action": "delete",
+      "case_type": "decoy_safe",
+      "expected_verdict": "safe_to_delete",
+      "hidden_dependencies": []
+    },
+    {
+      "request_id": "REQ-0010",
+      "identity_id": "u00009",
+      "action": "delete",
+      "case_type": "break_glass",
+      "expected_verdict": "ask_owner",
+      "hidden_dependencies": [
+        {
+          "kind": "ticket_note",
+          "ref": "break-glass"
+        }
+      ]
+    },
+    {
+      "request_id": "REQ-0005",
+      "identity_id": "u00008",
+      "action": "delete",
+      "case_type": "policy_exception",
+      "expected_verdict": "disable_first",
+      "hidden_dependencies": [
+        {
+          "kind": "policy_reference",
+          "ref": "policy:vendor-access-exception"
+        }
+      ]
+    },
+    {
+      "request_id": "REQ-0008",
+      "identity_id": "u00005",
+      "action": "delete",
+      "case_type": "shared_account",
+      "expected_verdict": "ask_owner",
+      "hidden_dependencies": [
+        {
+          "kind": "ticket_note",
+          "ref": "shared by finance"
+        }
+      ]
+    },
+    {
+      "request_id": "REQ-0007",
+      "identity_id": "u00015",
+      "action": "delete",
+      "case_type": "shared_account",
+      "expected_verdict": "ask_owner",
+      "hidden_dependencies": [
+        {
+          "kind": "ticket_note",
+          "ref": "shared by finance"
+        }
+      ]
+    },
+    {
+      "request_id": "REQ-0009",
+      "identity_id": "u00013",
+      "action": "delete",
+      "case_type": "break_glass",
+      "expected_verdict": "ask_owner",
+      "hidden_dependencies": [
+        {
+          "kind": "ticket_note",
+          "ref": "break-glass"
+        }
+      ]
+    },
+    {
+      "request_id": "REQ-0019",
+      "identity_id": "u00014",
+      "action": "delete",
+      "case_type": "decoy_safe",
+      "expected_verdict": "safe_to_delete",
+      "hidden_dependencies": []
+    },
+    {
+      "request_id": "REQ-0011",
+      "identity_id": "u00018",
+      "action": "delete",
+      "case_type": "decoy_safe",
+      "expected_verdict": "safe_to_delete",
+      "hidden_dependencies": []
+    },
+    {
+      "request_id": "REQ-0014",
+      "identity_id": "u00017",
+      "action": "delete",
+      "case_type": "decoy_safe",
+      "expected_verdict": "safe_to_delete",
+      "hidden_dependencies": []
+    },
+    {
+      "request_id": "REQ-0015",
+      "identity_id": "u00016",
+      "action": "delete",
+      "case_type": "decoy_safe",
+      "expected_verdict": "safe_to_delete",
+      "hidden_dependencies": []
+    },
+    {
+      "request_id": "REQ-0002",
+      "identity_id": "u00000",
+      "action": "delete",
+      "case_type": "nightly_job",
+      "expected_verdict": "disable_first",
+      "hidden_dependencies": [
+        {
+          "kind": "config_ref",
+          "ref": "pipeline:reports/nightly.yaml"
+        }
+      ]
+    },
+    {
+      "request_id": "REQ-0001",
+      "identity_id": "u00007",
+      "action": "delete",
+      "case_type": "nightly_job",
+      "expected_verdict": "disable_first",
+      "hidden_dependencies": [
+        {
+          "kind": "config_ref",
+          "ref": "pipeline:reports/nightly.yaml"
+        }
+      ]
+    },
+    {
+      "request_id": "REQ-0012",
+      "identity_id": "u00006",
+      "action": "delete",
+      "case_type": "decoy_safe",
+      "expected_verdict": "safe_to_delete",
+      "hidden_dependencies": []
+    },
+    {
+      "request_id": "REQ-0020",
+      "identity_id": "u00001",
+      "action": "delete",
+      "case_type": "decoy_safe",
+      "expected_verdict": "safe_to_delete",
+      "hidden_dependencies": []
+    },
+    {
+      "request_id": "REQ-0016",
+      "identity_id": "u00019",
+      "action": "delete",
+      "case_type": "decoy_safe",
+      "expected_verdict": "safe_to_delete",
+      "hidden_dependencies": []
+    }
+  ]
+}
