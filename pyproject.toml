@@ -27,3 +27,6 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM"]
 ignore = ["E501"]  # long SQL and ticket strings in week-1 code; no formatter churn in this PR
+
+[tool.setuptools.package-data]
+cia = ["monitor.html"]
