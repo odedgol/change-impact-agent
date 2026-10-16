@@ -440,7 +440,7 @@ svg.d{display:block;width:100%;height:auto}
 <section id="roadmap" class="doc">
   <h2><a class="anchor" href="#roadmap">Roadmap</a></h2>
   <ol class="weeks">
-    <li class="done"><span class="wk">Week 1</span><div><h3>Synthetic org and baseline <span class="st st-done">done</span></h3><p>Org generator with planted dependencies, five read-only tools, naive baseline that breaks 6 of 10 risky cases.</p></div></li>
+    <li class="done"><span class="wk">Week 1</span><div><h3>Synthetic org and baseline <span class="st st-done">done</span></h3><p>Org generator with planted dependencies (case types in a registry, <code>cases.py</code>), five read-only tools, naive baseline that breaks 6 of 10 risky cases.</p></div></li>
     <li class="now"><span class="wk">Week 2</span><div><h3>Investigator loop <span class="st st-now">in progress</span></h3><p><code>LLMClient</code>, <code>FakeLLM</code>, Bedrock Converse, the tool loop and a Pydantic <code>RiskReport</code> with the citation check. <a href="week-2.html">Week 2 plan</a></p></div></li>
     <li><span class="wk">Week 3</span><div><h3>Chains, guardrails, approval <span class="st">planned</span></h3><p>Credential chains with multi-hop dependencies (Q10), guardrails in code, Temporal approval signal, reversible executor and audit log.</p></div></li>
     <li><span class="wk">Week 4</span><div><h3>Proof and launch <span class="st">planned</span></h3><p>Full benchmark, red-team cases, results table, demo page. Experiment: doc index on pgvector with multi-round search (Q9, Q11).</p></div></li>
@@ -459,13 +459,14 @@ svg.d{display:block;width:100%;height:auto}
       <tr><td class="n">2.1</td><td><code>w2/tooling-models</code></td><td>Python 3.12, pydantic, ruff; <code>models.py</code></td><td><code>make lint</code>, <code>test_models.py</code></td><td><span class="st st-done">merged</span></td></tr>
       <tr><td class="n">2.2</td><td><code>w2/evidence-source</code></td><td><code>sources.py</code>, alias, row caps with truncation marker</td><td><code>test_sources.py</code></td><td><span class="st st-now">in review</span></td></tr>
       <tr><td class="n">2.3</td><td><code>w2/llm-client</code></td><td>Interface, <code>FakeLLM</code>, Bedrock mapping</td><td><code>test_llm_fake.py</code>, <code>test_bedrock_mapping.py</code></td><td><span class="st">to do</span></td></tr>
+      <tr><td class="n">R1</td><td><code>refactor/case-registry</code></td><td>Generator case types as a registry (<code>cases.py</code>, one <code>@case_type</code> function each); output byte-identical</td><td><code>test_generator_golden.py</code>, <code>test_cases.py</code></td><td><span class="st st-now">in review</span></td></tr>
       <tr><td class="n">2.4</td><td><code>w2/investigator</code></td><td>Loop, step cap, citation check, retry</td><td><code>test_investigator.py</code></td><td><span class="st">to do</span></td></tr>
       <tr><td class="n">2.5</td><td><code>w2/bench-results</code></td><td><code>bench.py</code>, results on the plan</td><td><code>unsafe_deletes: 0</code></td><td><span class="st">to do</span></td></tr>
     </tbody>
   </table></div>
   <h3>Later sprints</h3>
   <div class="two">
-    <div class="box"><h3>Sprint 3</h3><p>3.1 credential chain (Q10) · 3.2 guardrails in code · 3.3 Temporal approval · 3.4 executor and audit log</p></div>
+    <div class="box"><h3>Sprint 3</h3><p>3.1 credential chain (Q10), one new <code>@case_type</code> · 3.2 guardrails in code · 3.3 Temporal approval · 3.4 executor and audit log</p></div>
     <div class="box"><h3>Sprint 4</h3><p>4.1 full benchmark · 4.2 red-team cases · 4.3 doc index experiment (Q9, Q11) · 4.4 results, demo, README</p></div>
   </div>
 </section>

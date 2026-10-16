@@ -311,6 +311,7 @@ ul.check ul{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}
       <tr><td class="n">Q7</td><td>Bad citations</td><td>Drop the finding and count it; <span class="v v-safe">safe_to_delete</span> with any rejection becomes <span class="v v-ask">ask_owner</span></td></tr>
       <tr><td class="n">Q8</td><td>Retry on rejected citations?</td><td>Yes, once. <code>rejected_ids</code> go back to the model; the retry counts against the cap; then Q7 applies</td></tr>
       <tr><td class="n">Caps</td><td>What if a tool returns too many rows?</td><td>Cap at 50 rows (20 callers); a cut list ends with <code>{"truncated": true, "omitted": n}</code>, never a silent cut</td></tr>
+      <tr><td class="n">Cases</td><td>How are case types added?</td><td>A registry: one <code>@case_type(name, expected=...)</code> function in <code>cases.py</code> per type; <code>generate()</code> loops over it. A golden hash test keeps the org byte-identical (PR R1)</td></tr>
       <tr><td class="n">PR</td><td>How does the work land?</td><td>Five small PRs into <code>main</code>, each tested and reviewed (<a href="index.html#workflow">PR workflow</a>)</td></tr>
     </tbody>
   </table></div>
@@ -328,14 +329,14 @@ ul.check ul{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}
         <li>Hybrid search on pgvector: keywords for exact names, embeddings for paraphrases.</li>
         <li>Index when a doc changes; extract candidate links; an alias table maps names to <code>identity_id</code>.</li>
         <li>Docs are leads, not proof: a doc-only finding caps the verdict at <span class="v v-ask">ask_owner</span>.</li>
-        <li>Measured on a new case type, <code>doc_only_dependency</code>, with and without the index.</li>
+        <li>Measured on a new case type, <code>doc_only_dependency</code> (one new <code>@case_type</code>), with and without the index.</li>
       </ul>
     </article>
     <article class="q">
       <div class="q-head"><span class="q-id">Q10</span><span class="st">week 3</span></div>
       <p class="q-title">Model credential chains, such as a leaver's API key that a pipeline still uses?</p>
       <p class="chain"><b>user</b>owns<b>ES API key</b>stored in<b>secret</b>read by<b>pipeline</b>owned by<b>team</b></p>
-      <p class="rec"><b>Recommended:</b> yes, before the guardrails. A <code>credential_chain</code> case type, four new dependency kinds, and <code>get_dependencies</code> following up to 4 hops, each hop logged as evidence.</p>
+      <p class="rec"><b>Recommended:</b> yes, before the guardrails. A <code>credential_chain</code> case type (one new <code>@case_type</code> in <code>cases.py</code>), four new dependency kinds, and <code>get_dependencies</code> following up to 4 hops, each hop logged as evidence.</p>
     </article>
     <article class="q">
       <div class="q-head"><span class="q-id">Q11</span><span class="st">week 4</span></div>
