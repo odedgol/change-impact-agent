@@ -14,8 +14,8 @@ The model only proposes. Code owns everything that makes the report trustworthy:
   ``ask_owner``.
 - Paging. List tools return 50-row pages with ``next_offset``; nothing is cut.
 
-``events`` receives one dict per step (request, tool call, tool error, citation
-retry, report); ``JsonlEvents`` writes them as JSON lines for the terminal UI.
+``events`` receives one dict per step (request, model turn, tool call, tool error,
+citation retry, step cap, report); ``JsonlEvents`` writes them as JSON lines for the terminal UI.
 """
 from __future__ import annotations
 
@@ -130,6 +130,9 @@ class _Run:
         while True:
             turn = self.inv.llm.converse(SYSTEM_PROMPT, self.messages, TOOLS)
             self.messages.append(AssistantTurn(turn))
+            self.inv.events({"type": "model_turn", "request_id": self.request.request_id, "step": self.steps,
+                             "text": turn.text, "reasoning": turn.reasoning,
+                             "tool_calls": [{"name": c.name, "input": c.input} for c in turn.tool_calls]})
             report = self.handle(turn)
             if report is not None:
                 return report
@@ -225,7 +228,7 @@ class JsonlEvents:
 
 
 def main(argv: list[str] | None = None, llm: LLMClient | None = None) -> None:
-    from .llm import BedrockClient
+    from .llm import BedrockClient, OpenAICompatClient
     from .sources import SyntheticSource
 
     p = argparse.ArgumentParser(description="Investigate one change request.")
@@ -233,12 +236,17 @@ def main(argv: list[str] | None = None, llm: LLMClient | None = None) -> None:
     p.add_argument("--identity", required=True)
     p.add_argument("--request-id", default="REQ-CLI")
     p.add_argument("--events", help="write JSON-lines events to this file, or - for stdout")
+    p.add_argument("--llm", choices=["bedrock", "openai"], default="bedrock",
+                   help="openai = any OpenAI-compatible endpoint, Ollama by default")
+    p.add_argument("--model", help="model id; default from CIA_BEDROCK_MODEL_ID or CIA_OPENAI_MODEL")
     a = p.parse_args(argv)
     out = None
     if a.events:
         out = sys.stdout if a.events == "-" else open(a.events, "w")  # noqa: SIM115
     try:
-        inv = Investigator(SyntheticSource(a.db), llm or BedrockClient(), events=JsonlEvents(out) if out else None)
+        if llm is None:
+            llm = OpenAICompatClient(model=a.model) if a.llm == "openai" else BedrockClient(model_id=a.model)
+        inv = Investigator(SyntheticSource(a.db), llm, events=JsonlEvents(out) if out else None)
         report = inv.investigate(ChangeRequest(request_id=a.request_id, identity_id=a.identity))
     finally:
         if out not in (None, sys.stdout):

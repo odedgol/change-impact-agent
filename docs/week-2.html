@@ -306,7 +306,7 @@ ul.check ul{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}
       <tr><td class="n">Q2</td><td>Evidence id format</td><td><span class="ev">ev-&lt;tool&gt;-&lt;n&gt;</span>, assigned by the investigator</td></tr>
       <tr><td class="n">Q3</td><td>Rename <code>EvidenceTools</code></td><td><code>SyntheticSource</code>, with an alias</td></tr>
       <tr><td class="n">Q4</td><td>Python floor</td><td><code>&gt;=3.12</code></td></tr>
-      <tr><td class="n">Q5</td><td>Bedrock model</td><td>Claude Sonnet 5.5 via <code>CIA_BEDROCK_MODEL_ID</code>, temperature 0</td></tr>
+      <tr><td class="n">Q5</td><td>Which model?</td><td>Claude Sonnet 5.5 via <code>CIA_BEDROCK_MODEL_ID</code>, temperature 0. Locally: <code>gemma4:26b-mlx</code> on Ollama via <code>CIA_OPENAI_MODEL</code> (free, offline)</td></tr>
       <tr><td class="n">Q6</td><td>Step cap</td><td>8 tool calls; on cap, <span class="v v-ask">ask_owner</span>, confidence low</td></tr>
       <tr><td class="n">Q7</td><td>Bad citations</td><td>Drop the finding and count it; <span class="v v-safe">safe_to_delete</span> with any rejection becomes <span class="v v-ask">ask_owner</span></td></tr>
       <tr><td class="n">Q8</td><td>Retry on rejected citations?</td><td>Yes, once. <code>rejected_ids</code> go back to the model; the retry counts against the cap; then Q7 applies</td></tr>
@@ -356,6 +356,7 @@ ul.check ul{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}
     <li><span><span class="step-file">src/cia/models.py</span><code>ChangeRequest</code>, <code>Evidence</code>, <code>Finding</code> (≥ 1 evidence id), <code>RiskReport</code>.</span><span class="step-pr done">PR 2.1 · merged</span></li>
     <li><span><span class="step-file">src/cia/sources.py · tools.py</span><code>EvidenceSource</code> Protocol; <code>SyntheticSource</code> moved here, <code>EvidenceTools</code> kept as an alias. Lists come back complete and ordered; <code>paginate</code> serves them 50 rows at a time with <code>next_offset</code>. Usage windows are clamped to at least 90 days.</span><span class="step-pr done">PR 2.2 · merged</span></li>
     <li><span><span class="step-file">src/cia/llm.py</span><code>LLMClient</code> Protocol over provider-neutral messages (<code>UserText</code>, <code>AssistantTurn</code>, <code>ToolResults</code>); <code>FakeLLM(script)</code> records every call; <code>BedrockClient</code> maps to Converse <code>toolConfig</code> / <code>toolUse</code> / <code>toolResult</code>. <code>boto3</code> loads only for a real Bedrock run.</span><span class="step-pr done">PR 2.3 · in review</span></li>
+    <li><span><span class="step-file">src/cia/llm.py · Makefile</span><code>OpenAICompatClient</code> for any OpenAI-compatible endpoint (Ollama locally, vLLM in a private cloud), standard library only; the model's reasoning goes into a <code>model_turn</code> event. <code>make run-local ID=u00002</code> runs one request on <code>gemma4:26b-mlx</code>.</span><span class="step-pr done">PR 2.4b · in review</span></li>
     <li><span><span class="step-file">src/cia/investigator.py</span>Loop until <code>submit_report</code> or the cap; citation check with one retry. <code>--events</code> writes one JSON line per step (request, tool call with its evidence id, verdict) for the UI. Code sets <code>request_id</code> and <code>rejected_citations</code>; a report that tries to is sent back.</span><span class="step-pr done">PR 2.4 · in review</span></li>
     <li><span><span class="step-file">src/cia/bench.py</span><code>--llm fake|bedrock</code>; prints <code>unsafe_deletes</code>, accuracy, recall, precision. Fake mode is a plumbing check, not a quality claim.</span><span class="step-pr">PR 2.5</span></li>
     <li><span><span class="step-file">tests/</span>The tests under Validation; <code>ruff check</code> clean.</span><span class="step-pr">each PR</span></li>
@@ -368,7 +369,7 @@ ul.check ul{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}
   <h2>Validation</h2>
   <p>Each item is provable by a command or a test. CI runs <code>make test</code> and <code>make lint</code> on every PR; <code>make bench-fake</code> joins in PR 2.5.</p>
   <ul class="check">
-    <li class="done"><span><code>make test</code> passes; the 7 week-1 tests are unchanged. <em>70 passed after PR 2.4.</em></span></li>
+    <li class="done"><span><code>make test</code> passes; the 7 week-1 tests are unchanged. <em>79 passed after PR 2.4b.</em></span></li>
     <li class="done"><span><code>make lint</code> exits 0, in CI from PR 2.1.</span></li>
     <li class="done"><span><code>test_models.py</code>: empty <code>evidence_ids</code> and an invalid verdict both raise; also bad confidence, unknown fields, malformed evidence ids, JSON parsing and immutability (11 tests).</span></li>
     <li class="done"><span><code>test_llm_fake.py</code>: scripted turns come back in order, calls are recorded, an exhausted script raises (4 tests).</span></li>

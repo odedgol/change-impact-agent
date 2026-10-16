@@ -182,9 +182,10 @@ def test_events_tell_the_whole_story_in_order(org):
     target = _case(truth, "break_glass")["identity_id"]
     script = [call("get_tickets", 1, identity_id=target), submit("ask_owner", "ev-tickets-1")]
     _, events, _, case = run(org, script, "break_glass")
-    assert [e["type"] for e in events] == ["request", "tool_call", "report"]
+    assert [e["type"] for e in events] == ["request", "model_turn", "tool_call", "model_turn", "report"]
     assert events[0]["identity_id"] == case["identity_id"]
-    assert "Break-glass" in events[1]["result"]["rows"][0]["text"]
+    assert events[1]["tool_calls"] == [{"name": "get_tickets", "input": {"identity_id": target}}]
+    assert "Break-glass" in events[2]["result"]["rows"][0]["text"]
     assert events[-1]["verdict"] == "ask_owner"
 
 
@@ -200,8 +201,8 @@ def test_jsonl_events_and_cli(org, tmp_path):
                    submit("disable_first", "ev-deps-1")])
     main(["--db", db, "--identity", case["identity_id"], "--events", str(out)], llm=llm)
     lines = [json.loads(line) for line in out.read_text().splitlines()]
-    assert [e["type"] for e in lines] == ["request", "tool_call", "report"]
-    assert lines[1]["result"]["rows"][0]["kind"] == "policy_reference"
+    assert [e["type"] for e in lines if e["type"] != "model_turn"] == ["request", "tool_call", "report"]
+    assert of(lines, "tool_call")[0]["result"]["rows"][0]["kind"] == "policy_reference"
 
 
 def test_bad_step_cap_is_rejected(org):
