@@ -38,6 +38,15 @@
         ],
         "createdAt": "2026-10-16T15:19:37.407Z",
         "reason": "Claude: .tbl wrapper has no padding but every th/td has 10px 14px padding; screenshots show text inset 14px from the border"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "docs/workflow.html"
+        ],
+        "createdAt": "2026-10-16T19:01:21.716Z",
+        "reason": "Claude: .tbl wrapper has no padding but every th/td has 10px 14px padding; same pattern as plan.html and week-2.html"
       }
     ]
   }
