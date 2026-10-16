@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>PR Workflow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+/* Layout: case file. Same tokens as docs/plan.html and docs/week-2.html. */
+:root{
+  --paper:#f5f6f7;--surface:#ffffff;--ink:#15191d;--mut:#59616b;--line:#d8dce1;--line-strong:#b9c0c8;
+  --accent:#0e6b6b;--accent-bg:#e2f0ef;
+  --safe:#1d7a3a;--safe-bg:#e5f3e9;--disable:#94600a;--disable-bg:#faefd9;--ask:#4447b0;--ask-bg:#ebebfa;--guard:#b42318;--guard-bg:#fcebe9;
+  --code-bg:#eef0f2;
+  --f-display:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#0f1214;--surface:#161a1d;--ink:#e4e8eb;--mut:#98a1ab;--line:#2a3035;--line-strong:#3c444b;
+  --accent:#5cc4bf;--accent-bg:#11302f;
+  --safe:#62cf82;--safe-bg:#12291a;--disable:#e3ab50;--disable-bg:#2c2210;--ask:#a3a6ff;--ask-bg:#1e1f3d;--guard:#ff8a80;--guard-bg:#2d1614;
+  --code-bg:#1d2226;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#0f1214;--surface:#161a1d;--ink:#e4e8eb;--mut:#98a1ab;--line:#2a3035;--line-strong:#3c444b;
+  --accent:#5cc4bf;--accent-bg:#11302f;
+  --safe:#62cf82;--safe-bg:#12291a;--disable:#e3ab50;--disable-bg:#2c2210;--ask:#a3a6ff;--ask-bg:#1e1f3d;--guard:#ff8a80;--guard-bg:#2d1614;
+  --code-bg:#1d2226;color-scheme:dark}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.6 var(--f-body)}
+.wrap{max-width:960px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 96px}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:2px}
+p,li{max-width:72ch}
+code{font-family:var(--f-mono);font-size:.86em;background:var(--code-bg);padding:1px 5px;border-radius:4px;overflow-wrap:anywhere}
+pre{margin:14px 0 0;padding:14px 16px;background:var(--surface);border:1px solid var(--line);border-radius:8px;overflow-x:auto;font:13px/1.6 var(--f-mono)}
+pre code{background:none;padding:0;font-size:inherit}
+
+.topbar{display:flex;flex-wrap:wrap;gap:6px 22px;align-items:baseline;padding-block:18px;border-bottom:1px solid var(--line);font:500 13px/1.4 var(--f-mono)}
+.topbar a{color:var(--mut);text-decoration:none}
+.topbar a:hover,.topbar a[aria-current="page"]{color:var(--accent)}
+.topbar .brand{color:var(--ink);font-weight:600;letter-spacing:.08em;text-transform:uppercase;margin-right:auto}
+
+header.case{padding-block:40px 0}
+.eyebrow{font:500 12px/1.4 var(--f-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin:0}
+h1{font:700 clamp(30px,5.2vw,46px)/1.08 var(--f-display);margin:10px 0 14px;letter-spacing:-.01em;text-wrap:balance}
+h2{font:600 27px/1.2 var(--f-display);margin:0 0 14px;text-wrap:balance}
+h3{font:600 19px/1.3 var(--f-display);margin:0 0 6px;text-wrap:balance}
+.lead{font-size:18px;line-height:1.55;color:var(--mut);max-width:68ch;margin:0}
+.meta{display:flex;flex-wrap:wrap;align-items:center;gap:10px 26px;margin:22px 0 0;padding-block:12px;border-block:1px solid var(--line);font:13px/1.5 var(--f-mono);color:var(--mut)}
+.meta b{color:var(--ink);font-weight:500}
+nav.toc{display:flex;flex-wrap:wrap;gap:2px 18px;margin:14px 0 0;font:13px/1.9 var(--f-mono)}
+nav.toc a{text-decoration:none}
+nav.toc a:hover{text-decoration:underline}
+section{margin-top:48px;padding-top:28px;border-top:1px solid var(--line-strong);scroll-margin-top:12px}
+.sec-tag{font:500 11px/1 var(--f-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--mut);margin:0 0 8px}
+
+.pill{display:inline-flex;align-items:center;gap:6px;font:500 12px/1 var(--f-mono);padding:5px 9px;border-radius:999px;border:1px solid currentColor;white-space:nowrap;vertical-align:1px}
+.pill::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.st-active{color:var(--accent);background:var(--accent-bg)}
+.ok{color:var(--safe);background:var(--safe-bg)}
+.bad{color:var(--guard);background:var(--guard-bg)}
+
+.callout{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin:16px 0 0}
+.callout p{margin:0}
+.tbl{overflow-x:auto;margin:14px 0 0;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:15px;line-height:1.5}
+th,td{padding:10px 14px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}
+tr:last-child td{border-bottom:0}
+th{font:500 11px/1.4 var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--mut);background:var(--paper)}
+td code{white-space:nowrap}
+
+/* the three rules */
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:14px;margin-top:14px}
+.rule{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px 18px;display:grid;gap:6px;align-content:start}
+.rule .k{font:600 12px/1 var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--accent)}
+.rule p{margin:0;color:var(--mut)}
+.rule .by{font:12px/1.5 var(--f-mono);color:var(--ink)}
+
+/* flow: stages wrap on narrow screens; the arrow sits on each stage's leading edge */
+ol.flow{list-style:none;margin:16px 0 0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:14px 22px;counter-reset:st}
+ol.flow>li{counter-increment:st;position:relative;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:grid;gap:4px;align-content:start;max-width:none}
+ol.flow>li::before{content:counter(st,decimal-leading-zero);font:500 11px/1 var(--f-mono);color:var(--mut);letter-spacing:.08em}
+ol.flow>li+li::after{content:"\2192";position:absolute;left:-18px;top:14px;font:500 15px/1 var(--f-mono);color:var(--line-strong)}
+ol.flow>li.gate{border-color:var(--accent);background:var(--accent-bg)}
+ol.flow b{font:600 16px/1.25 var(--f-display)}
+ol.flow span{font-size:14px;line-height:1.45;color:var(--mut)}
+.loop{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:14px 0 0;padding:12px 14px;border:1px dashed var(--line-strong);border-radius:8px;font-size:15px}
+.loop .k{font:500 11px/1 var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--guard)}
+
+ol.cmds{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:10px}
+ol.cmds li{max-width:none;display:grid;gap:4px}
+ol.cmds .what{font-size:15px;color:var(--mut)}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="topbar" aria-label="Docs">
+  <a class="brand" href="plan.html">Change Impact Agent</a>
+  <a href="plan.html">Plan</a>
+  <a href="week-2.html">Week 2</a>
+  <a href="workflow.html" aria-current="page">PR workflow</a>
+</nav>
+
+<header class="case">
+  <p class="eyebrow">Process · Git flow</p>
+  <h1>How a change gets into main</h1>
+  <p class="lead">Every pull request is tested and reviewed before it merges into <code>main</code>. Every PR also says what changed in plain words and links the docs page that explains it.</p>
+  <div class="meta">
+    <span class="pill st-active">active</span>
+    <span>Applies to <b>every PR into main</b></span>
+    <span>Enforced by <b>CI + branch protection</b></span>
+    <span>Template <b>.github/pull_request_template.md</b></span>
+  </div>
+  <nav class="toc" aria-label="On this page">
+    <a href="#rules">Rules</a><a href="#flow">Flow</a><a href="#describe">PR description</a><a href="#checks">Checks</a><a href="#review">Review</a><a href="#branches">Branches</a><a href="#cheat">Cheat sheet</a>
+  </nav>
+</header>
+
+<section id="rules">
+  <p class="sec-tag">01 · Rules</p>
+  <h2>Three things before any merge</h2>
+  <div class="rules">
+    <div class="rule"><span class="k">Tested</span><p>The tests pass on Python 3.12 and 3.13. If the agent logic changed, the bench still shows 0 unsafe deletes.</p><span class="by">checked by: CI job test</span></div>
+    <div class="rule"><span class="k">Reviewed</span><p>The code has been reviewed and every review comment is resolved.</p><span class="by">checked by: branch protection</span></div>
+    <div class="rule"><span class="k">Explained</span><p>The PR says what changed in 1–3 bullets and links the <code>docs/*.html</code> page that explains it, including any design change.</p><span class="by">checked by: CI job pr-description</span></div>
+  </div>
+  <div class="callout"><p>Nobody can push straight to <code>main</code>, and you can't force-push to it. Every change goes through a PR.</p></div>
+</section>
+
+<section id="flow">
+  <p class="sec-tag">02 · Flow</p>
+  <h2>From branch to main</h2>
+  <ol class="flow">
+    <li><b>Plan</b><span>Write or update <code>docs/week-N.html</code> before writing code.</span></li>
+    <li><b>Branch</b><span>Start a short-lived branch off <code>main</code>, one slice per branch.</span></li>
+    <li><b>Open PR</b><span>Open it as a draft and fill in the template.</span></li>
+    <li class="gate"><b>CI checks</b><span>Tests and the description check run on every push.</span></li>
+    <li class="gate"><b>Review</b><span>Run a code review and resolve every comment.</span></li>
+    <li><b>Merge</b><span>Squash-merge into <code>main</code>, then delete the branch.</span></li>
+    <li><b>Close the loop</b><span>Tick the checks in the docs page and mark the step done.</span></li>
+  </ol>
+  <div class="loop"><span class="k">If a gate fails</span><span>Push a fix to the same branch. CI runs again and the PR stays open. Don't open a new PR.</span></div>
+</section>
+
+<section id="describe">
+  <p class="sec-tag">03 · PR description</p>
+  <h2>What a reviewer reads first</h2>
+  <p>GitHub fills in this template when you open a PR. Write it so someone who hasn't seen the code understands it in 30 seconds.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Section</th><th>Write</th><th>Required</th></tr></thead>
+    <tbody>
+      <tr><td><code>## What changed</code></td><td>1–3 plain bullets: what the code or docs can do now that they couldn't before.</td><td><span class="pill ok">CI</span></td></tr>
+      <tr><td><code>## Docs</code></td><td>A link to the <code>docs/*.html</code> page and section. Say whether the design changed and, if it did, what moved.</td><td><span class="pill ok">CI</span></td></tr>
+      <tr><td><code>## How to test</code></td><td>The exact commands to run and what the reviewer should see.</td><td><span class="pill ok">CI</span></td></tr>
+      <tr><td><code>## Review checklist</code></td><td>Tick each box once it's true.</td><td>yes</td></tr>
+      <tr><td><code>## Out of scope</code></td><td>What this PR deliberately leaves out, and which PR will do it.</td><td>optional</td></tr>
+    </tbody>
+  </table></div>
+  <h3 style="margin-top:26px">Example</h3>
+<pre><code>## What changed
+- Adds Pydantic models: ChangeRequest, Evidence, Finding, RiskReport.
+- A Finding with no evidence ids is now rejected at parse time.
+
+## Docs
+- Plan / spec: docs/week-2.html#steps (step 2)
+- Design changed? no
+
+## How to test
+make test   # 7 week-1 tests + 4 new model tests pass</code></pre>
+</section>
+
+<section id="checks">
+  <p class="sec-tag">04 · Checks</p>
+  <h2>What CI runs</h2>
+  <p>The workflow is in <code>.github/workflows/ci.yml</code>. It runs on every PR and on every push to <code>main</code>.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Check</th><th>Fails when</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td><code>test (3.12)</code><br><code>test (3.13)</code></td><td>Any pytest test fails.</td><td>Run <code>make test</code> locally, fix it, and push.</td></tr>
+      <tr><td><code>pr-description</code></td><td>The body has no <code>## What changed</code> or <code>## How to test</code> section, or no <code>docs/….html</code> link.</td><td>Edit the PR description. The check runs again by itself.</td></tr>
+      <tr><td><code>lint</code> <span class="pill st-active">PR 2.1</span></td><td><code>ruff check</code> reports an issue.</td><td>Run <code>make lint</code>. Arrives with the week-2 tooling PR.</td></tr>
+      <tr><td><code>bench</code> <span class="pill st-active">PR 2.5</span></td><td><code>unsafe_deletes</code> is above 0.</td><td>This is the hard gate, so fix the agent. Don't loosen the threshold.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="review">
+  <p class="sec-tag">05 · Review</p>
+  <h2>Who reviews</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Now (one author)</th><th>When a teammate joins</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Run Claude Code <code>/code-review --comment</code> on the PR. It posts findings as inline comments. Fix each one or reply, then resolve it. The author goes through the review checklist.</td>
+        <td>Raise branch protection to 1 required approval. The rest stays the same.</td>
+      </tr>
+    </tbody>
+  </table></div>
+  <div class="callout"><p>GitHub doesn't let you approve your own PR, so for now "reviewed" means: the review has run, and branch protection blocks the merge until every review comment is resolved.</p></div>
+</section>
+
+<section id="branches">
+  <p class="sec-tag">06 · Branches</p>
+  <h2>Naming</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Branch</th><th>Use</th><th>Example</th></tr></thead>
+    <tbody>
+      <tr><td><code>main</code></td><td>Protected. Changes only arrive through a merged PR.</td><td>–</td></tr>
+      <tr><td><code>w&lt;N&gt;/&lt;slice&gt;</code></td><td>One week-N slice, one PR.</td><td><code>w2/tooling-models</code></td></tr>
+      <tr><td><code>fix/&lt;what&gt;</code></td><td>A bug fix, with a regression test.</td><td><code>fix/citation-dedupe</code></td></tr>
+      <tr><td><code>docs/&lt;what&gt;</code></td><td>A docs-only change.</td><td><code>docs/workflow-page</code></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="cheat">
+  <p class="sec-tag">07 · Cheat sheet</p>
+  <h2>One PR, start to finish</h2>
+  <ol class="cmds">
+    <li><span class="what">1. Start a slice from an up-to-date main</span><pre><code>git switch main &amp;&amp; git pull &amp;&amp; git switch -c w2/tooling-models</code></pre></li>
+    <li><span class="what">2. Check it locally before pushing</span><pre><code>make test</code></pre></li>
+    <li><span class="what">3. Open a draft PR (the template fills in the description)</span><pre><code>git push -u origin HEAD &amp;&amp; gh pr create --draft --fill-first</code></pre></li>
+    <li><span class="what">4. Watch the checks, then review</span><pre><code>gh pr checks --watch
+/code-review --comment     # in Claude Code</code></pre></li>
+    <li><span class="what">5. Merge when green and all comments are resolved</span><pre><code>gh pr ready &amp;&amp; gh pr merge --squash --delete-branch</code></pre></li>
+  </ol>
+</section>
+
+</div>
+</body>
+</html>
