@@ -1,0 +1,44 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "docs/week-2.html"
+        ],
+        "createdAt": "2026-10-16T14:51:56.079Z",
+        "reason": "Claude: .note callout copies the existing docs/plan.html style so the docs pages stay consistent"
+      },
+      {
+        "rule": "tiny-text",
+        "value": "*",
+        "files": [
+          "docs/week-2.html"
+        ],
+        "createdAt": "2026-10-16T15:04:10.868Z",
+        "reason": "Claude: 10-11px labels are SVG diagram annotations rendered 1:1 (fixed 900px width, scroll container); page body text is 16px"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "docs/week-2.html"
+        ],
+        "createdAt": "2026-10-16T15:19:37.385Z",
+        "reason": "Claude: .tbl wrapper has no padding but every th/td has 10px 14px padding; screenshots show text inset 14px from the border"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "docs/plan.html"
+        ],
+        "createdAt": "2026-10-16T15:19:37.407Z",
+        "reason": "Claude: .tbl wrapper has no padding but every th/td has 10px 14px padding; screenshots show text inset 14px from the border"
+      }
+    ]
+  }
+}

@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Week 2 Investigator Plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+/* Layout: case file. One 960px column, a dossier header, sections ruled like file tabs; ids and payloads in mono. Shared by all docs/*.html pages. */
+:root{
+  --paper:#f5f6f7;--surface:#ffffff;--ink:#15191d;--mut:#59616b;--line:#d8dce1;--line-strong:#b9c0c8;
+  --accent:#0e6b6b;--accent-bg:#e2f0ef;
+  --safe:#1d7a3a;--safe-bg:#e5f3e9;--disable:#94600a;--disable-bg:#faefd9;--ask:#4447b0;--ask-bg:#ebebfa;--guard:#b42318;--guard-bg:#fcebe9;
+  --llm:#2457c5;--llm-bg:#e8effc;--tool:#1d7a3a;--tool-bg:#e5f3e9;--code-bg:#eef0f2;
+  --f-display:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#0f1214;--surface:#161a1d;--ink:#e4e8eb;--mut:#98a1ab;--line:#2a3035;--line-strong:#3c444b;
+  --accent:#5cc4bf;--accent-bg:#11302f;
+  --safe:#62cf82;--safe-bg:#12291a;--disable:#e3ab50;--disable-bg:#2c2210;--ask:#a3a6ff;--ask-bg:#1e1f3d;--guard:#ff8a80;--guard-bg:#2d1614;
+  --llm:#7ea9ff;--llm-bg:#15233b;--tool:#62cf82;--tool-bg:#12291a;--code-bg:#1d2226;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#0f1214;--surface:#161a1d;--ink:#e4e8eb;--mut:#98a1ab;--line:#2a3035;--line-strong:#3c444b;
+  --accent:#5cc4bf;--accent-bg:#11302f;
+  --safe:#62cf82;--safe-bg:#12291a;--disable:#e3ab50;--disable-bg:#2c2210;--ask:#a3a6ff;--ask-bg:#1e1f3d;--guard:#ff8a80;--guard-bg:#2d1614;
+  --llm:#7ea9ff;--llm-bg:#15233b;--tool:#62cf82;--tool-bg:#12291a;--code-bg:#1d2226;color-scheme:dark}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.6 var(--f-body)}
+.wrap{max-width:960px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 96px}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:2px}
+p,li{max-width:72ch}
+code{font-family:var(--f-mono);font-size:.86em;background:var(--code-bg);padding:1px 5px;border-radius:4px;overflow-wrap:anywhere}
+
+.topbar{display:flex;flex-wrap:wrap;gap:6px 22px;align-items:baseline;padding-block:18px;border-bottom:1px solid var(--line);font:500 13px/1.4 var(--f-mono)}
+.topbar a{color:var(--mut);text-decoration:none}
+.topbar a:hover,.topbar a[aria-current="page"]{color:var(--accent)}
+.topbar .brand{color:var(--ink);font-weight:600;letter-spacing:.08em;text-transform:uppercase;margin-right:auto}
+
+header.case{padding-block:40px 0}
+.eyebrow{font:500 12px/1.4 var(--f-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin:0}
+h1{font:700 clamp(30px,5.2vw,46px)/1.08 var(--f-display);margin:10px 0 14px;letter-spacing:-.01em;text-wrap:balance}
+h2{font:600 27px/1.2 var(--f-display);margin:0 0 14px;text-wrap:balance}
+h3{font:600 19px/1.3 var(--f-display);margin:30px 0 8px;text-wrap:balance}
+.lead{font-size:18px;line-height:1.55;color:var(--mut);max-width:68ch;margin:0}
+.meta{display:flex;flex-wrap:wrap;align-items:center;gap:10px 26px;margin:22px 0 0;padding-block:12px;border-block:1px solid var(--line);font:13px/1.5 var(--f-mono);color:var(--mut)}
+.meta b{color:var(--ink);font-weight:500}
+nav.toc{display:flex;flex-wrap:wrap;gap:2px 18px;margin:14px 0 0;font:13px/1.9 var(--f-mono)}
+nav.toc a{text-decoration:none}
+nav.toc a:hover{text-decoration:underline}
+section{margin-top:48px;padding-top:28px;border-top:1px solid var(--line-strong);scroll-margin-top:12px}
+.sec-tag{font:500 11px/1 var(--f-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--mut);margin:0 0 8px}
+
+.pill{display:inline-flex;align-items:center;gap:6px;font:500 12px/1 var(--f-mono);padding:5px 9px;border-radius:999px;border:1px solid currentColor;white-space:nowrap;vertical-align:1px}
+.pill::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.v-safe{color:var(--safe);background:var(--safe-bg)}
+.v-disable{color:var(--disable);background:var(--disable-bg)}
+.v-ask{color:var(--ask);background:var(--ask-bg)}
+.st-active{color:var(--accent);background:var(--accent-bg)}
+.st-done{color:var(--safe);background:var(--safe-bg)}
+.st-planned{color:var(--mut);background:transparent}
+.st-open{color:var(--disable);background:var(--disable-bg)}
+.ev{font:500 12px/1 var(--f-mono);color:var(--accent);background:var(--accent-bg);padding:3px 6px;border-radius:4px;white-space:nowrap}
+
+.callout{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin:16px 0 0}
+.callout p{margin:0}
+.callout.alert{border-color:var(--guard);background:var(--guard-bg)}
+.tbl{overflow-x:auto;margin:14px 0 0;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:15px;line-height:1.5}
+th,td{padding:10px 14px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}
+tr:last-child td{border-bottom:0}
+th{font:500 11px/1.4 var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--mut);background:var(--paper)}
+td.n{font:500 13px/1.6 var(--f-mono);color:var(--mut);white-space:nowrap;font-variant-numeric:tabular-nums}
+
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:14px;margin-top:14px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 18px;min-width:0}
+.panel ul{margin:8px 0 0;padding-left:18px;display:grid;gap:4px}
+.panel.out{background:transparent;border-style:dashed}
+
+.qs{display:grid;gap:12px;margin-top:14px}
+.q{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px 18px;display:grid;gap:8px;min-width:0}
+.q.open{border-color:var(--disable)}
+.q-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.q-id{font:600 13px/1 var(--f-mono)}
+.q-title{font-weight:600;margin:0}
+.q-rec{margin:0}
+.q-rec .label{font:500 11px/1 var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-right:6px}
+.q ul{margin:0;padding-left:18px;display:grid;gap:3px}
+
+ol.steps{list-style:none;padding:0;margin:14px 0 0;counter-reset:s}
+ol.steps>li{counter-increment:s;display:grid;grid-template-columns:30px minmax(0,1fr);gap:2px 16px;padding:14px 0;border-bottom:1px solid var(--line);max-width:none}
+ol.steps>li::before{content:counter(s);grid-row:span 2;width:28px;height:28px;border-radius:50%;border:1px solid var(--line-strong);display:grid;place-items:center;font:500 13px/1 var(--f-mono);color:var(--mut);background:var(--surface)}
+.step-file{font:13px/1.5 var(--f-mono);color:var(--accent);overflow-wrap:anywhere}
+
+ul.check{list-style:none;padding:0;margin:14px 0 0}
+ul.check>li{display:grid;grid-template-columns:18px minmax(0,1fr);gap:14px;padding:11px 0;border-bottom:1px solid var(--line);max-width:none}
+ul.check>li::before{content:"";width:16px;height:16px;margin-top:4px;border:1.5px solid var(--line-strong);border-radius:3px;background:var(--surface)}
+ul.check ul{margin:6px 0 0;padding-left:18px;display:grid;gap:2px}
+.optional{font:500 11px/1 var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--mut);border:1px solid var(--line-strong);border-radius:4px;padding:3px 5px;margin-right:6px}
+
+.flow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0;font:13px/1.4 var(--f-mono);color:var(--mut)}
+.flow b{font-weight:500;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:5px 9px}
+
+/* topology diagram */
+.fig{overflow-x:auto;margin:16px 0 0;border:1px solid var(--line);border-radius:8px;background:var(--surface);padding:12px}
+svg.topo{display:block;width:900px;min-width:900px;height:auto}
+.topo text{fill:var(--ink);font-family:var(--f-body)}
+.topo .ah{fill:var(--mut);stroke:none}
+.topo .c{fill:none;stroke:var(--line-strong);stroke-width:1.2}
+.topo .n-code{fill:var(--code-bg);stroke:var(--mut);stroke-width:1.2}
+.topo .n-state{fill:var(--surface);stroke:var(--mut);stroke-width:1.2}
+.topo .n-off{fill:none;stroke:var(--line-strong);stroke-width:1.2;stroke-dasharray:5 4}
+.topo .n-llm{fill:var(--llm-bg);stroke:var(--llm);stroke-width:2}
+.topo .n-tool{fill:var(--tool-bg);stroke:var(--tool);stroke-width:1.6}
+.topo .n-guard{fill:var(--guard-bg);stroke:var(--guard);stroke-width:2}
+.topo .sand{fill:none;stroke:var(--tool);stroke-width:1.2}
+.topo .wall{fill:none;stroke:var(--guard);stroke-width:1.4;stroke-dasharray:8 5}
+.topo .dash{stroke-dasharray:5 4}
+.topo path.e{fill:none;stroke:var(--mut);stroke-width:1.4}
+.topo text.h{font-size:13px;font-weight:600}
+.topo text.s{font-size:11px;fill:var(--mut)}
+.topo text.t{font:600 11px var(--f-mono);letter-spacing:.06em;fill:var(--mut)}
+.topo text.l{font:10px var(--f-mono);fill:var(--mut);paint-order:stroke;stroke:var(--surface);stroke-width:4px;stroke-linejoin:round}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="topbar" aria-label="Docs">
+  <a class="brand" href="plan.html">Change Impact Agent</a>
+  <a href="plan.html">Plan</a>
+  <a href="week-2.html" aria-current="page">Week 2</a>
+</nav>
+
+<header class="case">
+  <p class="eyebrow">Plan 001 · Week 2</p>
+  <h1>Investigator loop and RiskReport</h1>
+  <p class="lead">Week 1 shipped the synthetic org, read-only tools and a naive baseline that breaks 6 of 10 risky cases. Week 2 adds the agent: two swappable interfaces, a tool-calling loop, and a structured report where every finding cites evidence ids that code verifies.</p>
+  <div class="meta">
+    <span class="pill st-active">active</span>
+    <span>Owner <b>Oded Goldberg</b></span>
+    <span>Last updated <b>2026-10-16</b></span>
+    <span>Branch <b>feat/week2-investigator</b></span>
+  </div>
+  <nav class="toc" aria-label="Sections">
+    <a href="#goal">Goal</a><a href="#scope">Scope</a><a href="#assumptions">Assumptions</a><a href="#questions">Open Questions</a><a href="#steps">Steps</a><a href="#validation">Validation</a><a href="#risks">Risks</a><a href="#rollout">Rollout Order</a><a href="#rollback">Rollback</a>
+  </nav>
+</header>
+
+<section id="goal">
+  <h2>Goal</h2>
+  <p><code>investigate(request) -&gt; RiskReport</code> runs a tool-calling loop over an <code>LLMClient</code> and returns one verdict with a confidence:</p>
+  <p class="flow"><span class="pill v-safe">safe_to_delete</span><span class="pill v-disable">disable_first</span><span class="pill v-ask">ask_owner</span></p>
+  <p>Every finding cites evidence ids that exist in that run's tool log, such as <span class="ev">ev-deps-3</span>. Proven end-to-end with <code>FakeLLM</code>, plus one smoke run on Bedrock.</p>
+
+  <h3 id="topology">System topology</h3>
+  <p>The five layers of an agentic system, mapped onto what this project builds. Solid = week 2. Dashed = week 3+, asynchronous or proposed. Edge labels are the payload that moves along that edge.</p>
+  <div class="fig"><svg class="topo" viewBox="0 0 900 650" role="img" aria-label="System topology: orchestration layer, investigator worker agent with perception-action loop, memory and state, read-only tool boundary with human approval gate before the executor, and a citation-check critique loop">
+    <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" class="ah"/></marker></defs>
+
+    <rect class="c" x="10" y="10" width="880" height="120" rx="10"/>
+    <text class="t" x="24" y="32">LAYER 1 · ORCHESTRATION: DETERMINISTIC CODE, NO LLM ROUTER</text>
+    <rect class="n-code" x="30" y="52" width="160" height="60" rx="6"/>
+    <text class="h" x="110" y="78" text-anchor="middle">ChangeRequest</text><text class="s" x="110" y="96" text-anchor="middle">identity_id · action</text>
+    <rect class="n-code dash" x="350" y="52" width="200" height="60" rx="6"/>
+    <text class="h" x="450" y="78" text-anchor="middle">ChangeWorkflow</text><text class="s" x="450" y="96" text-anchor="middle">supervisor · Temporal (week 3)</text>
+    <rect class="n-code dash" x="690" y="52" width="180" height="60" rx="6"/>
+    <text class="h" x="780" y="78" text-anchor="middle">Router · fixed DAG</text><text class="s" x="780" y="96" text-anchor="middle">① → ② → ③ → ④</text>
+    <path class="e" d="M190,82H346" marker-end="url(#ar)"/><text class="l" x="268" y="75" text-anchor="middle">ChangeRequest{}</text>
+    <path class="e" d="M550,82H686" marker-end="url(#ar)"/><text class="l" x="618" y="75" text-anchor="middle">WorkflowState{}</text>
+    <path class="e" d="M450,112V156" marker-end="url(#ar)"/><text class="l" x="456" y="140">① ChangeRequest{}</text>
+
+    <rect class="c" x="10" y="160" width="250" height="220" rx="10"/>
+    <text class="t" x="24" y="182">LAYER 3 · MEMORY &amp; STATE</text>
+    <rect class="n-state" x="25" y="198" width="220" height="50" rx="6"/>
+    <text class="h" x="135" y="219" text-anchor="middle">messages[]</text><text class="s" x="135" y="236" text-anchor="middle">system prompt + chat history</text>
+    <rect class="n-off" x="25" y="256" width="220" height="42" rx="6"/>
+    <text class="s" x="135" y="273" text-anchor="middle">Doc index · week 4 (Q9)</text><text class="s" x="135" y="289" text-anchor="middle">pgvector, hybrid, leads only</text>
+    <rect class="n-state" x="25" y="306" width="220" height="56" rx="6"/>
+    <text class="h" x="135" y="330" text-anchor="middle">Evidence log</text><text class="s" x="135" y="348" text-anchor="middle">ev-&lt;tool&gt;-&lt;n&gt; → result</text>
+
+    <rect class="c" x="275" y="160" width="360" height="220" rx="10"/>
+    <text class="t" x="289" y="182">LAYER 2 · WORKER: INVESTIGATOR (WEEK 2)</text>
+    <rect class="n-llm" x="305" y="198" width="170" height="56" rx="6"/>
+    <text class="h" x="390" y="222" text-anchor="middle">Claude · LLMClient</text><text class="s" x="390" y="240" text-anchor="middle">Bedrock Converse | FakeLLM</text>
+    <rect class="n-code" x="305" y="306" width="170" height="56" rx="6"/>
+    <text class="h" x="390" y="330" text-anchor="middle">Investigator loop</text><text class="s" x="390" y="348" text-anchor="middle">dispatch · ≤ 8 tool calls</text>
+    <path class="e" d="M355,254V302" marker-end="url(#ar)"/><text class="l" x="361" y="283">toolUse{}</text>
+    <path class="e" d="M425,306V258" marker-end="url(#ar)"/><text class="l" x="431" y="283">toolResult[]</text>
+    <path class="e" d="M245,223H301" marker-end="url(#ar)"/><text class="l" x="273" y="216" text-anchor="middle">messages[]</text>
+    <path class="e" d="M305,334H249" marker-end="url(#ar)"/><text class="l" x="277" y="327" text-anchor="middle">Evidence{}</text>
+
+    <rect class="c" x="650" y="160" width="240" height="220" rx="10"/>
+    <text class="t" x="664" y="182">LAYER 5 · SELF-CRITIQUE (CODE)</text>
+    <rect class="n-state" x="665" y="198" width="210" height="62" rx="6"/>
+    <text class="h" x="770" y="217" text-anchor="middle">On fail</text><text class="s" x="770" y="234" text-anchor="middle">drop finding · safe → ask_owner</text><text class="s" x="770" y="250" text-anchor="middle">proposed: 1 retry (Q8)</text>
+    <rect class="n-guard" x="665" y="306" width="210" height="56" rx="6"/>
+    <text class="h" x="770" y="330" text-anchor="middle">② Citation check</text><text class="s" x="770" y="348" text-anchor="middle">cited ids ⊆ evidence log</text>
+    <path class="e" d="M475,334H661" marker-end="url(#ar)"/><text class="l" x="568" y="327" text-anchor="middle">RiskReport{} via submit_report</text>
+    <path class="e" d="M770,306V264" marker-end="url(#ar)"/><text class="l" x="776" y="289">rejected_ids[]</text>
+    <path class="e dash" d="M665,226H479" marker-end="url(#ar)"/><text class="l" x="572" y="219" text-anchor="middle">retry{rejected_ids} · async</text>
+
+    <rect class="wall" x="10" y="400" width="880" height="180" rx="10"/>
+    <text class="t" x="24" y="422">LAYER 4 · TOOL EXECUTION BOUNDARY</text>
+    <rect class="sand" x="25" y="436" width="525" height="130" rx="8"/>
+    <text class="t" x="39" y="456">READ-ONLY EVIDENCE TOOLS · SQLITE MODE=RO</text>
+    <rect class="n-tool" x="39" y="470" width="96" height="34" rx="5"/><text class="s" x="87" y="491" text-anchor="middle">get_identity</text>
+    <rect class="n-tool" x="139" y="470" width="96" height="34" rx="5"/><text class="s" x="187" y="491" text-anchor="middle">get_usage</text>
+    <rect class="n-tool" x="239" y="470" width="96" height="34" rx="5"/><text class="s" x="287" y="491" text-anchor="middle">get_dependencies</text>
+    <rect class="n-tool" x="339" y="470" width="96" height="34" rx="5"/><text class="s" x="387" y="491" text-anchor="middle">get_tickets</text>
+    <rect class="n-tool" x="439" y="470" width="96" height="34" rx="5"/><text class="s" x="487" y="491" text-anchor="middle">get_owner</text>
+    <text class="s" x="39" y="532">No web search, file writes or code exec: the agent cannot change state.</text>
+    <text class="s" x="39" y="549">Rows capped; ticket text is data, never instructions.</text>
+    <path class="e" d="M340,362V466" marker-end="url(#ar)"/><text class="l" x="334" y="393" text-anchor="end">toolUse.input{}</text>
+    <path class="e" d="M450,466V366" marker-end="url(#ar)"/><text class="l" x="456" y="393">toolResult{} + ev-id</text>
+
+    <rect class="sand dash" x="560" y="436" width="320" height="130" rx="8"/>
+    <text class="t" x="574" y="456">WRITE PATH · WEEK 3</text>
+    <rect class="n-tool dash" x="572" y="470" width="110" height="64" rx="6"/>
+    <text class="h" x="627" y="490" text-anchor="middle">④ Executor</text><text class="s" x="627" y="507" text-anchor="middle">dry-run · disable</text><text class="s" x="627" y="522" text-anchor="middle">undo · audit log</text>
+    <rect class="n-guard dash" x="735" y="470" width="135" height="64" rx="6"/>
+    <text class="h" x="802" y="490" text-anchor="middle">③ HITL approval</text><text class="s" x="802" y="507" text-anchor="middle">human signal</text><text class="s" x="802" y="522" text-anchor="middle">+ guardrails</text>
+    <path class="e" d="M790,362V466" marker-end="url(#ar)"/><text class="l" x="796" y="393">RiskReport{} ✓</text>
+    <path class="e dash" d="M735,502H686" marker-end="url(#ar)"/><text class="l" x="710" y="552" text-anchor="middle">Approval{}</text>
+
+    <rect class="n-llm" x="20" y="604" width="16" height="16" rx="3"/><text class="s" x="42" y="617">LLM call</text>
+    <rect class="n-code" x="120" y="604" width="16" height="16" rx="3"/><text class="s" x="142" y="617">Code / state</text>
+    <rect class="n-tool" x="240" y="604" width="16" height="16" rx="3"/><text class="s" x="262" y="617">Tool / action</text>
+    <rect class="n-guard" x="360" y="604" width="16" height="16" rx="3"/><text class="s" x="382" y="617">Guardrail / HITL</text>
+    <rect class="n-off" x="500" y="604" width="16" height="16" rx="3"/><text class="s" x="522" y="617">Dashed: week 3+, async or proposed</text>
+  </svg></div>
+  <div class="callout"><p>One LLM worker, not a team. The supervisor and router are plain code, so the step order can't be talked out of. Evidence ids are assigned by code, never by the model, and the critic is a code check, so a report can only cite what a tool actually returned in this run.</p></div>
+</section>
+
+<section id="scope">
+  <h2>Scope</h2>
+  <div class="cols">
+    <div class="panel">
+      <p class="sec-tag">In · week 2</p>
+      <ul>
+        <li><code>EvidenceSource</code> Protocol; <code>SyntheticSource</code> = today's <code>EvidenceTools</code></li>
+        <li><code>LLMClient</code> Protocol; <code>FakeLLM</code> and <code>BedrockClient</code> (boto3 Converse)</li>
+        <li><code>Investigator</code>: loop, step cap, tool dispatch, tool log, report parsing</li>
+        <li>Pydantic v2 models: <code>ChangeRequest</code>, <code>Evidence</code>, <code>Finding</code>, <code>RiskReport</code>, plus the citation check</li>
+        <li><code>cia.bench</code>: agent vs ground truth</li>
+        <li>Dependencies: <code>pydantic</code>, <code>ruff</code>; <code>boto3</code> as extra <code>[bedrock]</code></li>
+      </ul>
+    </div>
+    <div class="panel out">
+      <p class="sec-tag">Out · week 3+</p>
+      <ul>
+        <li>Guardrails beyond the citation check</li>
+        <li>Temporal approval, executor, audit log</li>
+        <li>Credential chain (Q10)</li>
+        <li>Doc index and multi-round search (Q9, Q11)</li>
+        <li>FastAPI, Postgres, red-team cases</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="assumptions">
+  <h2>Assumptions</h2>
+  <ul>
+    <li>Generator and ground truth are unchanged; the 7 week-1 tests stay green.</li>
+    <li>Unit tests and CI never call Bedrock; <code>FakeLLM</code> covers the loop.</li>
+    <li>Bedrock access exists in your AWS account, for the smoke run only.</li>
+    <li>Tools stay read-only (<code>mode=ro</code>); no write path is added.</li>
+  </ul>
+</section>
+
+<section id="questions">
+  <h2>Open Questions</h2>
+  <p>Four questions are open. Each has a recommended answer; reply with the number and "yes" or your change.</p>
+  <div class="qs">
+
+    <article class="q open">
+      <div class="q-head"><span class="q-id">Q8</span><span class="pill st-open">open</span><span class="pill st-planned">week 2</span></div>
+      <p class="q-title">Should the critic force a retry when citations are rejected?</p>
+      <p class="q-rec"><span class="label">Recommended</span>Yes, at most 1 retry. Send <code>rejected_ids</code> back to the model; the retry counts against the 8-call cap. If it fails again, Q7 applies. Adds one investigator test.</p>
+    </article>
+
+    <article class="q open">
+      <div class="q-head"><span class="q-id">Q9</span><span class="pill st-open">open</span><span class="pill st-planned">week 4</span></div>
+      <p class="q-title">Keep an index of internal docs (runbooks, wikis, READMEs, Slack) for evidence that never names the account id?</p>
+      <div class="q-rec"><span class="label">Recommended</span>Yes, as a measured week-4 experiment.
+        <ul>
+          <li>Hybrid search: keyword for exact names (<code>prod/flow/es</code>, <code>etl-writer</code>) plus embeddings for paraphrases, on pgvector inside Postgres.</li>
+          <li>Index when a doc changes, never per investigation.</li>
+          <li>At index time, extract candidate links from docs ("Flow gets its ES key from Vault, owner Dana"), each pointing back to its source doc.</li>
+          <li>An alias table maps names, emails and handles to <code>identity_id</code>.</li>
+          <li>Docs are leads, not proof. A doc-only finding caps the verdict at <span class="pill v-ask">ask_owner</span>. High confidence needs confirmation from an authoritative system.</li>
+          <li>Measure with a new case type, <code>doc_only_dependency</code>: run the baseline without the index first, then with it.</li>
+        </ul>
+      </div>
+    </article>
+
+    <article class="q open">
+      <div class="q-head"><span class="q-id">Q10</span><span class="pill st-open">open</span><span class="pill st-planned">week 3</span></div>
+      <p class="q-title">Model credential chains, such as a leaver's Elasticsearch API key that a pipeline still uses?</p>
+      <p class="flow"><b>user</b>→ owns →<b>ES API key</b>→ stored in →<b>secret</b>→ read by →<b>pipeline</b>→ owned by →<b>team</b></p>
+      <div class="q-rec"><span class="label">Recommended</span>Yes, in week 3 before the guardrails.
+        <ul>
+          <li>New case type <code>credential_chain</code> in the generator.</li>
+          <li>New dependency kinds: <code>owns_credential</code>, <code>stored_in</code>, <code>reads_secret</code>, <code>owned_by_team</code>.</li>
+          <li><code>get_dependencies</code> follows links up to 4 hops and logs each hop as its own evidence item.</li>
+          <li>Each link comes from the system that knows it: the ES API (key owner), Vault or Secrets Manager (where it's stored), access logs (who reads it), the service catalog (owning team). Real connectors stay optional.</li>
+        </ul>
+      </div>
+    </article>
+
+    <article class="q open">
+      <div class="q-head"><span class="q-id">Q11</span><span class="pill st-open">open</span><span class="pill st-planned">week 4</span></div>
+      <p class="q-title">Should doc search widen its terms from what each round finds?</p>
+      <div class="q-rec"><span class="label">Recommended</span>Yes, together with Q9.
+        <ul>
+          <li><code>search_docs(terms, filters, from_evidence)</code>. Every term must come from cited evidence, so the model can't invent search terms and a doc can't steer the search.</li>
+          <li>Rank by how many known chain items appear together. Filter by environment, service and doc age, so broad words like "prod" don't flood the results.</li>
+          <li>At most 4 rounds; stop when a round adds nothing. Rounds count toward the tool-call cap, which rises from 8 to 12 in week 4.</li>
+          <li>Each search is logged as evidence (<span class="ev">ev-search-2</span>), so the report shows why a doc was found.</li>
+        </ul>
+      </div>
+      <div class="tbl"><table>
+        <tr><th>Round</th><th>Search terms (from evidence)</th><th>Finds</th></tr>
+        <tr><td class="n">1</td><td>Dana, <code>dana@</code>, data-platform, key <code>etl-writer</code></td><td>Runbook: Flow nightly writes to <code>logs-prod-eu</code> with etl-writer</td></tr>
+        <tr><td class="n">2</td><td>Flow, <code>logs-prod-eu</code>, <code>prod/flow/es</code></td><td>Slack: staging Flow reuses the prod key</td></tr>
+        <tr><td class="n">3</td><td><code>flow-staging</code>, staging + ES</td><td>README: <code>billing-export</code> also reads <code>prod/flow/es</code></td></tr>
+        <tr><td class="n">4</td><td>billing-export</td><td>Nothing new, so the search stops</td></tr>
+      </table></div>
+    </article>
+  </div>
+
+  <h3>Decided</h3>
+  <div class="tbl"><table>
+    <tr><th>#</th><th>Question</th><th>Decision · 2026-10-16</th></tr>
+    <tr><td class="n">Q1</td><td>Where do plans live?</td><td><code>docs/*.html</code>, per <code>CLAUDE.md</code>. The <code>writing-plans</code> skill now writes HTML.</td></tr>
+    <tr><td class="n">Q2</td><td>Evidence id format</td><td><span class="ev">ev-&lt;tool&gt;-&lt;n&gt;</span> per run, assigned by the Investigator</td></tr>
+    <tr><td class="n">Q3</td><td>Rename <code>EvidenceTools</code> → <code>SyntheticSource</code>?</td><td>Yes, with alias <code>EvidenceTools = SyntheticSource</code></td></tr>
+    <tr><td class="n">Q4</td><td>Python floor</td><td><code>&gt;=3.12</code></td></tr>
+    <tr><td class="n">Q5</td><td>Bedrock model</td><td>Claude Sonnet 5.5 via env <code>CIA_BEDROCK_MODEL_ID</code>, temperature 0, region from env</td></tr>
+    <tr><td class="n">Q6</td><td>Step cap</td><td>8 tool calls; on cap, <span class="pill v-ask">ask_owner</span> with confidence <code>low</code></td></tr>
+    <tr><td class="n">Q7</td><td>Bad citations</td><td>Drop findings with unknown ids and count them in <code>rejected_citations</code>; <span class="pill v-safe">safe_to_delete</span> with any rejection becomes <span class="pill v-ask">ask_owner</span></td></tr>
+  </table></div>
+</section>
+
+<section id="steps">
+  <h2>Steps</h2>
+  <ol class="steps">
+    <li><span class="step-file">pyproject.toml · Makefile</span><span>Python <code>&gt;=3.12</code>; <code>pydantic&gt;=2</code>; extras <code>dev=[pytest, ruff]</code>, <code>bedrock=[boto3]</code>; <code>[tool.ruff]</code>; targets <code>lint</code>, <code>bench-fake</code>, <code>bench-bedrock</code>.</span></li>
+    <li><span class="step-file">src/cia/models.py</span><span><code>ChangeRequest</code>, <code>Evidence(id, tool, args, result)</code>, <code>Finding(kind, summary, evidence_ids ≥ 1, confidence)</code>, <code>RiskReport(request_id, verdict, confidence, findings, rejected_citations)</code>.</span></li>
+    <li><span class="step-file">src/cia/sources.py</span><span><code>EvidenceSource</code> Protocol. Move <code>EvidenceTools</code> here as <code>SyntheticSource</code> and re-export it from <code>tools.py</code>. Cap rows on list results.</span></li>
+    <li><span class="step-file">src/cia/llm.py</span><span><code>LLMClient</code>, <code>LLMTurn</code>, <code>ToolSpec</code>; <code>FakeLLM(script)</code>; <code>BedrockClient</code> mapping to Converse <code>toolConfig</code> / <code>toolUse</code> / <code>toolResult</code>; <code>boto3</code> imported lazily.</span></li>
+    <li><span class="step-file">src/cia/investigator.py</span><span>System prompt and tool specs; loop until <code>submit_report</code> or the cap; parse <code>RiskReport</code>; run the citation check (and the retry, if Q8 is accepted).</span></li>
+    <li><span class="step-file">src/cia/bench.py</span><span><code>--llm fake|bedrock</code>. Prints <code>unsafe_deletes</code>, accuracy, recall, precision and tool calls per case. Fake mode uses <code>ScriptedPolicyLLM</code>: a plumbing check, not a quality claim.</span></li>
+    <li><span class="step-file">tests/</span><span>The tests under Validation; <code>ruff check</code> clean.</span></li>
+    <li><span class="step-file">docs/ · CLAUDE.md</span><span>Record results on this page, update the status in <code>CLAUDE.md</code> and the roadmap in <code>docs/plan.html</code>, then mark this plan done.</span></li>
+  </ol>
+</section>
+
+<section id="validation">
+  <h2>Validation</h2>
+  <p>QA checklist. Every item is provable by a command or a test.</p>
+  <ul class="check">
+    <li><span><code>make test</code> passes; the 7 week-1 tests still pass unchanged.</span></li>
+    <li><span><code>make lint</code> (<code>ruff check src tests</code>) exits 0.</span></li>
+    <li><span><code>tests/test_models.py</code>: empty <code>evidence_ids</code> raises <code>ValidationError</code>; an invalid verdict raises.</span></li>
+    <li><span><code>tests/test_llm_fake.py</code>: <code>FakeLLM</code> returns scripted turns in order and raises when the script runs out.</span></li>
+    <li><span><code>tests/test_investigator.py</code>:
+      <ul>
+        <li>tool calls are dispatched and logged with unique evidence ids;</li>
+        <li>a finding citing an unknown id is dropped and counted;</li>
+        <li><span class="pill v-safe">safe_to_delete</span> with a rejected citation becomes <span class="pill v-ask">ask_owner</span>;</li>
+        <li>hitting the step cap returns <span class="pill v-ask">ask_owner</span>, never <span class="pill v-safe">safe_to_delete</span>;</li>
+        <li>an unknown tool name returns a tool error and doesn't crash;</li>
+        <li>if Q8 is accepted: rejected citations trigger exactly one retry, then Q7 applies.</li>
+      </ul></span></li>
+    <li><span><code>tests/test_sources.py</code>: <code>SyntheticSource</code> satisfies <code>EvidenceSource</code>; DELETE still raises <code>OperationalError</code>.</span></li>
+    <li><span><code>tests/test_bedrock_mapping.py</code>: Converse request and response mapping with a stubbed client, no network.</span></li>
+    <li><span><code>make bench-fake</code> prints <code>unsafe_deletes: 0</code> on the 500-identity org.</span></li>
+    <li><span><span class="optional">optional</span><code>make bench-bedrock</code> completes all 20 cases; the result is recorded on this page, with no target claimed.</span></li>
+  </ul>
+</section>
+
+<section id="risks">
+  <h2>Risks</h2>
+  <div class="tbl"><table>
+    <tr><th>Risk</th><th>Mitigation</th></tr>
+    <tr><td>Model invents evidence ids</td><td>Ids are assigned in code; the citation check drops unknown ids</td></tr>
+    <tr><td>Model never calls <code>submit_report</code></td><td>Step cap with fail-safe <span class="pill v-ask">ask_owner</span></td></tr>
+    <tr><td><code>ScriptedPolicyLLM</code> mistaken for agent quality</td><td>Fake runs are labelled "plumbing"; only Bedrock numbers count as results</td></tr>
+    <tr><td>Converse API shape drift</td><td>Mapping isolated in <code>BedrockClient</code> and stub-tested; check current docs before coding</td></tr>
+    <tr><td>Ticket or doc text used for prompt injection</td><td>Tools are read-only; search terms must come from cited evidence; red-team cases in week 4</td></tr>
+    <tr><td>Rename breaks week-1 code</td><td>Alias <code>EvidenceTools = SyntheticSource</code></td></tr>
+  </table></div>
+</section>
+
+<section id="rollout">
+  <h2>Rollout Order</h2>
+  <p class="flow"><b>deps</b>→<b>models</b>→<b>sources</b>→<b>llm (fake, then Bedrock)</b>→<b>investigator</b>→<b>bench</b>→<b>tests and lint</b>→<b>docs</b></p>
+  <p>One commit per step on <code>feat/week2-investigator</code>, branched from <code>feat/week1-synthetic-org</code>.</p>
+</section>
+
+<section id="rollback">
+  <h2>Rollback</h2>
+  <p>All work is additive on its own branch: delete the branch or <code>git revert</code> the step commits. The <code>EvidenceTools</code> alias keeps week-1 callers working at every step. No data migration, nothing deployed.</p>
+</section>
+
+</div>
+</body>
+</html>
