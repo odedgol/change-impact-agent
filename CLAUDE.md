@@ -5,6 +5,7 @@ Portfolio project (target: Twine Security, Backend Engineer – Agentic AI). Bef
 ## Status
 - Week 1 done: synthetic org generator, read-only evidence tools, naive baseline (breaks 6 of 10 risky cases). 7 tests pass.
 - Week 2 in progress (plan: `docs/week-2.html`). PR 2.1 (models) and PR 2.2 (`EvidenceSource`, `SyntheticSource`) merged, with review fixes (#7): lists paged with `next_offset` instead of cut, usage window clamped to >= 90 days, consumer rows carry `target`. PR 2.3 (`src/cia/llm.py`: `LLMClient`, provider-neutral messages, `FakeLLM`, `BedrockClient` Converse mapping) in review: 48 tests. Next: PR 2.4 investigator loop, PR 2.5 bench.
+- Refactor R1 (`refactor/case-commands`): planted case types in `generator.py` are commands (one class with `execute(org, target)` each, in `COMMANDS`; `CASE_TYPES`/`EXPECTED` derived). New types go at the end. `tests/test_generator_golden.py` pins the org hash: change it only on purpose, with the reason in the PR. 50 tests.
 
 ## Commands
 - `make seed` / `make test` / `make lint` / `make baseline`
