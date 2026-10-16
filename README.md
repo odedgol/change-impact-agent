@@ -45,3 +45,6 @@ make test
 - Evidence tools open the database in SQLite read-only mode. The agent has no write path.
 - Everything is deterministic: fixed seed, fixed clock.
 - SQLite keeps the benchmark dependency-free. The service layer will use PostgreSQL.
+
+## Docs
+Plans and design notes are HTML: open [docs/plan.html](docs/plan.html) in a browser.

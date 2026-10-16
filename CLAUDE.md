@@ -16,5 +16,8 @@ Portfolio project (target: Twine Security, Backend Engineer – Agentic AI). Bef
 - Stack: Python 3.12+, Pydantic v2, FastAPI, boto3 Bedrock Converse, Temporal (approval signal; LLM/DB calls in activities), Postgres later, pytest, Ruff.
 - Hard eval gate: 0 unsafe-delete recommendations. Targets (recall >= 90%, precision >= 80%) are proposals, not proven.
 
-## Full spec
-Claude Docs: "מפרט טכני – Change Impact Agent" (PRD, class diagram, challenges/proof plan, skills, LinkedIn plan).
+## Docs are HTML-first
+- Plans, specs, design notes, weekly plans and results live in `docs/*.html`: self-contained single files (inline CSS/JS/SVG, light and dark theme, readable at phone width, no build step).
+- Only `README.md` and `CLAUDE.md` stay Markdown (GitHub and Claude Code read them as Markdown).
+- Before coding each week, write `docs/week-N.html` (plan, diagram, acceptance checks); update it when done. Keep each page short and visual; tables and diagrams over prose.
+- Current full plan: `docs/plan.html` (PRD, class diagram, simulation, challenges and proof, skills, LinkedIn plan, roadmap).

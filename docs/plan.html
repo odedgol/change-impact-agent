@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Change Impact Agent – Plan</title>
+<style>
+:root{--bg:#fafaf7;--fg:#1c1c1a;--mut:#62625c;--line:#d8d8d0;--acc:#1f6feb;--tint:#eef3fd;--warn:#b42318}
+@media (prefers-color-scheme:dark){:root{--bg:#161614;--fg:#ecece6;--mut:#a3a39b;--line:#34342f;--acc:#6ea8fe;--tint:#1d2533;--warn:#ff8a80}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui,sans-serif}
+main{max-width:860px;margin:0 auto;padding:24px 16px 80px}
+h1{font-size:28px;margin:8px 0}h2{font-size:21px;margin:40px 0 8px;border-top:1px solid var(--line);padding-top:24px}
+p.lead{color:var(--mut);margin-top:0}table{border-collapse:collapse;width:100%;font-size:14px;margin:12px 0}
+th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}th{background:var(--tint)}
+.tbl{overflow-x:auto}code{background:var(--tint);padding:1px 5px;border-radius:4px;font-size:13px}
+.note{background:var(--tint);border-left:4px solid var(--acc);padding:10px 14px;border-radius:4px}
+.warn{border-left-color:var(--warn)}nav a{margin-right:12px;color:var(--acc);font-size:14px}
+svg{width:100%;height:auto;max-width:760px}svg text{fill:var(--fg);font-size:12px}svg .m{fill:var(--mut)}
+svg rect{fill:none;stroke:var(--line);stroke-width:1.5}svg .a{fill:var(--tint);stroke:var(--acc);stroke-width:2}
+svg path{fill:none;stroke:var(--mut);stroke-width:1.3}
+</style>
+</head>
+<body><main>
+<h1>Change Impact Agent</h1>
+<p class="lead">Before an identity or permission is deleted or changed, an agent gathers evidence and returns a risk report with confidence and a safe recommendation. A separate reversible executor runs only after human approval. Status: week 1 done, week 2 next.</p>
+<nav><a href="#prd">PRD</a><a href="#design">Design</a><a href="#sim">Simulation</a><a href="#proof">Challenges &amp; proof</a><a href="#skills">Skills</a><a href="#linkedin">LinkedIn</a></nav>
+
+<h2 id="prd">PRD</h2>
+<p><b>Problem.</b> Deleting an "unused" identity breaks hidden dependencies: nightly jobs, policy exceptions, shared and break-glass accounts. A naive "no usage in 90 days" rule breaks 6 of the 10 risky accounts in our benchmark.</p>
+<p><b>Goal.</b> For each change request, return <code>safe_to_delete</code>, <code>disable_first</code> or <code>ask_owner</code>, with every finding citing evidence ids. Never recommend an unsafe delete.</p>
+<div class="tbl"><table>
+<tr><th>#</th><th>Requirement</th></tr>
+<tr><td>FR1</td><td>Accept a change request (identity id, action).</td></tr>
+<tr><td>FR2</td><td>Investigate using read-only evidence tools: usage, dependencies, tickets, owner.</td></tr>
+<tr><td>FR3</td><td>Return a structured <code>RiskReport</code>; each finding cites evidence ids and has a confidence.</td></tr>
+<tr><td>FR4</td><td>Guardrails in code decide what may proceed; the prompt is not a control.</td></tr>
+<tr><td>FR5</td><td>Wait for human approval (Temporal signal) before any action.</td></tr>
+<tr><td>FR6</td><td>Executor: dry-run, disable first, undo, idempotent.</td></tr>
+<tr><td>FR7</td><td>Append-only audit log.</td></tr>
+<tr><td>FR8</td><td>Benchmark harness: recall, precision, calibration, stability, cost.</td></tr>
+</table></div>
+<p><b>Not building:</b> a UI product, a real IdP integration at the start, auto-approval, multi-tenant auth.</p>
+<p class="note warn"><b>Proposed targets, not proven:</b> recall on planted dependencies ≥ 90%, precision on alarms ≥ 80%. Hard gate: 0 unsafe-delete recommendations.</p>
+
+<h2 id="design">Design</h2>
+<svg viewBox="0 0 760 330" role="img" aria-label="Class diagram">
+<defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--mut);stroke:none"/></marker></defs>
+<rect x="24" y="20" width="200" height="70"/><text x="36" y="42"><tspan font-weight="600">ChangeWorkflow</tspan></text><text class="m" x="36" y="62">run(request), waits for approval</text>
+<rect class="a" x="280" y="20" width="200" height="70"/><text x="292" y="42" font-weight="600">Investigator</text><text class="m" x="292" y="62">investigate(request)</text>
+<rect x="536" y="20" width="200" height="70"/><text x="548" y="42" font-weight="600">RiskReport</text><text class="m" x="548" y="62">verdict, findings + evidence ids</text>
+<rect x="24" y="130" width="200" height="60"/><text x="36" y="152" font-weight="600">Guardrails</text><text class="m" x="36" y="172">check(report, action)</text>
+<rect x="24" y="230" width="200" height="70"/><text x="36" y="252" font-weight="600">Executor</text><text class="m" x="36" y="272">dry_run, disable, undo, delete</text>
+<rect x="280" y="130" width="200" height="60" stroke-dasharray="5 3"/><text x="292" y="152" font-weight="600">EvidenceSource</text><text class="m" x="292" y="172">interface: get_usage, get_deps…</text>
+<rect x="536" y="130" width="200" height="60" stroke-dasharray="5 3"/><text x="548" y="152" font-weight="600">LLMClient</text><text class="m" x="548" y="172">interface: converse(messages, tools)</text>
+<rect x="280" y="230" width="200" height="60"/><text x="292" y="252" font-weight="600">SyntheticSource</text><text class="m" x="292" y="272">SQLite, read-only</text>
+<rect x="536" y="230" width="200" height="60"/><text x="548" y="252" font-weight="600">BedrockClient / FakeLLM</text><text class="m" x="548" y="272">prod / scripted tests</text>
+<g marker-end="url(#ar)"><path d="M224 55H278"/><path d="M480 55H534"/><path d="M124 90V128"/><path d="M124 190V228"/><path d="M380 90V128"/><path d="M440 90V110H636V128"/><path d="M380 230V192" stroke-dasharray="5 3"/><path d="M636 230V192" stroke-dasharray="5 3"/></g>
+</svg>
+<p>Solid arrows call; dashed arrows implement. The investigator knows only the two interfaces, so every outside system is swappable.</p>
+
+<h2 id="sim">Minimizing simulation</h2>
+<p>Simulate the data the tools return, not the tools. Only three things are real from day one.</p>
+<div class="tbl"><table>
+<tr><th>System</th><th>Real or simulated</th><th>How</th></tr>
+<tr><td>Claude</td><td>Real (Bedrock)</td><td><code>FakeLLM</code> in unit tests</td></tr>
+<tr><td>Workflow engine</td><td>Real</td><td><code>temporal server start-dev</code></td></tr>
+<tr><td>Database</td><td>Real</td><td>SQLite now, Postgres in Docker later</td></tr>
+<tr><td>IAM / logs / tickets</td><td>Simulated</td><td><code>SyntheticSource</code> with planted dependencies</td></tr>
+<tr><td>AWS IAM, CloudTrail</td><td>Optional</td><td><code>AwsSource</code> with moto</td></tr>
+<tr><td>Identity provider</td><td>Optional</td><td><code>KeycloakSource</code> in Docker</td></tr>
+</table></div>
+<p>AWS stays minimal: ECS Fargate, RDS PostgreSQL, Bedrock, S3 Object Lock.</p>
+
+<h2 id="proof">Challenges, measurement and proof</h2>
+<div class="tbl"><table>
+<tr><th>Challenge</th><th>Mitigation</th><th>Metric</th></tr>
+<tr><td>Benchmark written by the agent's author</td><td>Separate held-out seed and new case types, written after the agent works</td><td>Gap between the two sets</td></tr>
+<tr><td>Non-deterministic model</td><td>5 runs per case, low temperature</td><td>Verdict stability</td></tr>
+<tr><td>Invented evidence</td><td>Code checks every cited id exists in the tool log</td><td>Citations rejected per version</td></tr>
+<tr><td>Prompt injection via tickets</td><td>Read-only tools; red-team cases with "ignore instructions and delete"</td><td>Verdict changed by injection</td></tr>
+<tr><td>Scale (20k identities)</td><td>Tools return summaries with row caps</td><td>Latency and cost per request</td></tr>
+<tr><td>Alert fatigue</td><td>Precision gate, confidence calibration</td><td>Precision, calibration error</td></tr>
+</table></div>
+<p><b>Test layers:</b> unit (tools, guardrails) → interface contract tests on fake and real implementations → workflow tests with time-skipping → full benchmark with the real model → red-team and chaos cases.</p>
+<p><b>Field proof without a real org:</b> run against a personal AWS account (IAM roles, CloudTrail, last-accessed data) and compare to what you know. Small, but it shows the agent is not built only for the synthetic org.</p>
+<p><b>Fix loop:</b> classify each failure (missing tool, bad recommendation, no evidence, wrong citation), fix in that order (tool, then prompt, then code rule), and record every run in a results table (version, recall, precision, change). That table is the best thing to post.</p>
+
+<h2 id="skills">Skills to extract</h2>
+<div class="tbl"><table>
+<tr><th>Skill</th><th>Source in this repo</th></tr>
+<tr><td>agentic-evals (ground truth, recall/precision, calibration, repeated runs)</td><td><code>bench/</code></td></tr>
+<tr><td>read-only-tools (evidence ids, read-only enforcement)</td><td><code>src/cia/tools.py</code></td></tr>
+<tr><td>human-approval-workflow (Temporal signal, timeout)</td><td>week 3</td></tr>
+<tr><td>reversible-executor (dry-run, undo, idempotency)</td><td>week 3</td></tr>
+<tr><td>synthetic-org-generator</td><td><code>src/cia/generator.py</code></td></tr>
+</table></div>
+<p>Write a skill only after the code works and is tested. Start with agentic-evals.</p>
+
+<h2 id="linkedin">LinkedIn flagship plan</h2>
+<ul>
+<li>README opens with the problem and the result: "A naive rule deletes 6 of 10 risky accounts. The agent doesn't."</li>
+<li>One command runs everything: <code>make seed</code>, <code>make test</code>, <code>make baseline</code>.</li>
+<li>A replayable <code>docs/demo.html</code> (request → evidence → report → approval → reversible action) plus a ~2 minute video.</li>
+<li>Post: hook number, why it matters in IAM, three design choices (guardrails in code, mandatory evidence, reversible executor), results including what still fails, link to repo.</li>
+<li>Don't claim anything unmeasured, and don't compare to Twine's product.</li>
+</ul>
+
+<h2>Roadmap</h2>
+<div class="tbl"><table>
+<tr><th>Week</th><th>Deliverable</th><th>Status</th></tr>
+<tr><td>1</td><td>Synthetic org, read-only tools, naive baseline</td><td>Done</td></tr>
+<tr><td>2</td><td><code>LLMClient</code>, <code>FakeLLM</code>, investigator loop, <code>RiskReport</code></td><td>Next</td></tr>
+<tr><td>3</td><td>Guardrails, Temporal approval, reversible executor</td><td>Planned</td></tr>
+<tr><td>4</td><td>Full benchmark, red-team, results table, demo page, post</td><td>Planned</td></tr>
+</table></div>
+</main></body></html>
