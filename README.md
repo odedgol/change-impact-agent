@@ -47,4 +47,4 @@ make test
 - SQLite keeps the benchmark dependency-free. The service layer will use PostgreSQL.
 
 ## Docs
-Plans and design notes are HTML: open [docs/plan.html](docs/plan.html) in a browser.
+Plans and design notes are HTML: open [docs/index.html](docs/index.html) in a browser.
