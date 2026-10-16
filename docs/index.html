@@ -248,7 +248,7 @@ svg.d{display:block;width:100%;height:auto}
     <div><dt>Output: one verdict, with confidence</dt><dd class="vs"><span class="v v-safe">safe_to_delete</span><span class="v v-disable">disable_first</span><span class="v v-ask">ask_owner</span></dd></div>
     <div><dt>Hard gate</dt><dd><b>0</b> unsafe-delete recommendations. Recall ≥ 90%<span class="target">target</span> precision ≥ 80%<span class="target">target</span></dd></div>
   </dl>
-  <div class="note"><p><b>Status, 2026-10-16.</b> Week 1 is done (synthetic org, read-only tools, baseline, 7 tests). Week 2, the investigator loop, is in progress: <a href="week-2.html">read the plan</a>. Numbers marked <span class="target">target</span> are goals, not results.</p></div>
+  <div class="note"><p><b>Status, 2026-10-16.</b> Week 1 is done (synthetic org, read-only tools, baseline). Week 2, the investigator loop, is in progress: the Pydantic models are in review (PR 2.1, 18 tests); <a href="week-2.html">read the plan</a>. Numbers marked <span class="target">target</span> are goals, not results.</p></div>
 </section>
 
 <section id="system" class="wide">
@@ -452,9 +452,10 @@ svg.d{display:block;width:100%;height:auto}
   <div class="tbl"><table>
     <thead><tr><th>PR</th><th>Branch</th><th>What it adds</th><th>Must pass</th><th>Status</th></tr></thead>
     <tbody>
-      <tr><td class="n"><a href="https://github.com/odedgol/change-impact-agent/pull/1">#1</a></td><td><code>feat/week1-synthetic-org</code></td><td>Week 1, CI, PR template</td><td><code>make test</code></td><td><span class="st st-now">in review</span></td></tr>
-      <tr><td class="n"><a href="https://github.com/odedgol/change-impact-agent/pull/2">#2</a></td><td><code>feat/week2-investigator</code></td><td>Week-2 plan and these docs</td><td>PR description check</td><td><span class="st st-now">in review</span></td></tr>
-      <tr><td class="n">2.1</td><td><code>w2/tooling-models</code></td><td>Python 3.12, pydantic, ruff; <code>models.py</code></td><td><code>make lint</code>, <code>test_models.py</code></td><td><span class="st">to do</span></td></tr>
+      <tr><td class="n"><a href="https://github.com/odedgol/change-impact-agent/pull/1">#1</a></td><td><code>feat/week1-synthetic-org</code></td><td>Week 1: synthetic org, tools, baseline</td><td><code>make test</code></td><td><span class="st st-done">merged</span></td></tr>
+      <tr><td class="n"><a href="https://github.com/odedgol/change-impact-agent/pull/2">#2</a></td><td><code>feat/week2-investigator</code></td><td>Week-2 plan</td><td>review</td><td><span class="st st-done">merged</span></td></tr>
+      <tr><td class="n"><a href="https://github.com/odedgol/change-impact-agent/pull/3">#3</a></td><td><code>docs/hub-ci-workflow</code></td><td>CI, PR workflow, docs hub</td><td>CI, review</td><td><span class="st st-done">merged</span></td></tr>
+      <tr><td class="n">2.1</td><td><code>w2/tooling-models</code></td><td>Python 3.12, pydantic, ruff; <code>models.py</code></td><td><code>make lint</code>, <code>test_models.py</code></td><td><span class="st st-now">in review</span></td></tr>
       <tr><td class="n">2.2</td><td><code>w2/evidence-source</code></td><td><code>sources.py</code>, alias, row caps</td><td><code>test_sources.py</code></td><td><span class="st">to do</span></td></tr>
       <tr><td class="n">2.3</td><td><code>w2/llm-client</code></td><td>Interface, <code>FakeLLM</code>, Bedrock mapping</td><td><code>test_llm_fake.py</code>, <code>test_bedrock_mapping.py</code></td><td><span class="st">to do</span></td></tr>
       <tr><td class="n">2.4</td><td><code>w2/investigator</code></td><td>Loop, step cap, citation check, retry</td><td><code>test_investigator.py</code></td><td><span class="st">to do</span></td></tr>
@@ -515,7 +516,7 @@ svg.d{display:block;width:100%;height:auto}
   <div class="tbl"><table>
     <thead><tr><th>Gate</th><th>Checked by</th><th>Fails when</th></tr></thead>
     <tbody>
-      <tr><td>Tested</td><td><code>test (3.12)</code>, <code>test (3.13)</code></td><td>Any pytest test fails. Later: <code>lint</code> (PR 2.1) and <code>bench</code> with <code>unsafe_deletes &gt; 0</code> (PR 2.5)</td></tr>
+      <tr><td>Tested</td><td><code>test (3.12)</code>, <code>test (3.13)</code></td><td>Any pytest test fails or <code>ruff check</code> reports an issue. From PR 2.5: <code>unsafe_deletes &gt; 0</code></td></tr>
       <tr><td>Explained</td><td><code>pr-description</code></td><td>No <code>## What changed</code>, no <code>## How to test</code>, or no link to a <code>docs/*.html</code> page</td></tr>
       <tr><td>Reviewed</td><td>Branch protection</td><td>A review comment is unresolved. Review today: <code>/code-review --comment</code>; 1 approval once a teammate joins</td></tr>
     </tbody>
