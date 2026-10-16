@@ -20,4 +20,4 @@ Portfolio project (target: Twine Security, Backend Engineer – Agentic AI). Bef
 - Plans, specs, design notes, weekly plans and results live in `docs/*.html`: self-contained single files (inline CSS/JS/SVG, light and dark theme, readable at phone width, no build step).
 - Only `README.md` and `CLAUDE.md` stay Markdown (GitHub and Claude Code read them as Markdown).
 - Before coding each week, write `docs/week-N.html` (plan, diagram, acceptance checks); update it when done. Keep each page short and visual; tables and diagrams over prose.
-- Current full plan: `docs/plan.html` (PRD, class diagram, simulation, challenges and proof, skills, LinkedIn plan, roadmap).
+- Docs hub: `docs/index.html` (overview, system diagram, agentic workflow, guardrails, roadmap, sprints and PRs, tech stack, PR workflow, requirements). Week plans: `docs/week-N.html`, same shell and sidebar.

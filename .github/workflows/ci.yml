@@ -1,6 +1,6 @@
 name: CI
 
-# Every PR into main must pass these checks before it can merge (see docs/workflow.html).
+# Every PR into main must pass these checks before it can merge (see docs/index.html#workflow).
 on:
   pull_request:
     types: [opened, synchronize, reopened, edited, ready_for_review]

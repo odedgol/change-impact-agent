@@ -1,25 +1,27 @@
 {
   "detector": {
     "ignoreRules": [],
-    "ignoreFiles": [],
+    "ignoreFiles": [
+      ".impeccable/mocks/**"
+    ],
     "ignoreValues": [
       {
-        "rule": "side-tab",
+        "rule": "cramped-padding",
         "value": "*",
         "files": [
-          "docs/week-2.html"
+          "docs/index.html"
         ],
-        "createdAt": "2026-10-16T14:51:56.079Z",
-        "reason": "Claude: .note callout copies the existing docs/plan.html style so the docs pages stay consistent"
+        "createdAt": "2026-10-16T19:17:21.482Z",
+        "reason": "Claude: .tbl wrapper has no padding by design; every th/td carries 11px 14px padding, so text is inset from the border"
       },
       {
-        "rule": "tiny-text",
+        "rule": "overused-font",
         "value": "*",
         "files": [
-          "docs/week-2.html"
+          "docs/index.html"
         ],
-        "createdAt": "2026-10-16T15:04:10.868Z",
-        "reason": "Claude: 10-11px labels are SVG diagram annotations rendered 1:1 (fixed 900px width, scroll container); page body text is 16px"
+        "createdAt": "2026-10-16T19:17:21.959Z",
+        "reason": "Claude: user chose the developer-docs canon with Vercel/Next.js docs as a named benchmark; Geist is that benchmark's own face"
       },
       {
         "rule": "cramped-padding",
@@ -27,26 +29,17 @@
         "files": [
           "docs/week-2.html"
         ],
-        "createdAt": "2026-10-16T15:19:37.385Z",
-        "reason": "Claude: .tbl wrapper has no padding but every th/td has 10px 14px padding; screenshots show text inset 14px from the border"
+        "createdAt": "2026-10-16T19:17:22.434Z",
+        "reason": "Claude: .tbl wrapper has no padding by design; every th/td carries 11px 14px padding, so text is inset from the border"
       },
       {
-        "rule": "cramped-padding",
+        "rule": "overused-font",
         "value": "*",
         "files": [
-          "docs/plan.html"
+          "docs/week-2.html"
         ],
-        "createdAt": "2026-10-16T15:19:37.407Z",
-        "reason": "Claude: .tbl wrapper has no padding but every th/td has 10px 14px padding; screenshots show text inset 14px from the border"
-      },
-      {
-        "rule": "cramped-padding",
-        "value": "*",
-        "files": [
-          "docs/workflow.html"
-        ],
-        "createdAt": "2026-10-16T19:01:21.716Z",
-        "reason": "Claude: .tbl wrapper has no padding but every th/td has 10px 14px padding; same pattern as plan.html and week-2.html"
+        "createdAt": "2026-10-16T19:17:22.910Z",
+        "reason": "Claude: user chose the developer-docs canon with Vercel/Next.js docs as a named benchmark; Geist is that benchmark's own face"
       }
     ]
   }
