@@ -37,12 +37,12 @@ EVIDENCE_PREFIX = {"get_identity": "identity", "get_usage": "usage", "get_depend
                    "get_tickets": "tickets", "get_owner": "owner"}
 
 
-class RunState(TypedDict, total=False):
-    """Everything one investigation knows. Each node returns only the keys it changes."""
+class RunState(TypedDict):
+    """Everything one investigation knows. ``initial_state`` sets every key; nodes return an ``Update``."""
 
     request: ChangeRequest
     messages: list[Message]
-    turn: LLMTurn                    # the model's latest turn
+    turn: LLMTurn | None             # the model's latest turn; None before the first one
     cursor: int                      # next tool call of that turn to handle
     results: list[ToolResult]        # results of that turn so far, sent back together
     evidence: dict[str, Evidence]    # the evidence log: id -> what a tool returned
@@ -51,6 +51,15 @@ class RunState(TypedDict, total=False):
     steps: int
     retried: bool                    # the one citation retry is spent
     report: RiskReport | None
+
+
+Update = dict[str, Any]  # what a node returns: only the RunState keys it changes
+
+
+def latest_turn(state: RunState) -> LLMTurn:
+    turn = state["turn"]
+    assert turn is not None, "routed here before the model's first turn"
+    return turn
 
 
 # ---- rules: plain functions, no graph, tested on their own ------------------------------------------
@@ -105,8 +114,8 @@ def build_graph(inv: Investigator, checkpointer: Any = None):
     def emit(state: RunState, event: dict[str, Any]) -> None:
         inv.events({"type": event.pop("type"), "request_id": state["request"].request_id, **event})
 
-    def error(state: RunState, call: ToolCall, message: str) -> ToolResult:
-        emit(state, {"type": "tool_error", "step": state["steps"], "tool": call.name, "error": message})
+    def error(state: RunState, step: int, call: ToolCall, message: str) -> ToolResult:
+        emit(state, {"type": "tool_error", "step": step, "tool": call.name, "error": message})
         return ToolResult(call.id, {"error": message}, is_error=True)
 
     def paged(list_fn: Callable[[str], list[dict]]) -> Callable[..., dict]:
@@ -120,96 +129,97 @@ def build_graph(inv: Investigator, checkpointer: Any = None):
 
     # -- nodes
 
-    def model(state: RunState) -> RunState:
+    def model(state: RunState) -> Update:
         turn = inv.llm.converse(SYSTEM_PROMPT, state["messages"], TOOLS)
         emit(state, {"type": "model_turn", "step": state["steps"], "text": turn.text, "reasoning": turn.reasoning,
                      "stop_reason": turn.stop_reason,
                      "tool_calls": [{"name": c.name, "input": c.input} for c in turn.tool_calls]})
         return {"turn": turn, "cursor": 0, "results": [], "messages": [*state["messages"], AssistantTurn(turn)]}
 
-    def nudge(state: RunState) -> RunState:
+    def nudge(state: RunState) -> Update:
         """A turn with no tool call costs a step and gets a reminder."""
         return {"steps": state["steps"] + 1, "messages": [*state["messages"], UserText(NUDGE)]}
 
-    def tools(state: RunState) -> RunState:
+    def tools(state: RunState) -> Update:
         """Run this turn's read-only calls in order, up to a submit_report or the step cap."""
-        calls, i = state["turn"].tool_calls, state["cursor"]
+        calls, i = latest_turn(state).tool_calls, state["cursor"]
         steps, results, evidence = state["steps"], list(state["results"]), dict(state["evidence"])
         read_ok, unread = state["read_ok"], state["unread_pages"]
         while i < len(calls) and calls[i].name != SUBMIT and steps < inv.max_steps:
             call, steps = calls[i], steps + 1
-            result, ev = dispatch({**state, "steps": steps, "evidence": evidence}, call)
+            result, ev = dispatch(state, steps, len(evidence), call)
             if ev is not None:
                 evidence[ev.id] = ev
                 read_ok, unread = coverage(read_ok, unread, call.name, ev.result)
             results.append(result)
             i += 1
-        update: RunState = {"cursor": i, "steps": steps, "results": results, "evidence": evidence,
+        update: Update = {"cursor": i, "steps": steps, "results": results, "evidence": evidence,
                             "read_ok": read_ok, "unread_pages": unread}
         if i == len(calls):  # the turn is done: send every result back at once
             update.update(messages=[*state["messages"], ToolResults(tuple(results))], results=[])
         return update
 
-    def dispatch(state: RunState, call: ToolCall) -> tuple[ToolResult, Evidence | None]:
+    def dispatch(state: RunState, step: int, n_evidence: int, call: ToolCall) -> tuple[ToolResult, Evidence | None]:
         fn = tools_by_name.get(call.name)
         if fn is None:
-            return error(state, call, f"unknown tool {call.name!r}"), None
+            return error(state, step, call, f"unknown tool {call.name!r}"), None
         try:
             inspect.signature(fn).bind(**call.input)
             data = fn(**call.input)
         except (TypeError, ValueError) as e:
-            return error(state, call, f"bad arguments for {call.name}: {e}"), None
+            return error(state, step, call, f"bad arguments for {call.name}: {e}"), None
         except Exception as e:  # noqa: BLE001 - an unavailable source is an error, never "no rows"
-            return error(state, call, f"source unavailable for {call.name}: {type(e).__name__}: {e}"), None
-        ev = Evidence(id=f"ev-{EVIDENCE_PREFIX[call.name]}-{len(state['evidence']) + 1}", tool=call.name,
+            return error(state, step, call, f"source unavailable for {call.name}: {type(e).__name__}: {e}"), None
+        ev = Evidence(id=f"ev-{EVIDENCE_PREFIX[call.name]}-{n_evidence + 1}", tool=call.name,
                       args=dict(call.input), result=data, collected_at=inv.clock(),
                       source_name=inv.source_name, source_updated_at=inv.source_updated_at)
-        emit(state, {"type": "tool_call", "step": state["steps"], "evidence_id": ev.id, "tool": call.name,
+        emit(state, {"type": "tool_call", "step": step, "evidence_id": ev.id, "tool": call.name,
                      "args": ev.args, "result": data, "collected_at": ev.collected_at,
                      "source_name": ev.source_name, "source_updated_at": ev.source_updated_at})
         return ToolResult(call.id, {"evidence_id": ev.id, "data": data}), ev
 
-    def check(state: RunState) -> RunState:
+    def check(state: RunState) -> Update:
         """The citation check: accept the report, or send it back once with the unknown ids."""
-        call, steps = state["turn"].tool_calls[state["cursor"]], state["steps"] + 1
-        s = {**state, "steps": steps}
+        call, steps = latest_turn(state).tool_calls[state["cursor"]], state["steps"] + 1
         extra = set(call.input) - REPORT_FIELDS
         if extra:
-            return send_back(s, error(s, call, f"invalid report: unexpected fields {sorted(extra)}"))
+            return send_back(state, steps, error(state, steps, call, f"invalid report: unexpected fields {sorted(extra)}"))
         try:
             draft = RiskReport(request_id=state["request"].request_id, **call.input)
         except ValidationError as e:
-            return send_back(s, error(s, call, f"invalid report: {e}"))
+            return send_back(state, steps, error(state, steps, call, f"invalid report: {e}"))
         unknown = sorted({i for f in draft.findings for i in f.evidence_ids if i not in state["evidence"]})
         if not unknown:
             return {"steps": steps, "report": draft}
         if not state["retried"]:
-            emit(s, {"type": "citation_retry", "step": steps, "rejected_ids": unknown})
+            emit(state, {"type": "citation_retry", "step": steps, "rejected_ids": unknown})
             back = ToolResult(call.id, {"error": "unknown evidence ids; cite only ids the tools returned",
                                         "rejected_ids": unknown}, is_error=True)
-            return {**send_back(s, back), "retried": True}
+            return {**send_back(state, steps, back), "retried": True}
         return {"steps": steps, "report": drop_bad_citations(draft, set(unknown))}
 
-    def send_back(state: RunState, result: ToolResult) -> RunState:
+    def send_back(state: RunState, steps: int, result: ToolResult) -> Update:
         """A rejected report is one more tool result of this turn; the turn's other calls still run."""
-        return {"steps": state["steps"], "cursor": state["cursor"] + 1, "results": [*state["results"], result]}
+        return {"steps": steps, "cursor": state["cursor"] + 1, "results": [*state["results"], result]}
 
-    def finish(state: RunState) -> RunState:
-        return {"report": finish_report(state["report"], state["read_ok"], state["unread_pages"])}
+    def finish(state: RunState) -> Update:
+        report = state["report"]
+        assert report is not None, "check routes here only with a report"
+        return {"report": finish_report(report, state["read_ok"], state["unread_pages"])}
 
-    def cap(state: RunState) -> RunState:
+    def cap(state: RunState) -> Update:
         emit(state, {"type": "step_cap", "steps": state["steps"]})
         return {"report": cap_report(state["request"], state["steps"])}
 
     # -- routing: where each node goes next
 
     def after_model(state: RunState) -> str:
-        if not state["turn"].tool_calls:
+        if not latest_turn(state).tool_calls:
             return "cap" if state["steps"] >= inv.max_steps else "nudge"
         return "tools"
 
     def after_tools(state: RunState) -> str:
-        calls, i = state["turn"].tool_calls, state["cursor"]
+        calls, i = latest_turn(state).tool_calls, state["cursor"]
         if i == len(calls):
             return "model"
         if state["steps"] >= inv.max_steps:
@@ -217,7 +227,7 @@ def build_graph(inv: Investigator, checkpointer: Any = None):
         return "check"  # calls[i] is submit_report
 
     def after_check(state: RunState) -> str:
-        if state.get("report") is not None:
+        if state["report"] is not None:
             return "finish"
         return "tools"
 
@@ -236,7 +246,7 @@ def build_graph(inv: Investigator, checkpointer: Any = None):
 
 
 def initial_state(request: ChangeRequest) -> RunState:
-    return {"request": request, "steps": 0, "retried": False, "report": None, "evidence": {},
+    return {"request": request, "turn": None, "steps": 0, "retried": False, "report": None, "evidence": {},
             "read_ok": [], "unread_pages": [], "cursor": 0, "results": [],
             "messages": [UserText(f"Change request {request.request_id}: {request.action} identity "
                                   f"{request.identity_id}. Investigate, then call submit_report.")]}
@@ -265,10 +275,24 @@ def mermaid() -> str:
     from .llm import FakeLLM
 
     class _NoSource:
+        """Drawing the graph never calls a tool."""
+
         name = "none"
 
-        def __getattr__(self, name):
-            return lambda *a, **k: None
+        def get_identity(self, identity_id: str) -> dict[str, Any] | None:
+            raise NotImplementedError
+
+        def get_usage(self, identity_id: str, days: int = 90) -> dict[str, Any]:
+            raise NotImplementedError
+
+        def get_dependencies(self, identity_id: str) -> list[dict[str, Any]]:
+            raise NotImplementedError
+
+        def get_tickets(self, identity_id: str) -> list[dict[str, Any]]:
+            raise NotImplementedError
+
+        def get_owner(self, identity_id: str) -> dict[str, Any] | None:
+            raise NotImplementedError
 
     return build_graph(Investigator(_NoSource(), FakeLLM([]))).get_graph().draw_mermaid()
 

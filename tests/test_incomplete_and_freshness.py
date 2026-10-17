@@ -53,6 +53,7 @@ def test_old_evidence_without_freshness_is_still_valid():
 def test_evidence_with_freshness():
     ev = Evidence(id="ev-deps-1", tool="get_dependencies", args={}, result=[], collected_at=NOW,
                   source_name="keycloak", source_updated_at=NOW - timedelta(minutes=5))
+    assert ev.source_updated_at is not None and ev.collected_at is not None
     assert ev.source_updated_at < ev.collected_at
 
 
@@ -122,7 +123,7 @@ def test_unread_pages_block_a_delete(org):
 
     report, _ = investigate(PagedSource(db), [*full_read(case["identity_id"]), submit("safe_to_delete")], case)
     assert report.verdict == "insufficient_evidence"
-    assert report.incomplete_reason.endswith("get_tickets has unread pages")
+    assert (report.incomplete_reason or "").endswith("get_tickets has unread pages")
 
 
 def test_reading_every_page_clears_the_gap(org):
@@ -150,7 +151,7 @@ def test_an_unavailable_source_is_an_error_not_an_empty_result(org):
     report, events = investigate(DownSource(db), [*full_read(case["identity_id"]), submit("safe_to_delete")], case)
     errors = [e for e in events if e["type"] == "tool_error"]
     assert errors and "source unavailable for get_tickets: ConnectionError" in errors[0]["error"]
-    assert report.verdict == "insufficient_evidence" and "get_tickets not read" in report.incomplete_reason
+    assert report.verdict == "insufficient_evidence" and "get_tickets not read" in (report.incomplete_reason or "")
 
 
 def test_failure_then_success_counts_as_read(org):

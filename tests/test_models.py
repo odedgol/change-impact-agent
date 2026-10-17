@@ -17,7 +17,7 @@ def test_finding_without_evidence_is_rejected():
 
 def test_invalid_verdict_is_rejected():
     with pytest.raises(ValidationError):
-        RiskReport(request_id="REQ-0001", verdict="delete_now", confidence="high")
+        RiskReport(request_id="REQ-0001", verdict="delete_now", confidence="high")  # pyright: ignore[reportArgumentType] - invalid on purpose
 
 
 def test_invalid_confidence_is_rejected():
@@ -27,7 +27,7 @@ def test_invalid_confidence_is_rejected():
 
 def test_unknown_fields_are_rejected():
     with pytest.raises(ValidationError):
-        RiskReport(request_id="REQ-0001", verdict="ask_owner", confidence="low", approved=True)
+        RiskReport(request_id="REQ-0001", verdict="ask_owner", confidence="low", approved=True)  # pyright: ignore[reportCallIssue] - unknown field on purpose
 
 
 def test_rejected_citations_cannot_be_negative():

@@ -19,19 +19,24 @@ def script_for(identity):
                  "confidence": "high"}]}),))]
 
 
+class ScriptedFactory:
+    """The monitor's llm_factory in tests: a scripted run for ``identity``; model "broken" fails to start."""
+
+    identity = "u00000"
+
+    def __call__(self, llm, model):
+        if model == "broken":
+            raise RuntimeError("Connection refused")
+        return FakeLLM(script_for(self.identity))
+
+
 @pytest.fixture
 def server(tmp_path):
     db, truth_path = tmp_path / "org.db", tmp_path / "truth.json"
     truth = generate(db, n_identities=500, seed=7)
     truth_path.write_text(json.dumps(truth))
 
-    def factory(llm, model):
-        if model == "broken":
-            raise RuntimeError("Connection refused")
-        return FakeLLM(script_for(factory.identity))
-
-    factory.identity = "u00000"
-
+    factory = ScriptedFactory()
     mon = Monitor(str(db), str(truth_path), str(tmp_path / "runs"), llm_factory=factory)
     srv = serve(mon, port=0)
     threading.Thread(target=srv.serve_forever, daemon=True).start()

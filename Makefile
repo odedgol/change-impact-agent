@@ -1,4 +1,4 @@
-.PHONY: seed test lint baseline run-local monitor graph bench-fake bench-local bench-openrouter bench-bedrock
+.PHONY: seed test lint typecheck baseline run-local monitor graph bench-fake bench-local bench-openrouter bench-bedrock
 
 seed:
 	PYTHONPATH=src python -m cia.generator --identities 500 --out data/org.db --truth bench/ground_truth.json
@@ -8,6 +8,9 @@ test:
 
 lint:
 	ruff check src tests
+
+typecheck:
+	pyright --pythonpath "$$(command -v python)"  # the active Python: .venv locally, the runner in CI
 
 baseline: seed
 	PYTHONPATH=src python -m cia.baseline --db data/org.db --truth bench/ground_truth.json

@@ -195,7 +195,8 @@ def retrying(post: Transport, tries: int = 4, wait: float = 10.0, sleep: Callabl
             except HTTPStatusError as e:
                 if e.code not in (429, 502, 503) or attempt == tries - 1:
                     raise
-                sleep(float(e.retry_after) if (e.retry_after or "").isdigit() else wait * (attempt + 1))
+                ra = e.retry_after
+                sleep(float(ra) if ra is not None and ra.isdigit() else wait * (attempt + 1))
         raise AssertionError("unreachable")
     return call
 
@@ -255,7 +256,7 @@ def make_client(llm: str, model: str | None = None, max_tokens: int | None = Non
     if llm == "openrouter":
         return OpenRouterClient(model=model, max_tokens=max_tokens)
     if llm == "bedrock":
-        return BedrockClient(model_id=model, **({"max_tokens": max_tokens} if max_tokens else {}))
+        return BedrockClient(model_id=model, max_tokens=max_tokens or 2048)
     raise ValueError(f"unknown llm {llm!r}; choose from {', '.join(LLM_CHOICES)}")
 
 

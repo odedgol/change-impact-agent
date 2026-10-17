@@ -1,4 +1,5 @@
 import pytest
+from langchain_core.runnables import RunnableConfig
 
 from cia.generator import generate
 from cia.graph import (
@@ -52,7 +53,7 @@ def test_coverage_tracks_reads_and_unread_pages():
 def test_finish_report_never_lets_an_unverified_delete_through():
     out = finish_report(safe("ev-usage-1"), ["get_usage"], [])
     assert out.verdict == "insufficient_evidence" and out.confidence == "low"
-    assert "get_dependencies not read" in out.incomplete_reason
+    assert "get_dependencies not read" in (out.incomplete_reason or "")
     assert finish_report(safe("ev-usage-1"), list(REQUIRED_FOR_DELETE), []).verdict == "safe_to_delete"
     assert finish_report(safe(), list(REQUIRED_FOR_DELETE), ["get_tickets"]).verdict == "insufficient_evidence"
 
@@ -69,7 +70,7 @@ def test_recursion_limit_is_only_a_backstop(org):
     llm = FakeLLM([LLMTurn(text="thinking")] * 20)
     report = Investigator(SyntheticSource(db), llm, max_steps=8).investigate(
         ChangeRequest(request_id="R", identity_id=case["identity_id"]))
-    assert report.verdict == "insufficient_evidence" and "step cap" in report.incomplete_reason
+    assert report.verdict == "insufficient_evidence" and "step cap" in (report.incomplete_reason or "")
     assert recursion_limit(8) > 3 * 8
 
 
@@ -81,7 +82,7 @@ def test_checkpointer_saves_every_step_under_the_request_id(org):
                   {"kind": "job", "summary": "nightly", "evidence_ids": ["ev-usage-1"], "confidence": "high"}]}))]
     inv = Investigator(SyntheticSource(db), FakeLLM(script), checkpointer=memory_checkpointer())
     report = inv.investigate(ChangeRequest(request_id="REQ-CP", identity_id=target))
-    config = {"configurable": {"thread_id": "REQ-CP"}}
+    config: RunnableConfig = {"configurable": {"thread_id": "REQ-CP"}}
     saved = inv.graph.get_state(config).values
     assert saved["report"] == report and sorted(saved["evidence"]) == ["ev-deps-2", "ev-usage-1"]
     assert len(list(inv.graph.get_state_history(config))) >= 5  # start, model, tools, model, check, finish

@@ -33,6 +33,8 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import IO, Any
 
+from langchain_core.runnables import RunnableConfig
+
 from .graph import REQUIRED_FOR_DELETE, SUBMIT, build_graph, initial_state, recursion_limit
 from .llm import LLMClient, ToolSpec
 from .models import ChangeRequest, RiskReport
@@ -109,7 +111,7 @@ class Investigator:
     def investigate(self, request: ChangeRequest) -> RiskReport:
         self.events({"type": "request", "request_id": request.request_id,
                      "identity_id": request.identity_id, "action": request.action})
-        config: dict[str, Any] = {"recursion_limit": recursion_limit(self.max_steps)}
+        config: RunnableConfig = {"recursion_limit": recursion_limit(self.max_steps)}
         if self.checkpointer is not None:
             config["configurable"] = {"thread_id": request.request_id}
         final = self.graph.invoke(initial_state(request), config)
