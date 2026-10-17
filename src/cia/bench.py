@@ -45,6 +45,11 @@ from .sources import SyntheticSource
 
 SAFE = "safe_to_delete"
 READS = ("get_usage", "get_dependencies", "get_tickets")
+READ_ARGS = {"get_dependencies": {"depth": 4}}
+ASK_KINDS = {
+    "owner_of",
+    "owned_by",
+}  # an owned account; a team owns a thing down a chain
 HR_NOTICE = (
     "hr-bot"  # every leaver gets its "Employee left" ticket; it says nothing about risk
 )
@@ -53,9 +58,9 @@ HR_NOTICE = (
 class RuleLLM:
     """Plays the model with a fixed rule, so the bench runs offline. A plumbing check, not a quality claim.
 
-    Turn 1 reads usage, dependencies and tickets. Turn 2 decides: a ticket written by a person (not the
-    HR leaver notice) or an owned account means ask_owner; any usage or dependency means disable_first;
-    nothing at all means safe_to_delete.
+    Turn 1 reads usage, dependencies (all 4 hops) and tickets. Turn 2 decides: a ticket written by a
+    person (not the HR leaver notice), an owned account or something a team owns down a chain means
+    ask_owner; any usage or dependency means disable_first; nothing at all means safe_to_delete.
     """
 
     model = "rule"
@@ -67,7 +72,11 @@ class RuleLLM:
             identity = re.search(r"identity (\S+)\.", messages[0].text).group(1)  # type: ignore[union-attr]
             return LLMTurn(
                 tool_calls=tuple(
-                    ToolCall(f"r{i}", name, {"identity_id": identity})
+                    ToolCall(
+                        f"r{i}",
+                        name,
+                        {"identity_id": identity, **READ_ARGS.get(name, {})},
+                    )
                     for i, name in enumerate(READS)
                 )
             )
@@ -98,7 +107,7 @@ class RuleLLM:
         tickets = any(e.startswith("ev-tickets") for e in found)
         verdict = (
             "ask_owner"
-            if tickets or "owner_of" in kinds
+            if tickets or kinds & ASK_KINDS
             else "disable_first"
             if found
             else SAFE

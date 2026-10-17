@@ -61,12 +61,13 @@ MAX_STEPS = 8
 
 SYSTEM_PROMPT = """You investigate whether an IAM identity can be safely deleted.
 Use the tools to gather evidence: usage, dependencies (including consumers of accounts it owns), tickets and the owner.
+get_dependencies follows dependencies hop by hop (depth 1-4, default 2); a key or secret that depends on the identity may be used further along, so look deeper when you see one.
 Dormant is not the same as unused: break-glass accounts, shared logins, scheduled jobs and policy exceptions look idle.
 List tools return pages; if next_offset is not null, there are more rows.
 When done, call submit_report once. Verdicts:
 - safe_to_delete: nothing depends on the identity.
 - disable_first: something may depend on it; disabling is reversible, deleting is not.
-- ask_owner: a person must decide (an owned service account, a shared or break-glass account, unclear evidence).
+- ask_owner: a person must decide (an owned service account, a credential still used downstream, a shared or break-glass account, unclear evidence).
 - insufficient_evidence: you could not check what you needed (a tool failed, a source was unavailable).
 Every finding must cite the evidence_id values returned by the tools. Never cite an id you were not given."""
 
@@ -77,6 +78,12 @@ _OFFSET = {
     "type": "integer",
     "minimum": 0,
     "description": "row offset of the page, from next_offset",
+}
+_DEPTH = {
+    "type": "integer",
+    "minimum": 1,
+    "maximum": 4,
+    "description": "how many hops to follow (default 2)",
 }
 
 TOOLS: tuple[ToolSpec, ...] = (
@@ -103,10 +110,12 @@ TOOLS: tuple[ToolSpec, ...] = (
     ),
     ToolSpec(
         "get_dependencies",
-        "Things that point at the identity, plus consumers of accounts it owns. Paged.",
+        "Things that depend on the identity, hop by hop: hop 1 points at it, hop 2 at a "
+        "hop-1 thing (such as consumers of an account it owns). Each row has hop and via. "
+        "Paged.",
         {
             "type": "object",
-            "properties": {"identity_id": _ID, "offset": _OFFSET},
+            "properties": {"identity_id": _ID, "offset": _OFFSET, "depth": _DEPTH},
             "required": ["identity_id"],
         },
     ),

@@ -25,13 +25,19 @@ PAGE_SIZE = 50
 MAX_CALLERS = 20
 MIN_USAGE_DAYS = 90  # a shorter window can make a nightly or monthly job look dormant
 MAX_USAGE_DAYS = 3650
+DEFAULT_DEPTH = (
+    2  # the identity's dependents and theirs, e.g. consumers of an owned account
+)
+MAX_DEPTH = 4  # deep enough for user -> key -> secret -> pipeline -> team
 
 
 @runtime_checkable
 class EvidenceSource(Protocol):
     def get_identity(self, identity_id: str) -> dict | None: ...
     def get_usage(self, identity_id: str, days: int = 90) -> dict: ...
-    def get_dependencies(self, identity_id: str) -> list[dict]: ...
+    def get_dependencies(
+        self, identity_id: str, depth: int = DEFAULT_DEPTH
+    ) -> list[dict]: ...
     def get_tickets(self, identity_id: str) -> list[dict]: ...
     def get_owner(self, identity_id: str) -> dict | None: ...
 
@@ -94,19 +100,35 @@ class SyntheticSource:
             "callers_omitted": len(callers) - len(top),
         }
 
-    def get_dependencies(self, identity_id: str) -> list[dict]:
-        """Things that point at this identity, plus the consumers of accounts it owns.
+    def get_dependencies(
+        self, identity_id: str, depth: int = DEFAULT_DEPTH
+    ) -> list[dict]:
+        """Things that depend on this identity, hop by hop, clamped to 1-4 hops.
 
-        ``target`` names the identity each row points at, so a consumer of an owned
-        service account is never mistaken for a direct dependency.
+        Hop 1 points at the identity, hop 2 at a hop-1 thing (the consumers of an
+        owned service account), and so on. Each row names the ``target`` it points
+        at, its ``hop`` and ``via``: the path from the identity to that target.
         """
-        return self._rows(
-            "SELECT source, kind, detail, target_id AS target FROM dependencies "
-            "WHERE target_id = ?1 OR target_id IN "
-            "  (SELECT source FROM dependencies WHERE target_id = ?1 AND kind = 'owner_of') "
-            "ORDER BY target_id = ?1 DESC, target_id, kind, source",
-            identity_id,
-        )
+        depth = min(max(int(depth), 1), MAX_DEPTH)
+        rows: list[dict] = []
+        paths: dict[str, list[str]] = {identity_id: []}
+        frontier = [identity_id]
+        for hop in range(1, depth + 1):
+            found = self._rows(
+                "SELECT source, kind, detail, target_id AS target FROM dependencies "
+                f"WHERE target_id IN ({','.join('?' * len(frontier))}) "
+                "ORDER BY target_id, kind, source",
+                *frontier,
+            )
+            frontier = []
+            for r in found:
+                rows.append({**r, "hop": hop, "via": paths[r["target"]]})
+                if r["source"] not in paths:
+                    paths[r["source"]] = [*paths[r["target"]], r["source"]]
+                    frontier.append(r["source"])
+            if not frontier:
+                break
+        return rows
 
     def get_tickets(self, identity_id: str) -> list[dict]:
         return self._rows(

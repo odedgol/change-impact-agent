@@ -409,7 +409,7 @@ ul.check ul{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}
 
 <section id="results" class="doc">
   <h2>Results (PR 2.5)</h2>
-  <p>20 change requests on the 500-identity synthetic org (seed 7): 10 risky, 10 decoys that are truly safe. Each row is one full <code>make bench-*</code> run. Synthetic results show that the loop and the guardrails work; they are not evidence of production quality.</p>
+  <p>20 change requests on the 500-identity synthetic org (seed 7): 10 risky, 10 decoys that are truly safe. Each row is one full <code>make bench-*</code> run. Synthetic results show that the loop and the guardrails work; they are not evidence of production quality. These runs predate PR 3.1, which added a sixth case type (<code>credential_chain</code>) and grew the org to 24 cases; see <a href="week-3.html">week 3</a>.</p>
   <div class="tbl"><table>
     <thead><tr><th>Run</th><th>Unsafe deletes</th><th>Recall</th><th>Precision</th><th>Accuracy</th><th>Incomplete</th><th>Avg steps</th><th>What it shows</th></tr></thead>
     <tbody>
