@@ -96,3 +96,38 @@ def test_text_answer_without_tools():
 def test_bad_arguments_are_passed_on_not_crashed(raw):
     turn = OpenAICompatClient(transport=StubTransport(tool_message(arguments=raw))).converse("s", [UserText("x")], TOOLS)
     assert "_unparsed" in turn.tool_calls[0].input or turn.tool_calls[0].input == {}
+
+
+def test_an_empty_turn_is_sent_back_as_an_empty_string_not_null():
+    """Ollama answers HTTP 400 to an assistant message with content null and no tool calls."""
+    stub = StubTransport({"role": "assistant", "content": "ok"}, finish="stop")
+    client = OpenAICompatClient(model="m", transport=stub)
+    call = ToolCall("c1", "get_usage", {"identity_id": "u1"})
+    client.converse("sys", [UserText("hi"), AssistantTurn(LLMTurn()), UserText("call a tool"),
+                            AssistantTurn(LLMTurn(tool_calls=(call,)))], TOOLS)
+    sent = [m for m in stub.requests[0]["body"]["messages"] if m["role"] == "assistant"]
+    assert sent[0]["content"] == "" and "tool_calls" not in sent[0]
+    assert sent[1]["content"] is None and sent[1]["tool_calls"]
+
+
+def test_an_http_error_keeps_the_server_reason(monkeypatch):
+    import io
+    import urllib.error
+
+    from cia import llm
+
+    def refuse(req, timeout):
+        raise urllib.error.HTTPError(req.full_url, 400, "Bad Request", {},
+                                     io.BytesIO(b'{"error":"invalid message content type"}'))
+
+    monkeypatch.setattr(llm.urllib.request, "urlopen", refuse)
+    with pytest.raises(RuntimeError, match="HTTP 400 .*invalid message content type"):
+        llm._http_post("http://x/v1/chat/completions", {}, {})
+
+
+def test_max_tokens_from_argument_env_or_default(monkeypatch):
+    monkeypatch.delenv("CIA_OPENAI_MAX_TOKENS", raising=False)
+    assert OpenAICompatClient(model="m").max_tokens == 2048
+    monkeypatch.setenv("CIA_OPENAI_MAX_TOKENS", "8192")
+    assert OpenAICompatClient(model="m").max_tokens == 8192
+    assert OpenAICompatClient(model="m", max_tokens=100).max_tokens == 100

@@ -9,3 +9,4 @@ data/*.db
 .impeccable/mocks/
 runs/
 .playwright-mcp/
+.env

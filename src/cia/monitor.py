@@ -6,7 +6,7 @@ runs started from the terminal show up here too.
 
     GET  /                       the page (monitor.html)
     GET  /api/cases              change requests from the ground truth, with the expected verdict
-    GET  /api/models             local Ollama models, plus Bedrock when configured
+    GET  /api/models             local Ollama models, plus OpenRouter and Bedrock when configured
     GET  /api/runs               every run, newest first, summarised
     GET  /api/runs/<id>/events   the run's events as server-sent events; follows a live run to the end
     POST /api/runs               {"request_id", "model", "llm"} starts a run, returns {"run_id"}
@@ -31,14 +31,18 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+from .env import load_env
 from .investigator import Investigator, JsonlEvents
 from .llm import (
     DEFAULT_OPENAI_BASE_URL,
     DEFAULT_OPENAI_MODEL,
+    DEFAULT_OPENROUTER_MODEL,
+    LLM_CHOICES,
     MODEL_ID_ENV,
-    BedrockClient,
+    OPENROUTER_API_KEY_ENV,
+    OPENROUTER_MODEL_ENV,
     LLMClient,
-    OpenAICompatClient,
+    make_client,
 )
 from .models import ChangeRequest
 from .sources import SyntheticSource
@@ -53,9 +57,7 @@ LLMFactory = Callable[[str, str], LLMClient]
 
 
 def default_llm_factory(llm: str, model: str) -> LLMClient:
-    if llm == "bedrock":
-        return BedrockClient(model_id=model or None)
-    return OpenAICompatClient(model=model or None)
+    return make_client(llm, model or None)
 
 
 class Monitor:
@@ -85,6 +87,8 @@ class Monitor:
             out += [{"llm": "openai", "model": n} for n in names if "embed" not in n]
         except (OSError, ValueError):
             out.append({"llm": "openai", "model": DEFAULT_OPENAI_MODEL, "offline": "true"})
+        if os.environ.get(OPENROUTER_API_KEY_ENV):
+            out.append({"llm": "openrouter", "model": os.environ.get(OPENROUTER_MODEL_ENV) or DEFAULT_OPENROUTER_MODEL})
         if os.environ.get(MODEL_ID_ENV):
             out.append({"llm": "bedrock", "model": os.environ[MODEL_ID_ENV]})
         return out
@@ -129,7 +133,7 @@ class Monitor:
         case = next((c for c in self.cases() if c["request_id"] == request_id), None)
         if case is None:
             raise ValueError(f"unknown request {request_id!r}")
-        if llm not in ("openai", "bedrock"):
+        if llm not in LLM_CHOICES:
             raise ValueError(f"unknown llm {llm!r}")
         if model and not MODEL_NAME.match(model):
             raise ValueError("bad model name")
@@ -252,6 +256,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--runs", default="runs")
     p.add_argument("--port", type=int, default=8765)
     a = p.parse_args(argv)
+    load_env()
     try:
         server = serve(Monitor(a.db, a.truth, a.runs), a.port)
     except OSError as e:
