@@ -12,6 +12,7 @@ ticket, a consumer of an owned service account). Keeping the model's context
 small is the caller's job, through ``paginate``, which always says how to fetch
 the next page.
 """
+
 from __future__ import annotations
 
 import sqlite3
@@ -38,10 +39,16 @@ class EvidenceSource(Protocol):
 def paginate(rows: list[dict], offset: int = 0, limit: int = PAGE_SIZE) -> dict:
     """One page of a list, with the total and the offset of the next page (None on the last page)."""
     if offset < 0 or limit < 1:
-        raise ValueError(f"offset must be >= 0 and limit >= 1 (got offset={offset}, limit={limit})")
+        raise ValueError(
+            f"offset must be >= 0 and limit >= 1 (got offset={offset}, limit={limit})"
+        )
     end = offset + limit
-    return {"rows": rows[offset:end], "total": len(rows), "offset": offset,
-            "next_offset": end if end < len(rows) else None}
+    return {
+        "rows": rows[offset:end],
+        "total": len(rows),
+        "offset": offset,
+        "next_offset": end if end < len(rows) else None,
+    }
 
 
 class SyntheticSource:
@@ -50,7 +57,9 @@ class SyntheticSource:
     # no "last updated" time, so this stays None: unknown, never invented. Event timestamps are not it.
     updated_at: datetime | None = None
 
-    def __init__(self, db_path: str, now: datetime = NOW, max_callers: int = MAX_CALLERS):
+    def __init__(
+        self, db_path: str, now: datetime = NOW, max_callers: int = MAX_CALLERS
+    ):
         if max_callers < 1:
             raise ValueError(f"max_callers must be >= 1 (got {max_callers})")
         self._db = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
@@ -73,12 +82,17 @@ class SyntheticSource:
         callers = self._rows(
             "SELECT caller, COUNT(*) AS n, MAX(ts) AS last FROM usage_events "
             "WHERE identity_id = ? AND ts >= ? GROUP BY caller ORDER BY n DESC, caller",
-            identity_id, since,
+            identity_id,
+            since,
         )
         top = callers[: self.max_callers]
-        return {"window_days": window, "event_count": sum(c["n"] for c in callers),
-                "last_seen": max((c["last"] for c in callers), default=None),
-                "callers": {c["caller"]: c["n"] for c in top}, "callers_omitted": len(callers) - len(top)}
+        return {
+            "window_days": window,
+            "event_count": sum(c["n"] for c in callers),
+            "last_seen": max((c["last"] for c in callers), default=None),
+            "callers": {c["caller"]: c["n"] for c in top},
+            "callers_omitted": len(callers) - len(top),
+        }
 
     def get_dependencies(self, identity_id: str) -> list[dict]:
         """Things that point at this identity, plus the consumers of accounts it owns.
@@ -95,8 +109,10 @@ class SyntheticSource:
         )
 
     def get_tickets(self, identity_id: str) -> list[dict]:
-        return self._rows("SELECT id, ts, author, text FROM tickets WHERE identity_id = ? ORDER BY ts DESC, id",
-                          identity_id)
+        return self._rows(
+            "SELECT id, ts, author, text FROM tickets WHERE identity_id = ? ORDER BY ts DESC, id",
+            identity_id,
+        )
 
     def get_owner(self, identity_id: str) -> dict | None:
         ident = self.get_identity(identity_id)

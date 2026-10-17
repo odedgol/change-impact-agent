@@ -5,8 +5,12 @@ from cia.models import ChangeRequest, Evidence, Finding, RiskReport
 
 
 def _finding(**overrides):
-    data = {"kind": "hidden_dependency", "summary": "Nightly job uses this key", "evidence_ids": ["ev-deps-1"],
-            "confidence": "high"}
+    data = {
+        "kind": "hidden_dependency",
+        "summary": "Nightly job uses this key",
+        "evidence_ids": ["ev-deps-1"],
+        "confidence": "high",
+    }
     return Finding(**(data | overrides))
 
 
@@ -27,15 +31,27 @@ def test_invalid_confidence_is_rejected():
 
 def test_unknown_fields_are_rejected():
     with pytest.raises(ValidationError):
-        RiskReport(request_id="REQ-0001", verdict="ask_owner", confidence="low", approved=True)  # pyright: ignore[reportCallIssue] - unknown field on purpose
+        RiskReport(
+            request_id="REQ-0001",
+            verdict="ask_owner",
+            confidence="low",
+            approved=True,  # pyright: ignore[reportCallIssue] - unknown field on purpose
+        )
 
 
 def test_rejected_citations_cannot_be_negative():
     with pytest.raises(ValidationError):
-        RiskReport(request_id="REQ-0001", verdict="ask_owner", confidence="low", rejected_citations=-1)
+        RiskReport(
+            request_id="REQ-0001",
+            verdict="ask_owner",
+            confidence="low",
+            rejected_citations=-1,
+        )
 
 
-@pytest.mark.parametrize("bad_id", ["deps-3", "ev-deps", "ev-Deps-3", "ev-deps-3; drop"])
+@pytest.mark.parametrize(
+    "bad_id", ["deps-3", "ev-deps", "ev-Deps-3", "ev-deps-3; drop"]
+)
 def test_evidence_id_must_match_format(bad_id):
     with pytest.raises(ValidationError):
         Evidence(id=bad_id, tool="get_dependencies", args={}, result=[])

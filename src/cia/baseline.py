@@ -3,6 +3,7 @@
 This is the control the agent has to beat. It shows how many planted hidden
 dependencies a plain staleness rule would break.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -13,7 +14,11 @@ from .tools import EvidenceTools
 
 
 def naive_verdict(tools: EvidenceTools, identity_id: str) -> str:
-    return "safe_to_delete" if tools.get_usage(identity_id, 90)["event_count"] == 0 else "disable_first"
+    return (
+        "safe_to_delete"
+        if tools.get_usage(identity_id, 90)["event_count"] == 0
+        else "disable_first"
+    )
 
 
 def run(db: str, truth_path: str) -> dict:
@@ -27,7 +32,12 @@ def run(db: str, truth_path: str) -> dict:
             broken += 1
             by_type[c["case_type"]] += 1
     risky = sum(1 for c in truth["cases"] if c["expected_verdict"] != "safe_to_delete")
-    return {"requests": len(truth["cases"]), "risky": risky, "broken_by_naive_delete": broken, "by_type": dict(by_type)}
+    return {
+        "requests": len(truth["cases"]),
+        "risky": risky,
+        "broken_by_naive_delete": broken,
+        "by_type": dict(by_type),
+    }
 
 
 if __name__ == "__main__":

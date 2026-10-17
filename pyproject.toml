@@ -29,12 +29,12 @@ pythonVersion = "3.12"
 include = ["src", "tests"]
 
 [tool.ruff]
-line-length = 120
+line-length = 88
 target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM"]
-ignore = ["E501"]  # long SQL and ticket strings in week-1 code; no formatter churn in this PR
+ignore = ["E501"]  # the formatter sets line length; long strings and URLs stay whole
 
 [tool.setuptools.package-data]
 cia = ["monitor.html"]

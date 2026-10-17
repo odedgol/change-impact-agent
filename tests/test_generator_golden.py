@@ -5,6 +5,7 @@ org, so a refactor of the generator must not change a single row. The hashes
 below were recorded from the generator before the case types moved to commands.
 To change them on purpose, say why in the PR.
 """
+
 import hashlib
 import json
 import sqlite3

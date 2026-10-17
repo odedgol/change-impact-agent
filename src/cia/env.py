@@ -6,6 +6,7 @@
 A variable already set in the shell wins, so ``OPENROUTER_API_KEY=... make bench-openrouter``
 still overrides the file. ``.env`` is git-ignored; ``.env.example`` lists every setting.
 """
+
 from __future__ import annotations
 
 import os
@@ -27,7 +28,9 @@ def parse(text: str) -> dict[str, str]:
         if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
             value = value[1:-1]
         else:
-            value = value.split(" #", 1)[0].rstrip()  # an inline comment after an unquoted value
+            value = value.split(" #", 1)[
+                0
+            ].rstrip()  # an inline comment after an unquoted value
         out[key] = value
     return out
 

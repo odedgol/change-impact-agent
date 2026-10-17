@@ -34,27 +34,48 @@ def org(tmp_path_factory):
 
 
 def turn(*calls):
-    return LLMTurn(tool_calls=tuple(ToolCall(f"t{i}", name, args) for i, (name, args) in enumerate(calls)))
+    return LLMTurn(
+        tool_calls=tuple(
+            ToolCall(f"t{i}", name, args) for i, (name, args) in enumerate(calls)
+        )
+    )
 
 
 def safe(*cited):
-    return RiskReport(request_id="R", verdict="safe_to_delete", confidence="high", findings=[
-        Finding(kind="k", summary="s", evidence_ids=[i], confidence="high") for i in cited])
+    return RiskReport(
+        request_id="R",
+        verdict="safe_to_delete",
+        confidence="high",
+        findings=[
+            Finding(kind="k", summary="s", evidence_ids=[i], confidence="high")
+            for i in cited
+        ],
+    )
 
 
 def test_graph_has_the_agreed_nodes_and_routes():
     text = mermaid()
     for node in ("model", "nudge", "tools", "check", "finish", "cap"):
         assert f"\t{node}(" in text
-    for edge in ("__start__ --> model", "model -.-> tools", "model -.-> nudge", "tools -.-> check",
-                 "check -.-> tools", "check -.-> finish", "tools -.-> cap", "finish --> __end__"):
+    for edge in (
+        "__start__ --> model",
+        "model -.-> tools",
+        "model -.-> nudge",
+        "tools -.-> check",
+        "check -.-> tools",
+        "check -.-> finish",
+        "tools -.-> cap",
+        "finish --> __end__",
+    ):
         assert edge in text
 
 
 def test_coverage_tracks_reads_and_unread_pages():
     read, unread = coverage([], [], "get_tickets", {"rows": [], "next_offset": 50})
     assert read == ["get_tickets"] and unread == ["get_tickets"]
-    read, unread = coverage(read, unread, "get_tickets", {"rows": [], "next_offset": None})
+    read, unread = coverage(
+        read, unread, "get_tickets", {"rows": [], "next_offset": None}
+    )
     assert unread == []
 
 
@@ -62,8 +83,14 @@ def test_finish_report_never_lets_an_unverified_delete_through():
     out = finish_report(safe("ev-usage-1"), ["get_usage"], [])
     assert out.verdict == "insufficient_evidence" and out.confidence == "low"
     assert "get_dependencies not read" in (out.incomplete_reason or "")
-    assert finish_report(safe("ev-usage-1"), list(REQUIRED_FOR_DELETE), []).verdict == "safe_to_delete"
-    assert finish_report(safe(), list(REQUIRED_FOR_DELETE), ["get_tickets"]).verdict == "insufficient_evidence"
+    assert (
+        finish_report(safe("ev-usage-1"), list(REQUIRED_FOR_DELETE), []).verdict
+        == "safe_to_delete"
+    )
+    assert (
+        finish_report(safe(), list(REQUIRED_FOR_DELETE), ["get_tickets"]).verdict
+        == "insufficient_evidence"
+    )
 
 
 def test_drop_bad_citations_turns_a_safe_verdict_into_ask_owner():
@@ -77,23 +104,53 @@ def test_recursion_limit_is_only_a_backstop(org):
     db, case = org
     llm = FakeLLM([LLMTurn(text="thinking")] * 20)
     report = Investigator(SyntheticSource(db), llm, max_steps=8).investigate(
-        ChangeRequest(request_id="R", identity_id=case["identity_id"]))
-    assert report.verdict == "insufficient_evidence" and "step cap" in (report.incomplete_reason or "")
+        ChangeRequest(request_id="R", identity_id=case["identity_id"])
+    )
+    assert report.verdict == "insufficient_evidence" and "step cap" in (
+        report.incomplete_reason or ""
+    )
     assert recursion_limit(8) > 3 * 8
 
 
 def test_checkpointer_saves_every_step_under_the_request_id(org):
     db, case = org
     target = case["identity_id"]
-    script = [turn(("get_usage", {"identity_id": target}), ("get_dependencies", {"identity_id": target})),
-              turn(("submit_report", {"verdict": "disable_first", "confidence": "high", "findings": [
-                  {"kind": "job", "summary": "nightly", "evidence_ids": ["ev-usage-1"], "confidence": "high"}]}))]
-    inv = Investigator(SyntheticSource(db), FakeLLM(script), checkpointer=memory_checkpointer())
+    script = [
+        turn(
+            ("get_usage", {"identity_id": target}),
+            ("get_dependencies", {"identity_id": target}),
+        ),
+        turn(
+            (
+                "submit_report",
+                {
+                    "verdict": "disable_first",
+                    "confidence": "high",
+                    "findings": [
+                        {
+                            "kind": "job",
+                            "summary": "nightly",
+                            "evidence_ids": ["ev-usage-1"],
+                            "confidence": "high",
+                        }
+                    ],
+                },
+            )
+        ),
+    ]
+    inv = Investigator(
+        SyntheticSource(db), FakeLLM(script), checkpointer=memory_checkpointer()
+    )
     report = inv.investigate(ChangeRequest(request_id="REQ-CP", identity_id=target))
     config: RunnableConfig = {"configurable": {"thread_id": "REQ-CP"}}
     saved = inv.graph.get_state(config).values
-    assert saved["report"] == report and sorted(saved["evidence"]) == ["ev-deps-2", "ev-usage-1"]
-    assert len(list(inv.graph.get_state_history(config))) >= 5  # start, model, tools, model, check, finish
+    assert saved["report"] == report and sorted(saved["evidence"]) == [
+        "ev-deps-2",
+        "ev-usage-1",
+    ]
+    assert (
+        len(list(inv.graph.get_state_history(config))) >= 5
+    )  # start, model, tools, model, check, finish
 
 
 def test_every_node_and_route_has_a_drawing_entry():
@@ -101,14 +158,18 @@ def test_every_node_and_route_has_a_drawing_entry():
     data = describe()
     assert all(n["kind"] for n in data["nodes"])
     assert {(e["source"], e["target"]) for e in data["edges"]} == set(ROUTE_LABELS)
-    assert all(n["doc"] for n in data["nodes"] if n["kind"] not in ("start", "end"))  # each node has a docstring
+    assert all(
+        n["doc"] for n in data["nodes"] if n["kind"] not in ("start", "end")
+    )  # each node has a docstring
 
 
 def test_the_docs_drawing_matches_the_code():
     """docs/index.html#engine draws the embedded data; run `make graph` after changing graph.py."""
     page = (Path(__file__).resolve().parents[1] / "docs" / "index.html").read_text()
-    embedded = page[page.index(DOCS_BEGIN):page.index(DOCS_END) + len(DOCS_END)]
-    assert embedded == docs_block(describe()), "docs/index.html is behind src/cia/graph.py: run `make graph`"
+    embedded = page[page.index(DOCS_BEGIN) : page.index(DOCS_END) + len(DOCS_END)]
+    assert embedded == docs_block(describe()), (
+        "docs/index.html is behind src/cia/graph.py: run `make graph`"
+    )
 
 
 def test_write_docs_replaces_only_the_marked_block(tmp_path):
@@ -116,4 +177,8 @@ def test_write_docs_replaces_only_the_marked_block(tmp_path):
     page.write_text(f"<p>before</p>\n{DOCS_BEGIN}\nold\n{DOCS_END}\n<p>after</p>\n")
     assert write_docs(page) is True and write_docs(page) is False
     text = page.read_text()
-    assert text.startswith("<p>before</p>") and text.endswith("<p>after</p>\n") and '"model"' in text
+    assert (
+        text.startswith("<p>before</p>")
+        and text.endswith("<p>after</p>\n")
+        and '"model"' in text
+    )

@@ -24,13 +24,18 @@ def test_synthetic_source_satisfies_the_interface(org):
     assert isinstance(SyntheticSource(org[0]), EvidenceSource)
 
 
-@pytest.mark.parametrize("name", ["get_identity", "get_usage", "get_dependencies", "get_tickets", "get_owner"])
+@pytest.mark.parametrize(
+    "name",
+    ["get_identity", "get_usage", "get_dependencies", "get_tickets", "get_owner"],
+)
 def test_signatures_match_the_protocol(name):
     """isinstance only checks method names; this catches a source whose parameters drift."""
     proto = inspect.signature(getattr(EvidenceSource, name))
     impl = inspect.signature(getattr(SyntheticSource, name))
     assert list(impl.parameters) == list(proto.parameters)
-    assert [p.default for p in impl.parameters.values()] == [p.default for p in proto.parameters.values()]
+    assert [p.default for p in impl.parameters.values()] == [
+        p.default for p in proto.parameters.values()
+    ]
 
 
 def test_week1_name_still_works():
@@ -83,8 +88,9 @@ def test_owned_account_consumers_name_their_target(org):
 def test_dependencies_are_deterministic(org):
     db, truth = org
     case = _case(truth, "orphaned_service_account")
-    assert SyntheticSource(db).get_dependencies(case["identity_id"]) == \
-        SyntheticSource(db).get_dependencies(case["identity_id"])
+    assert SyntheticSource(db).get_dependencies(case["identity_id"]) == SyntheticSource(
+        db
+    ).get_dependencies(case["identity_id"])
 
 
 @pytest.mark.parametrize("days", [0, -5, 7])
@@ -103,9 +109,14 @@ def test_usage_aggregates_match_raw_rows(org):
     source = SyntheticSource(db)
     usage = source.get_usage(case["identity_id"], 365)
     since = (source.now - timedelta(days=365)).isoformat(timespec="seconds")
-    count, last = sqlite3.connect(db).execute(
-        "SELECT COUNT(*), MAX(ts) FROM usage_events WHERE identity_id = ? AND ts >= ?",
-        (case["identity_id"], since)).fetchone()
+    count, last = (
+        sqlite3.connect(db)
+        .execute(
+            "SELECT COUNT(*), MAX(ts) FROM usage_events WHERE identity_id = ? AND ts >= ?",
+            (case["identity_id"], since),
+        )
+        .fetchone()
+    )
     assert (usage["event_count"], usage["last_seen"]) == (count, last)
     assert usage["callers_omitted"] == 0
     assert sum(usage["callers"].values()) == count

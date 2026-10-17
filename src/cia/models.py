@@ -14,6 +14,7 @@ is when the source data last changed, which is not the time of any event in it.
 required check never succeeded, unread pages). It is not a risk finding, and like
 the two cautious verdicts it never permits a delete.
 """
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -21,7 +22,9 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-Verdict = Literal["safe_to_delete", "disable_first", "ask_owner", "insufficient_evidence"]
+Verdict = Literal[
+    "safe_to_delete", "disable_first", "ask_owner", "insufficient_evidence"
+]
 Confidence = Literal["low", "medium", "high"]
 
 EVIDENCE_ID_PATTERN = r"^ev-[a-z_]+-\d+$"
@@ -54,7 +57,9 @@ class Evidence(_Contract):
         if collected is None or updated is None:
             return self
         if (collected.tzinfo is None) != (updated.tzinfo is None):
-            raise ValueError("collected_at and source_updated_at mix naive and timezone-aware times")
+            raise ValueError(
+                "collected_at and source_updated_at mix naive and timezone-aware times"
+            )
         if updated > collected:
             raise ValueError("source_updated_at is after collected_at")
         return self
@@ -73,7 +78,9 @@ class RiskReport(_Contract):
     confidence: Confidence
     findings: list[Finding] = Field(default_factory=list)
     rejected_citations: int = Field(default=0, ge=0)
-    incomplete_reason: str | None = None  # set with insufficient_evidence: what could not be verified
+    incomplete_reason: str | None = (
+        None  # set with insufficient_evidence: what could not be verified
+    )
 
     @property
     def permits_delete(self) -> bool:
