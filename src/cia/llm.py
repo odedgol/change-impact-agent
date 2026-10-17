@@ -112,7 +112,7 @@ class BedrockClient:
         if not self.model_id:
             raise ValueError(f"set {MODEL_ID_ENV} or pass model_id")
         if client is None:
-            import boto3  # lazy: only real Bedrock runs need AWS
+            import boto3  # pyright: ignore[reportMissingImports] - lazy, optional extra: only real Bedrock runs need AWS
 
             client = boto3.client("bedrock-runtime", region_name=region)
         self._client = client
