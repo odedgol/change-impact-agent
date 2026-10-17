@@ -1,4 +1,4 @@
-.PHONY: seed test lint typecheck baseline run-local monitor graph bench-fake bench-local bench-openrouter bench-bedrock
+.PHONY: seed test lint typecheck smoke tui-test tui-fixture baseline run-local monitor graph bench-fake bench-local bench-openrouter bench-bedrock
 
 seed:
 	PYTHONPATH=src python -m cia.generator --identities 500 --out data/org.db --truth bench/ground_truth.json
@@ -23,6 +23,19 @@ run-local: seed
 PORT ?= 8765
 monitor: seed
 	PYTHONPATH=src python -m cia.monitor --port $(PORT)
+
+# Rust terminal UI (tui/): offline smoke runs piped in live. Interactive on a terminal; SMOKE_FLAGS=--plain
+# prints text and fails if any run recommended an unsafe delete (CI). Replay a saved run:
+#   cargo run --manifest-path tui/Cargo.toml -- runs/<run>.jsonl
+smoke: seed
+	PYTHONPATH=src python -m cia.smoke | cargo run -q --manifest-path tui/Cargo.toml -- $(SMOKE_FLAGS)
+
+tui-test:
+	cd tui && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
+
+# Re-record the stream tui/tests replays (tests/test_smoke.py fails when it is stale).
+tui-fixture: seed
+	PYTHONPATH=src python -m cia.smoke > tui/tests/fixtures/smoke.jsonl
 
 # The investigator graph (LangGraph) as Mermaid text; paste into docs or mermaid.live.
 graph:

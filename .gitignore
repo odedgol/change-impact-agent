@@ -10,3 +10,4 @@ data/*.db
 runs/
 .playwright-mcp/
 .env
+tui/target/
