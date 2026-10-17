@@ -33,8 +33,11 @@ bench-local: seed
 	  --out bench/results/$(subst :,-,$(MODEL))-$(MAX_TOKENS).json
 
 # Hosted Gemma 4 31B on OpenRouter's free tier; needs OPENROUTER_API_KEY. Prompts leave the machine (synthetic data only).
+# OR_MODEL=google/gemma-4-26b-a4b-it is the paid twin (about 1 cent for the 20 cases) when the free pool is rate-limited.
+OR_MODEL ?= google/gemma-4-31b-it:free
 bench-openrouter: seed
-	PYTHONPATH=src python -m cia.bench --llm openrouter --max-tokens $(MAX_TOKENS) --out bench/results/openrouter-gemma-4-31b-$(MAX_TOKENS).json
+	PYTHONPATH=src python -m cia.bench --llm openrouter --model $(OR_MODEL) --max-tokens $(MAX_TOKENS) \
+	  --out bench/results/openrouter-$(subst :,-,$(subst /,-,$(OR_MODEL)))-$(MAX_TOKENS).json
 
 bench-bedrock: seed
 	PYTHONPATH=src python -m cia.bench --llm bedrock --out bench/results/bedrock.json

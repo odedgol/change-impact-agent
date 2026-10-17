@@ -16,6 +16,7 @@ evidence ids, an 8-step cap, citation check). It runs on a local model through O
 hosted open model through OpenRouter, or on Bedrock, and a local run monitor shows each run live. In review: the benchmark. On
 the 20 synthetic cases, gemma4:26b on Ollama made 0 unsafe deletes and got all 20 right
 (with an 8192-token output limit; 19 of 20 at 2048, the miss safely marked incomplete).
+The same model hosted on OpenRouter also got 20 of 20, in about 3 minutes, for under 1 cent.
 
 Results so far come from a synthetic org. They show the guardrails work as designed; they
 are not evidence of production readiness.
@@ -53,7 +54,7 @@ make monitor                 # http://127.0.0.1:8765: start runs, watch them liv
 # score every change request (fails if any risky account would be deleted)
 make bench-fake             # offline plumbing check, also in CI
 make bench-local MAX_TOKENS=8192   # Ollama; results in bench/results/
-OPENROUTER_API_KEY=... make bench-openrouter   # Gemma 4 31B, OpenRouter free tier
+make bench-openrouter OR_MODEL=google/gemma-4-26b-a4b-it   # OpenRouter; key in .env
 ```
 
 `python -m cia.generator --identities 20000` builds the 20,000-identity org in a few seconds.
