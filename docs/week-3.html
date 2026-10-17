@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<script>try{var t=localStorage.getItem("cia-theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<title>Week 3 Plan</title>
+<meta name="description" content="Plan 002: credential chains, guardrails in code, human approval with LangGraph interrupt(), and a reversible executor with an append-only audit log.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#ffffff;--bg-2:#f7f8fa;--bg-3:#eef0f4;--ink:#0b0d12;--ink-2:#434955;--ink-3:#5f6672;--line:#e5e7eb;--line-2:#cfd4dc;
+  --accent:#2f52e0;--accent-2:#2443c4;--accent-bg:#eef2ff;
+  --safe:#13773a;--safe-bg:#e9f8ef;--disable:#a24f06;--disable-bg:#fff4e5;--ask:#6a3bd2;--ask-bg:#f3eeff;--guard:#c01c1c;--guard-bg:#fff0f0;
+  --f:"Geist",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;--m:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --side:264px;--col:760px;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0a0c10;--bg-2:#11141a;--bg-3:#181c24;--ink:#eceef2;--ink-2:#b3b9c5;--ink-3:#9198a5;--line:#222731;--line-2:#323946;
+  --accent:#8199ff;--accent-2:#a3b4ff;--accent-bg:#171d36;
+  --safe:#4bd47e;--safe-bg:#0e2618;--disable:#f5b445;--disable-bg:#2a1e09;--ask:#b89dff;--ask-bg:#201838;--guard:#ff7a7a;--guard-bg:#2c1313;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0a0c10;--bg-2:#11141a;--bg-3:#181c24;--ink:#eceef2;--ink-2:#b3b9c5;--ink-3:#9198a5;--line:#222731;--line-2:#323946;
+  --accent:#8199ff;--accent-2:#a3b4ff;--accent-bg:#171d36;
+  --safe:#4bd47e;--safe-bg:#0e2618;--disable:#f5b445;--disable-bg:#2a1e09;--ask:#b89dff;--ask-bg:#201838;--guard:#ff7a7a;--guard-bg:#2c1313;color-scheme:dark}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;scroll-padding-top:76px}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 var(--f);font-feature-settings:"ss01"}
+::selection{background:var(--accent-bg);color:var(--ink)}
+a{color:var(--accent-2);text-underline-offset:3px;text-decoration-thickness:1px}
+a:hover{text-decoration-thickness:2px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+code{font-family:var(--m);font-size:.86em;font-weight:500;background:var(--bg-3);padding:2px 6px;border-radius:5px;overflow-wrap:anywhere}
+pre{margin:16px 0 0;padding:14px 16px;background:var(--bg-2);border:1px solid var(--line);border-radius:10px;overflow-x:auto;font:13.5px/1.65 var(--m)}
+pre code{background:none;padding:0;font:inherit}
+*{scrollbar-color:var(--line-2) transparent;scrollbar-width:thin}
+
+/* top bar */
+.top{position:sticky;top:0;z-index:20;height:60px;display:flex;align-items:center;gap:16px;padding:0 max(16px,env(safe-area-inset-left));background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:saturate(1.4) blur(10px);border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:10px;color:var(--ink);text-decoration:none;font-weight:600;letter-spacing:-.01em}
+.brand svg{flex:none}
+.brand span{color:var(--ink-3);font-weight:400}
+.top .sp{flex:1}
+.top a.gh,.top button{font:500 14px var(--f);color:var(--ink-2);text-decoration:none;background:none;border:1px solid var(--line);border-radius:8px;height:34px;padding:0 12px;display:inline-flex;align-items:center;gap:8px;cursor:pointer}
+.top a.gh:hover,.top button:hover{border-color:var(--line-2);color:var(--ink)}
+.top .menu{display:none}
+
+/* shell */
+.shell{display:grid;grid-template-columns:var(--side) minmax(0,1fr);max-width:1480px;margin:0 auto}
+.side{position:sticky;top:60px;height:calc(100vh - 60px);overflow-y:auto;padding:28px 20px 40px 24px;border-right:1px solid var(--line)}
+.side h4{font:600 12px/1 var(--f);letter-spacing:.02em;color:var(--ink-3);margin:22px 0 8px;padding-left:10px}
+.side h4:first-child{margin-top:0}
+.side a{display:block;padding:6px 10px;border-radius:7px;color:var(--ink-2);text-decoration:none;font-size:14.5px;line-height:1.35}
+.side a:hover{background:var(--bg-2);color:var(--ink)}
+.side a[aria-current="true"],.side a[aria-current="page"]{background:var(--accent-bg);color:var(--accent-2);font-weight:500}
+.side a.sub{padding-left:22px;font-size:14px}
+main{min-width:0;padding:44px clamp(16px,4vw,56px) 120px}
+.doc{max-width:var(--col)}
+.wide{max-width:1080px}
+
+/* type */
+h1{font:700 clamp(34px,5vw,48px)/1.06 var(--f);letter-spacing:-.035em;margin:0 0 16px;text-wrap:balance}
+h2{font:650 28px/1.2 var(--f);letter-spacing:-.025em;margin:0 0 12px;text-wrap:balance}
+h3{font:600 19px/1.35 var(--f);letter-spacing:-.01em;margin:36px 0 8px}
+p,li{color:var(--ink-2);max-width:70ch}
+p{margin:0 0 14px}
+strong,b{color:var(--ink);font-weight:600}
+.lead{font-size:19px;line-height:1.6;color:var(--ink-2);max-width:62ch}
+section{padding-top:64px;margin-top:64px;border-top:1px solid var(--line)}
+section:first-of-type{border-top:0;margin-top:0;padding-top:0}
+.anchor{color:inherit;text-decoration:none}
+.anchor:hover::after{content:" #";color:var(--ink-3)}
+
+/* verdict + status pills */
+.v{display:inline-flex;align-items:center;gap:6px;font:500 13px/1 var(--m);padding:5px 9px 5px 8px;border-radius:999px;white-space:nowrap;vertical-align:1px}
+.v::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.v-none{color:var(--ink-2);background:var(--bg-3);box-shadow:inset 0 0 0 1px var(--line-2)}.v-none::before{background:none;box-shadow:inset 0 0 0 1.5px currentColor}
+.v-safe{color:var(--safe);background:var(--safe-bg)}.v-disable{color:var(--disable);background:var(--disable-bg)}.v-ask{color:var(--ask);background:var(--ask-bg)}
+.st{display:inline-flex;align-items:center;gap:6px;font:500 12.5px/1 var(--f);padding:4px 9px;border-radius:999px;border:1px solid var(--line-2);color:var(--ink-2);white-space:nowrap}
+.st-done{border-color:transparent;background:var(--safe-bg);color:var(--safe)}
+.st-now{border-color:transparent;background:var(--accent-bg);color:var(--accent-2)}
+.target{font:500 12px/1 var(--m);color:var(--disable);border:1px dashed currentColor;border-radius:4px;padding:2px 5px;margin-left:6px;vertical-align:2px;white-space:nowrap}
+.ev{font:500 12.5px/1 var(--m);color:var(--accent-2);background:var(--accent-bg);padding:3px 6px;border-radius:5px;white-space:nowrap}
+
+/* at a glance: one contract row, not a stat grid */
+.contract{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin:28px 0 0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--bg-2)}
+.contract>div{padding:16px 18px;border-left:1px solid var(--line);min-width:0}
+.contract>div:first-child{border-left:0}
+.contract dt{font:500 12.5px/1.2 var(--f);color:var(--ink-3);margin:0 0 8px}
+.contract dd{margin:0;color:var(--ink);font-size:15px;line-height:1.5}
+.contract .vs{display:flex;flex-wrap:wrap;gap:6px}
+@media (max-width:720px){.contract{grid-template-columns:1fr}.contract>div{border-left:0;border-top:1px solid var(--line)}.contract>div:first-child{border-top:0}}
+
+.note{margin:20px 0 0;padding:14px 16px;border:1px solid var(--line);border-radius:10px;background:var(--bg-2)}
+.note p{margin:0}
+.note.warn{border-color:color-mix(in srgb,var(--disable) 40%,var(--line));background:var(--disable-bg)}
+.note.warn p,.note.warn b{color:var(--ink)}
+
+/* tables */
+.tbl{overflow-x:auto;margin:18px 0 0;border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:15px;line-height:1.5}
+th,td{padding:11px 14px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}
+tr:last-child td{border-bottom:0}
+th{font:600 13px/1.4 var(--f);color:var(--ink-3);background:var(--bg-2)}
+td{color:var(--ink-2)}
+td:first-child{color:var(--ink)}
+td.n{font:500 13.5px/1.6 var(--m);color:var(--ink-3);white-space:nowrap;font-variant-numeric:tabular-nums}
+td code{white-space:nowrap}
+
+/* figures */
+figure{margin:24px 0 0}
+.fig{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--bg-2);padding:16px}
+figcaption{margin-top:10px;font-size:14px;color:var(--ink-3);max-width:80ch}
+svg.d{display:block;width:100%;height:auto}
+.d text{fill:var(--ink);font-family:var(--f)}
+.d .h{font-size:14px;font-weight:600}
+.d .s{font-size:12px;fill:var(--ink-3)}
+.d .t{font:600 12px var(--m);letter-spacing:.06em;fill:var(--ink-3)}
+.d .l{font:500 12px var(--m);fill:var(--ink-3);paint-order:stroke;stroke:var(--bg-2);stroke-width:5px;stroke-linejoin:round}
+.d .node{fill:var(--bg);stroke:var(--line-2);stroke-width:1.2}
+.d .llm{fill:var(--accent-bg);stroke:var(--accent);stroke-width:1.8}
+.d .tool{fill:var(--safe-bg);stroke:var(--safe);stroke-width:1.5}
+.d .guard{fill:var(--guard-bg);stroke:var(--guard);stroke-width:1.8}
+.d .iface{fill:var(--bg);stroke:var(--ink-3);stroke-width:1.2;stroke-dasharray:2 3}
+.d .later{stroke-dasharray:6 4}
+.d .zone{fill:none;stroke:var(--line-2);stroke-width:1.2}
+.d .zone-ro{fill:none;stroke:var(--safe);stroke-width:1.2;stroke-dasharray:6 4}
+.d .zone-h{fill:none;stroke:var(--guard);stroke-width:1.2;stroke-dasharray:6 4}
+.d .e{fill:none;stroke:var(--ink-3);stroke-width:1.5}
+.d .e.dash{stroke-dasharray:5 4}
+.d .ah{fill:var(--ink-3)}
+.legend{display:flex;flex-wrap:wrap;gap:8px 18px;margin:12px 0 0;font-size:13.5px;color:var(--ink-3)}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.legend i{width:14px;height:14px;border-radius:4px;border:1.5px solid;display:inline-block}
+.legend .k-llm{background:var(--accent-bg);border-color:var(--accent)}
+.legend .k-tool{background:var(--safe-bg);border-color:var(--safe)}
+.legend .k-guard{background:var(--guard-bg);border-color:var(--guard)}
+.legend .k-code{background:var(--bg);border-color:var(--line-2)}
+.legend .k-later{background:transparent;border-color:var(--ink-3);border-style:dashed}
+
+/* flow stepper: the one interaction */
+.stepper{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 14px}
+.stepper button{font:500 13.5px var(--f);color:var(--ink-2);background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:6px 12px;cursor:pointer;display:inline-flex;gap:7px;align-items:center}
+.stepper button b{font:500 12px var(--m);color:var(--ink-3)}
+.stepper button:hover{border-color:var(--line-2);color:var(--ink)}
+.stepper button[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.stepper button[aria-pressed="true"] b{color:var(--bg);opacity:.7}
+.flowfig g[data-step]{transition:opacity .35s cubic-bezier(.16,1,.3,1)}
+.flowfig.focus g[data-step]:not(.on){opacity:.18}
+.say{min-height:3.2em;margin:12px 0 0;padding:12px 14px;border-radius:10px;background:var(--bg);border:1px solid var(--line);font-size:15px;color:var(--ink-2)}
+.say b{color:var(--ink)}
+
+/* guardrail list */
+.rails{list-style:none;padding:0;margin:18px 0 0;border:1px solid var(--line);border-radius:10px}
+.rails li{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:4px 20px;padding:13px 16px;border-top:1px solid var(--line);max-width:none}
+.rails li:first-child{border-top:0}
+.rails b{font-weight:600}
+.rails span{color:var(--ink-3);font-size:14.5px}
+@media (max-width:640px){.rails li{grid-template-columns:1fr}}
+
+/* roadmap timeline */
+.weeks{list-style:none;margin:18px 0 0;padding:0;position:relative}
+.weeks li{position:relative;display:grid;grid-template-columns:96px minmax(0,1fr);gap:4px 18px;padding:0 0 26px;max-width:none}
+.weeks li::before{content:"";position:absolute;left:5px;top:22px;bottom:0;width:1px;background:var(--line-2)}
+.weeks li:last-child::before{display:none}
+.weeks .wk{display:flex;gap:10px;align-items:baseline;font:600 15px var(--f);color:var(--ink)}
+.weeks .wk::before{content:"";flex:none;width:11px;height:11px;border-radius:50%;border:2px solid var(--line-2);background:var(--bg);transform:translateY(1px)}
+.weeks li.done .wk::before{background:var(--safe);border-color:var(--safe)}
+.weeks li.now .wk::before{background:var(--accent);border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-bg)}
+.weeks h3{margin:0 0 4px;font-size:17px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.weeks p{margin:0;font-size:15px}
+@media (max-width:560px){.weeks li{grid-template-columns:1fr}}
+
+/* pr flow track */
+.track{list-style:none;margin:18px 0 0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,96px),1fr));gap:8px}
+.track li{padding:12px 12px 13px;border:1px solid var(--line);border-radius:10px;background:var(--bg);display:grid;gap:3px;align-content:start;max-width:none}
+.track li.gate{border-color:color-mix(in srgb,var(--accent) 45%,var(--line));background:var(--accent-bg)}
+.track b{font-size:15px}
+.track span{font-size:13.5px;color:var(--ink-3);line-height:1.45}
+
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:14px;margin-top:18px}
+.box{border:1px solid var(--line);border-radius:10px;padding:16px 18px;min-width:0}
+.box h3{margin:0 0 6px;font-size:16px}
+.box p{margin:0;font-size:15px}
+.box .when{font:500 12.5px var(--m);color:var(--ink-3)}
+
+.foot{margin-top:96px;padding-top:24px;border-top:1px solid var(--line);font-size:14px;color:var(--ink-3)}
+
+@media (max-width:900px){
+  .shell{grid-template-columns:1fr}
+  .top .menu{display:inline-flex}
+  .shell{grid-template-columns:minmax(0,1fr)}
+  .side{position:fixed;inset:60px 0 auto 0;height:auto;max-height:calc(100vh - 60px);background:var(--bg);border-right:0;border-bottom:1px solid var(--line);z-index:15;display:none;box-shadow:0 12px 32px -12px rgb(0 0 0 / .25)}
+  .side.open{display:block}
+  .brand span{display:none}
+  main{padding-top:32px}
+  .top a.gh{display:none}
+}
+/* week plan extras */
+.qs{display:grid;gap:12px;margin-top:18px}
+.q{border:1px solid var(--line);border-radius:10px;padding:16px 18px;display:grid;gap:8px;min-width:0}
+.q-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.q-id{font:600 14px var(--m);color:var(--ink)}
+.q-title{margin:0;font-weight:600;color:var(--ink)}
+.q ul{margin:0;padding-left:18px;display:grid;gap:4px}
+.q ul li{font-size:15px}
+.rec{margin:0;font-size:15px}
+.rec b{color:var(--accent-2)}
+ol.steps{list-style:none;padding:0;margin:18px 0 0;counter-reset:s;border:1px solid var(--line);border-radius:10px}
+ol.steps>li{counter-increment:s;display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:2px 14px;padding:14px 16px;border-top:1px solid var(--line);max-width:none;align-items:start}
+ol.steps>li:first-child{border-top:0}
+ol.steps>li::before{content:counter(s);width:26px;height:26px;border-radius:50%;border:1px solid var(--line-2);display:grid;place-items:center;font:500 13px var(--m);color:var(--ink-3)}
+.step-file{display:block;font:500 13.5px var(--m);color:var(--ink);overflow-wrap:anywhere}
+.step-pr{font:500 12.5px var(--m);color:var(--accent-2);background:var(--accent-bg);padding:3px 8px;border-radius:999px;white-space:nowrap}
+ul.check{list-style:none;padding:0;margin:18px 0 0;border:1px solid var(--line);border-radius:10px}
+ul.check>li{display:grid;grid-template-columns:18px minmax(0,1fr);gap:14px;padding:12px 16px;border-top:1px solid var(--line);max-width:none}
+ul.check>li:first-child{border-top:0}
+ul.check>li::before{content:"";width:16px;height:16px;margin-top:4px;border:1.5px solid var(--line-2);border-radius:4px}
+ul.check>li.done::before{content:"\2713";display:grid;place-items:center;font:700 11px/1 var(--f);color:var(--bg);background:var(--safe);border-color:var(--safe)}
+.step-pr.done{color:var(--safe);background:var(--safe-bg)}
+ul.check ul{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}
+.opt{font:500 12px var(--f);color:var(--ink-3);border:1px solid var(--line-2);border-radius:999px;padding:2px 8px;margin-right:6px}
+.scope{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:14px;margin-top:18px}
+.scope .box ul{margin:8px 0 0;padding-left:18px;display:grid;gap:4px}
+.scope .box li{font-size:15px}
+.scope .out{border-style:dashed}
+.chain{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:4px 0;font:13px var(--m);color:var(--ink-3)}
+.chain b{font-weight:500;color:var(--ink);background:var(--bg-2);border:1px solid var(--line);border-radius:6px;padding:3px 8px}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <a class="brand" href="index.html" aria-label="Change Impact Agent docs home">
+    <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect x="1" y="1" width="20" height="20" rx="6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 11.5l3.2 3.2L16 7.8" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    Change Impact Agent <span>Docs</span>
+  </a>
+  <div class="sp"></div>
+  <button class="menu" type="button" aria-expanded="false" aria-controls="side">Menu</button>
+  <button type="button" id="theme" aria-label="Toggle dark mode">Theme</button>
+  <a class="gh" href="https://github.com/odedgol/change-impact-agent">GitHub</a>
+</header>
+
+<div class="shell">
+<nav class="side" id="side" aria-label="Docs">
+  <h4>Docs</h4>
+  <a href="index.html">Overview</a>
+  <a href="index.html#agent">Agentic workflow</a>
+  <a href="index.html#roadmap">Roadmap</a>
+  <a href="index.html#workflow">PR workflow</a>
+  <a href="week-2.html">Week 2 plan</a>
+  <h4>Week 3 plan</h4>
+  <a href="#goal">Goal</a>
+  <a href="#flow">The change workflow</a>
+  <a href="#scope">Scope</a>
+  <a href="#decisions">Decisions</a>
+  <a href="#questions">Open questions</a>
+  <a href="#steps">Steps and PRs</a>
+  <a href="#validation">Validation</a>
+  <a href="#risks">Risks</a>
+  <a href="#rollback">Rollout and rollback</a>
+</nav>
+
+<main>
+
+<section id="goal" class="doc">
+  <h1>Week 3: approval and a reversible executor</h1>
+  <p class="lead">The report becomes an action, but only through code-checked guardrails, a person's approval and an executor that disables first and can undo every step.</p>
+  <dl class="contract">
+    <div><dt>Status</dt><dd><span class="st">draft</span> · plan for review; no code yet · updated 2026-10-17</dd></div>
+    <div><dt>Delivers</dt><dd><code>ChangeWorkflow</code>: investigate → guard → approve → act</dd></div>
+    <div><dt>Done when</dt><dd><code>make bench-fake</code> prints <code>unsafe_deletes: 0</code> and <code>unapproved_actions: 0</code></dd></div>
+  </dl>
+  <p style="margin-top:22px">Week 2 answers "is it safe?". Week 3 does something with the answer. A second LangGraph graph wraps the investigator. Plain functions decide which actions the verdict allows. <code>interrupt()</code> waits for a person. The executor then dry-runs, disables, waits a quiet period, checks again, and deletes or restores. Every step is written to an append-only audit log.</p>
+  <div class="note"><p>Where this sits: <a href="index.html#loop">the request loop</a>, steps 5 and 6, and the dashed week-3 boxes in <a href="index.html#layers">the five layers</a>.</p></div>
+</section>
+
+<section id="flow" class="doc">
+  <h2>The change workflow</h2>
+  <figure>
+    <div class="fig">
+      <svg class="d" viewBox="0 0 790 490" role="img" aria-labelledby="wf-t wf-d">
+        <title id="wf-t">ChangeWorkflow</title>
+        <desc id="wf-d">A change request goes to the investigator, then the guardrails, then human approval. If it is approved: dry run, disable, a quiet period, a second usage check, then delete or restore. Blocked or declined requests stop with no change. Every action goes to the audit log.</desc>
+        <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker></defs>
+        <!-- row 1 -->
+        <rect class="node" x="20" y="30" width="160" height="62" rx="8"/><text class="h" x="36" y="56">Change request</text><text class="s" x="36" y="76">identity_id · action</text>
+        <rect class="llm" x="210" y="30" width="160" height="62" rx="8"/><text class="h" x="226" y="56">Investigator</text><text class="s" x="226" y="76">week-2 graph → report</text>
+        <rect class="guard" x="400" y="30" width="160" height="62" rx="8"/><text class="h" x="416" y="56">Guardrails</text><text class="s" x="416" y="76">allowed_actions(report)</text>
+        <rect class="guard" x="590" y="30" width="160" height="62" rx="8"/><text class="h" x="606" y="56">Human approval</text><text class="s" x="606" y="76">interrupt() · resume</text>
+        <path class="e" d="M180 61H204" marker-end="url(#ah)"/>
+        <path class="e" d="M370 61H394" marker-end="url(#ah)"/>
+        <path class="e" d="M560 61H584" marker-end="url(#ah)"/>
+        <!-- row 2, right to left -->
+        <rect class="tool" x="590" y="170" width="160" height="62" rx="8"/><text class="h" x="606" y="196">Dry run</text><text class="s" x="606" y="216">plan · no change</text>
+        <rect class="tool" x="400" y="170" width="160" height="62" rx="8"/><text class="h" x="416" y="196">Disable</text><text class="s" x="416" y="216">reversible · idempotent</text>
+        <rect class="node" x="210" y="170" width="160" height="62" rx="8"/><text class="h" x="226" y="196">Quiet period</text><text class="s" x="226" y="216">interrupt() · 14 days</text>
+        <rect class="guard" x="20" y="170" width="160" height="62" rx="8"/><text class="h" x="36" y="196">Check again</text><text class="s" x="36" y="216">use since disable?</text>
+        <path class="e" d="M670 92V164" marker-end="url(#ah)"/><text class="l" x="680" y="134">approved</text>
+        <path class="e" d="M590 201H566" marker-end="url(#ah)"/>
+        <path class="e" d="M400 201H376" marker-end="url(#ah)"/>
+        <path class="e" d="M210 201H186" marker-end="url(#ah)"/>
+        <!-- row 3 -->
+        <rect class="tool" x="20" y="310" width="160" height="62" rx="8"/><text class="h" x="36" y="336">Delete</text><text class="s" x="36" y="356">safe_to_delete only</text>
+        <rect class="tool" x="210" y="310" width="160" height="62" rx="8"/><text class="h" x="226" y="336">Restore</text><text class="s" x="226" y="356">undo · re-enable</text>
+        <rect class="node" x="590" y="310" width="160" height="62" rx="8"/><text class="h" x="606" y="336">Stop</text><text class="s" x="606" y="356">no change · owner asked</text>
+        <path class="e dash" d="M100 232V304" marker-end="url(#ah)"/><text class="l" x="110" y="274">quiet</text>
+        <path class="e dash" d="M170 232L250 304" marker-end="url(#ah)"/><text class="l" x="214" y="262">used</text>
+        <path class="e dash" d="M480 30V14H772V341H756" marker-end="url(#ah)"/>
+        <path class="e dash" d="M750 61H772"/>
+        <text class="l" x="762" y="292" text-anchor="end">blocked or declined</text>
+        <!-- audit -->
+        <rect class="iface" x="20" y="410" width="730" height="50" rx="8"/><text class="h" x="36" y="432">AuditSink</text><text class="s" x="36" y="450">append-only, hash-chained: every guardrail decision, approval, dry run, disable, delete and undo</text>
+        <path class="e dash" d="M480 232V404" marker-end="url(#ah)"/>
+        <path class="e dash" d="M100 372V404" marker-end="url(#ah)"/>
+        <path class="e dash" d="M290 372V404" marker-end="url(#ah)"/>
+        <path class="e dash" d="M670 372V404" marker-end="url(#ah)"/>
+      </svg>
+    </div>
+    <figcaption>Solid arrows: the happy path. Dashed: conditional routes and audit writes. Red boxes are gates: code decides what is allowed, a person decides whether it runs. The investigator is the week-2 graph, used as a node.</figcaption>
+  </figure>
+  <div class="legend"><span><i class="k-llm"></i>LLM</span><span><i class="k-tool"></i>Action on the target</span><span><i class="k-guard"></i>Gate: code or person</span><span><i class="k-code"></i>Plain node</span></div>
+  <h3>What each verdict may do</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>Verdict</th><th>Allowed actions</th><th>After the quiet period</th></tr></thead>
+    <tbody>
+      <tr><td><span class="v v-safe">safe_to_delete</span></td><td>disable, then delete</td><td>delete if nothing used it; else restore</td></tr>
+      <tr><td><span class="v v-disable">disable_first</span></td><td>disable only</td><td>restore if used; else stays disabled, and a new run is needed before any delete</td></tr>
+      <tr><td><span class="v v-ask">ask_owner</span></td><td>none</td><td>stop; the owner is asked</td></tr>
+      <tr><td><span class="v v-none">insufficient_evidence</span></td><td>none</td><td>stop; run again when the source is back</td></tr>
+    </tbody>
+  </table></div>
+  <p style="margin-top:14px">A person can approve less than the guardrails allow, never more. Protected identities (break-glass, the tenant's own admins) allow no action, whatever the verdict.</p>
+</section>
+
+<section id="scope" class="doc">
+  <h2>Scope</h2>
+  <div class="scope">
+    <div class="box"><h3>In, week 3</h3><ul>
+      <li><code>credential_chain</code> case type and multi-hop dependencies (Q10)</li>
+      <li><code>guardrails.py</code>: allowed actions, protected identities, stale reports</li>
+      <li><code>TargetSystem</code> interface; <code>SyntheticTarget</code> on its own writable copy</li>
+      <li>Executor: dry run, disable first, undo, idempotency keys</li>
+      <li><code>AuditSink</code> interface; <code>JsonlAuditSink</code>, hash-chained</li>
+      <li><code>ChangeWorkflow</code> graph with two <code>interrupt()</code> waits</li>
+      <li>Approve or decline from a CLI and the monitor; the Rust UI shows the new events</li>
+    </ul></div>
+    <div class="box out"><h3>Out, week 4 and later</h3><ul>
+      <li>Real targets (<code>AwsIamTarget</code>, <code>KeycloakTarget</code>)</li>
+      <li>Postgres audit and checkpointer</li>
+      <li>FastAPI service, sign-in, roles for approvers</li>
+      <li>Doc index (Q9, Q11), red-team cases, held-out bench</li>
+    </ul></div>
+  </div>
+  <p style="margin-top:16px">Assumptions: the evidence database stays read-only (<code>mode=ro</code>); the executor never writes to it. No real IAM system is touched. Unit tests and CI never call a hosted model. Time in the quiet period is simulated in tests.</p>
+</section>
+
+<section id="decisions" class="doc">
+  <h2>Decisions</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>#</th><th>Question</th><th>Decision</th></tr></thead>
+    <tbody>
+      <tr><td class="n">Engine</td><td>How does the workflow run?</td><td>A second LangGraph <code>StateGraph</code> in <code>src/cia/workflow.py</code>. The investigator graph is one node. No <code>while True</code>, no Temporal</td></tr>
+      <tr><td class="n">Wait</td><td>How does it wait for a person or for 14 days?</td><td><code>interrupt()</code>, resumed with <code>Command(resume=…)</code>. Nothing sleeps; a checkpointer keeps the state</td></tr>
+      <tr><td class="n">Rules</td><td>Who decides what may run?</td><td>Plain tested functions in <code>guardrails.py</code>. The model and the prompt never do</td></tr>
+      <tr><td class="n">Writes</td><td>Where does the executor write?</td><td>Only through <code>TargetSystem</code>. Evidence stays on <code>mode=ro</code></td></tr>
+      <tr><td class="n">Draw</td><td>Is the workflow drawn?</td><td>Yes: <code>make graph</code> draws both graphs on the hub, generated from the code like the investigator</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="questions" class="doc">
+  <h2>Open questions</h2>
+  <p>Each one has a recommended answer. Answer them in review of this plan; the code starts after.</p>
+  <div class="qs">
+    <article class="q">
+      <div class="q-head"><span class="q-id">Q10</span><span class="st">from week 2</span></div>
+      <p class="q-title">How do we model credential chains?</p>
+      <p class="chain"><b>user</b>owns<b>API key</b>stored in<b>secret</b>read by<b>pipeline</b>owned by<b>team</b></p>
+      <p class="rec"><b>Recommended:</b> one new <code>credential_chain</code> command, added at the end of <code>COMMANDS</code> (the golden org hash changes on purpose). Four dependency kinds: <code>owns_credential</code>, <code>stored_in</code>, <code>read_by</code>, <code>owned_by</code>. <code>get_dependencies(identity_id, depth=1)</code> follows up to 4 hops; each row carries <code>hop</code> and <code>via</code>, and code clamps <code>depth</code> to 1–4. Expected verdict: <span class="v v-ask">ask_owner</span>.</p>
+    </article>
+    <article class="q">
+      <div class="q-head"><span class="q-id">Q12</span><span class="st">new</span></div>
+      <p class="q-title">Can a person approve more than the guardrails allow, for example a delete on <code>ask_owner</code>?</p>
+      <p class="rec"><b>Recommended:</b> no. A person can only narrow. To widen, record the owner's answer as a ticket and run the investigation again, so the reason is evidence.</p>
+    </article>
+    <article class="q">
+      <div class="q-head"><span class="q-id">Q13</span><span class="st">new</span></div>
+      <p class="q-title">Which checkpointer holds the two waits?</p>
+      <p class="rec"><b>Recommended:</b> <code>SqliteSaver</code> (<code>langgraph-checkpoint-sqlite</code>) in <code>data/</code> now, with the same allow-listed serializer as week 2. Postgres later, behind the same LangGraph interface. A wait must survive a restart.</p>
+    </article>
+    <article class="q">
+      <div class="q-head"><span class="q-id">Q14</span><span class="st">new</span></div>
+      <p class="q-title">How long is the quiet period, and what ends it early?</p>
+      <p class="rec"><b>Recommended:</b> 14 days, set in config. Any sign-in or key use while disabled ends it with a restore. A scheduler, or <code>make resume</code> in the demo, resumes the graph with the current time; tests use a fake clock.</p>
+    </article>
+    <article class="q">
+      <div class="q-head"><span class="q-id">Q15</span><span class="st">new</span></div>
+      <p class="q-title">How old can a report be at approval time?</p>
+      <p class="rec"><b>Recommended:</b> 24 hours. An older report needs a new run before the guardrails allow anything, because a ticket or a job may have appeared since.</p>
+    </article>
+    <article class="q">
+      <div class="q-head"><span class="q-id">Q16</span><span class="st">new</span></div>
+      <p class="q-title">What makes the audit log trustworthy?</p>
+      <p class="rec"><b>Recommended:</b> JSON lines; each entry holds the hash of the one before. <code>verify()</code> finds any edit or gap. Each action has an idempotency key (<code>request_id</code> + action), so a retry or resume never acts twice.</p>
+    </article>
+  </div>
+</section>
+
+<section id="steps" class="doc">
+  <h2>Steps and PRs</h2>
+  <ol class="steps">
+    <li><span><span class="step-file">docs/week-3.html</span>This plan; week 2 marked done on the hub.</span><span class="step-pr">PR 3.0 · in review</span></li>
+    <li><span><span class="step-file">src/cia/generator.py · sources.py · tools.py</span><code>credential_chain</code> case type and multi-hop <code>get_dependencies</code> (Q10). Ground truth grows; golden hash, bench rule and smoke fixture updated on purpose.</span><span class="step-pr">PR 3.1</span></li>
+    <li><span><span class="step-file">src/cia/guardrails.py</span><code>allowed_actions(report, identity, now)</code>: the verdict table above, protected identities, report age (Q15), narrowing only (Q12).</span><span class="step-pr">PR 3.2</span></li>
+    <li><span><span class="step-file">src/cia/executor.py · audit.py</span><code>TargetSystem</code> Protocol and <code>SyntheticTarget</code> (a writable copy, <code>data/target.db</code>); <code>Executor</code> with <code>plan</code> (dry run), <code>disable</code>, <code>restore</code>, <code>delete</code>, idempotency keys; <code>AuditSink</code> and <code>JsonlAuditSink</code> with a hash chain and <code>verify()</code> (Q16).</span><span class="step-pr">PR 3.3</span></li>
+    <li><span><span class="step-file">src/cia/workflow.py</span><code>ChangeWorkflow</code> <code>StateGraph</code>: <code>investigate</code>, <code>guard</code>, <code>approve</code> (interrupt), <code>dry_run</code>, <code>disable</code>, <code>quiet</code> (interrupt), <code>recheck</code>, <code>delete</code>, <code>restore</code>, <code>stop</code>. <code>SqliteSaver</code> checkpointer (Q13). New events: <code>guardrail</code>, <code>approval_requested</code>, <code>approval</code>, <code>action</code>.</span><span class="step-pr">PR 3.4</span></li>
+    <li><span><span class="step-file">src/cia/workflow.py · monitor · tui/</span><code>python -m cia.workflow start|approve|decline|resume|status</code>; <code>make change ID=…</code>. The monitor lists waiting approvals with Approve and Decline buttons; the Rust UI shows the new events.</span><span class="step-pr">PR 3.5</span></li>
+    <li><span><span class="step-file">src/cia/bench.py · graph.py · docs/</span>The bench runs the workflow with an auto-approver and counts <code>unapproved_actions</code> and <code>wrong_deletes</code>; <code>make graph</code> draws both graphs; results recorded here.</span><span class="step-pr">PR 3.6</span></li>
+  </ol>
+</section>
+
+<section id="validation" class="doc">
+  <h2>Validation</h2>
+  <p>Each item is a test or a command. CI runs <code>make lint typecheck test</code>, <code>make bench-fake</code> and the <code>tui</code> job on every PR.</p>
+  <ul class="check">
+    <li><span><code>test_generator_golden.py</code>: the new org hash is pinned, and the PR says why it changed. The <code>credential_chain</code> case is found only by following hops; the naive baseline deletes it.</span></li>
+    <li><span><code>test_guardrails.py</code>: every row of the verdict table; a protected identity allows nothing; a 25-hour-old report allows nothing; an approval that asks for more than allowed is refused.</span></li>
+    <li><span><code>test_executor.py</code>: a dry run changes nothing; disable then restore gives back the same row; running the same action twice acts once; delete without a prior disable is refused; the evidence database is unchanged after every test.</span></li>
+    <li><span><code>test_audit.py</code>: every action writes one entry; editing, removing or reordering an entry makes <code>verify()</code> fail.</span></li>
+    <li><span><code>test_workflow.py</code>, on <code>FakeLLM</code> and a fake clock:<ul>
+      <li>the run stops at <code>approve</code>, and nothing has changed on the target;</li>
+      <li>decline ends with no change; approve runs dry run → disable → quiet;</li>
+      <li>use during the quiet period restores; no use deletes, only for <span class="v v-safe">safe_to_delete</span>;</li>
+      <li>a restart between the waits resumes from the checkpoint and never acts twice.</li></ul></span></li>
+    <li><span><code>make bench-fake</code> prints <code>unsafe_deletes: 0</code>, <code>unapproved_actions: 0</code> and <code>wrong_deletes: 0</code>.</span></li>
+    <li><span><code>test_graph.py</code>: the hub's drawing matches both graphs.</span></li>
+    <li><span><span class="opt">optional</span> One real-model run of the full workflow on the synthetic org (asked before it runs), recorded here.</span></li>
+  </ul>
+</section>
+
+<section id="risks" class="doc">
+  <h2>Risks</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Risk</th><th>Mitigation</th></tr></thead>
+    <tbody>
+      <tr><td>An action runs without approval</td><td>The executor needs an approval record from the checkpoint; the bench counts <code>unapproved_actions</code></td></tr>
+      <tr><td>A resume or retry acts twice</td><td>Idempotency key per action, checked against the audit log</td></tr>
+      <tr><td>Delete cannot be undone</td><td>Disable first, a quiet period, a second check; delete only for <span class="v v-safe">safe_to_delete</span></td></tr>
+      <tr><td>A person rubber-stamps</td><td>Approval can only narrow (Q12); the report and its cited evidence are shown with the request</td></tr>
+      <tr><td>The report is stale by approval time</td><td>24-hour limit (Q15), then a new run</td></tr>
+      <tr><td>Executor writes leak into evidence</td><td>Separate target database; evidence stays <code>mode=ro</code>; a test checks the evidence hash</td></tr>
+      <tr><td>Audit log is edited later</td><td>Hash chain and <code>verify()</code>; Postgres with insert-only rights later</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="rollback" class="doc">
+  <h2>Rollout and rollback</h2>
+  <p>PRs merge in order 3.0 → 3.6, each small and additive. The investigator and its events don't change, so week-2 tools (bench, monitor, Rust UI) keep working at every step. Revert a squash commit to roll it back. Only synthetic data; nothing is deployed and no real system is touched.</p>
+</section>
+
+<p class="foot doc">Plan 002 · owner Oded Goldberg · updated 2026-10-17</p>
+</main>
+</div>
+<script>
+(function(){
+  var root=document.documentElement,key="cia-theme";
+  document.getElementById("theme").addEventListener("click",function(){
+    var dark=root.getAttribute("data-theme")==="dark"||(!root.getAttribute("data-theme")&&matchMedia("(prefers-color-scheme: dark)").matches);
+    var next=dark?"light":"dark";root.setAttribute("data-theme",next);try{localStorage.setItem(key,next)}catch(e){}
+  });
+  var side=document.getElementById("side"),menu=document.querySelector(".menu");
+  menu.addEventListener("click",function(){var o=side.classList.toggle("open");menu.setAttribute("aria-expanded",o)});
+  side.addEventListener("click",function(e){if(e.target.tagName==="A"){side.classList.remove("open");menu.setAttribute("aria-expanded","false")}});
+
+  /* scrollspy */
+  var links=[].slice.call(side.querySelectorAll('a[href^="#"]'));
+  var map={};links.forEach(function(a){map[a.getAttribute("href").slice(1)]=a});
+  var io=new IntersectionObserver(function(es){es.forEach(function(en){if(en.isIntersecting&&map[en.target.id]){links.forEach(function(a){a.removeAttribute("aria-current")});map[en.target.id].setAttribute("aria-current","true")}})},{rootMargin:"-70px 0px -65% 0px"});
+  Object.keys(map).forEach(function(id){var el=document.getElementById(id);if(el)io.observe(el)});
+})();
+</script>
+</body>
+</html>
