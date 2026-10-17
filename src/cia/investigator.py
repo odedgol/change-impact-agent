@@ -23,6 +23,7 @@ import argparse
 import inspect
 import json
 import sys
+import time
 from collections.abc import Callable
 from typing import IO, Any
 
@@ -104,7 +105,7 @@ class Investigator:
         except _CapReached:
             report = RiskReport(request_id=request.request_id, verdict="ask_owner", confidence="low")
             self.events({"type": "step_cap", "request_id": request.request_id, "steps": run.steps})
-        self.events({"type": "report", **report.model_dump()})
+        self.events({"type": "report", **report.model_dump(), "steps": run.steps})
         return report
 
 
@@ -217,13 +218,13 @@ class _Run:
 
 
 class JsonlEvents:
-    """Writes each event as one JSON line, for the terminal UI or a saved replay."""
+    """Writes each event as one JSON line, stamped with wall-clock time ``t``, for the UIs or a replay."""
 
     def __init__(self, stream: IO[str]):
         self.stream = stream
 
     def __call__(self, event: dict[str, Any]) -> None:
-        self.stream.write(json.dumps(event, default=str) + "\n")
+        self.stream.write(json.dumps({**event, "t": round(time.time(), 3)}, default=str) + "\n")
         self.stream.flush()
 
 
@@ -246,7 +247,11 @@ def main(argv: list[str] | None = None, llm: LLMClient | None = None) -> None:
     try:
         if llm is None:
             llm = OpenAICompatClient(model=a.model) if a.llm == "openai" else BedrockClient(model_id=a.model)
-        inv = Investigator(SyntheticSource(a.db), llm, events=JsonlEvents(out) if out else None)
+        sink = JsonlEvents(out) if out else None
+        if sink:
+            sink({"type": "run", "run_id": a.request_id, "llm": a.llm,
+                  "model": getattr(llm, "model", None) or getattr(llm, "model_id", None)})
+        inv = Investigator(SyntheticSource(a.db), llm, events=sink)
         report = inv.investigate(ChangeRequest(request_id=a.request_id, identity_id=a.identity))
     finally:
         if out not in (None, sys.stdout):

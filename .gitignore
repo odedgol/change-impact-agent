@@ -8,3 +8,4 @@ data/*.db
 .impeccable/review/
 .impeccable/mocks/
 runs/
+.playwright-mcp/

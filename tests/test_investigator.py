@@ -192,7 +192,8 @@ def test_events_tell_the_whole_story_in_order(org):
 def test_jsonl_events_and_cli(org, tmp_path):
     buf = io.StringIO()
     JsonlEvents(buf)({"type": "request", "n": 1})
-    assert json.loads(buf.getvalue()) == {"type": "request", "n": 1}
+    line = json.loads(buf.getvalue())
+    assert line["type"] == "request" and line["n"] == 1 and line["t"] > 0
 
     db, truth = org
     case = _case(truth, "policy_exception")
@@ -201,7 +202,7 @@ def test_jsonl_events_and_cli(org, tmp_path):
                    submit("disable_first", "ev-deps-1")])
     main(["--db", db, "--identity", case["identity_id"], "--events", str(out)], llm=llm)
     lines = [json.loads(line) for line in out.read_text().splitlines()]
-    assert [e["type"] for e in lines if e["type"] != "model_turn"] == ["request", "tool_call", "report"]
+    assert [e["type"] for e in lines if e["type"] != "model_turn"] == ["run", "request", "tool_call", "report"]
     assert of(lines, "tool_call")[0]["result"]["rows"][0]["kind"] == "policy_reference"
 
 
