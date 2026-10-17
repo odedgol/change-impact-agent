@@ -53,17 +53,6 @@ class ScriptedFactory:
         return FakeLLM(script_for(self.identity))
 
 
-class ScriptedFactory:
-    """The monitor's llm_factory in tests: a scripted run for ``identity``; model "broken" fails to start."""
-
-    identity = "u00000"
-
-    def __call__(self, llm, model):
-        if model == "broken":
-            raise RuntimeError("Connection refused")
-        return FakeLLM(script_for(self.identity))
-
-
 @pytest.fixture
 def server(tmp_path):
     db, truth_path = tmp_path / "org.db", tmp_path / "truth.json"
