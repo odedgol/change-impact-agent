@@ -506,14 +506,14 @@ svg.thread circle{fill:var(--accent)}
     return e.type;
   }
   function flowGraph(evts,upto){
-    var ev=evts.slice(0,upto+1),cur=ev[ev.length-1]||{},last={},s={turns:0,cut:0,calls:{},ids:{},errors:[],blocked:[],submits:0,retries:0,rejected:[]};
+    var ev=evts.slice(0,upto+1),cur=ev[ev.length-1]||{},last={},s={turns:0,cut:0,nocall:[],badReports:0,calls:{},ids:{},errors:[],blocked:[],submits:0,retries:0,rejected:[]};
     var req=evts.find(function(e){return e.type==="request"})||{},run=evts.find(function(e){return e.type==="run"})||{};
     var rep=null,cap=null,err=null,steps=0;
     ev.forEach(function(e,i){
       last[e.type]=i;steps=Math.max(steps,e.step||0,e.steps||0);
-      if(e.type==="model_turn"){s.turns++;if(e.stop_reason==="length")s.cut++;(e.tool_calls||[]).forEach(function(c){if(c.name==="submit_report")s.submits++})}
+      if(e.type==="model_turn"){s.turns++;if(e.stop_reason==="length")s.cut++;if(!(e.tool_calls||[]).length)s.nocall.push(i);(e.tool_calls||[]).forEach(function(c){if(c.name==="submit_report")s.submits++})}
       else if(e.type==="tool_call"){(s.calls[e.tool]=s.calls[e.tool]||[]).push(e.evidence_id);s.ids[e.evidence_id]=1;last["t:"+e.tool]=i}
-      else if(e.type==="tool_error"){if(TOOLS5.indexOf(e.tool)>=0){s.errors.push(e.tool);last["t:"+e.tool]=i}else{s.blocked.push(e.tool);last.blocked=i}}
+      else if(e.type==="tool_error"){if(TOOLS5.indexOf(e.tool)>=0){s.errors.push(e.tool);last["t:"+e.tool]=i}else if(e.tool==="submit_report"){s.badReports++;last.citation_retry=i}else{s.blocked.push(e.tool);last.blocked=i}}
       else if(e.type==="citation_retry"){s.retries++;s.rejected=s.rejected.concat(e.rejected_ids)}
       else if(e.type==="report")rep=e;else if(e.type==="step_cap")cap=e;else if(e.type==="run_error")err=e;
     });
@@ -524,33 +524,41 @@ svg.thread circle{fill:var(--accent)}
     function box(id,parent,x,y,w,h,kind,t,sub,d,ref,extra){nodes.push({id:id,type:"box",x:x,y:y,w:w,h:h,parent:parent,data:{kind:kind,t:t,s:sub||"",d:d||"",ref:ref,cls:extra||""}})}
     function edge(id,a,ah,b,bh,label,cls){edges.push({id:id,source:a,sh:"s"+ah,target:b,th:"t"+bh,label:label||"",cls:cls||""})}
 
+    // the graph's nodes (src/cia/graph.py), placed on the agent's levels
+    var lastTools=Math.max(last.tool_call==null?-1:last.tool_call,last.tool_error==null?-1:last.tool_error);
+    var nudges=s.nocall.filter(function(i){return i<last.model_turn||(!cap&&!rep&&i<ev.length-1)}).length;
     // 1 · orchestration
-    zone("z1","<b>1</b> · Orchestration · plain code, no LLM router",0,0,940,124);
+    zone("z1","<b>1</b> · Orchestration · LangGraph StateGraph",0,0,940,124);
     box("req","z1",16,38,220,70,"","ChangeRequest",(req.request_id||"")+" · "+(req.action||"delete")+" "+(req.identity_id||""),"from the CLI, the monitor or the bench",last.request);
-    box("wf","z1",371,38,200,70,"","Investigator.investigate","plain Python call","Temporal workflow: week 3",null);
+    box("wf","z1",371,38,200,70,"","StateGraph.invoke","graph.py · 6 nodes","interrupt() approval: week 3",last.request);
     var vcls=rep?"v-"+rep.verdict:err?"k-guard":"idle";
     box("rep","z1",716,38,208,70,vcls,rep?rep.verdict:err?"Run failed":"RiskReport",rep?"confidence "+rep.confidence:err?"":"waiting",
-      rep?plural(rep.findings.length,"finding")+(rep.permits_delete===false?"":""):(err?String(err.error).slice(0,60):""),rep?last.report:(err?last.run_error:null));
+      rep?plural(rep.findings.length,"finding"):(err?String(err.error).slice(0,60):""),rep?last.report:(err?last.run_error:null));
     // 3 · memory and state
-    zone("z3","<b>3</b> · Memory and state",0,140,240,270);
-    box("msg","z3",12,40,216,92,s.turns?"":"idle","messages[]",plural(s.turns*2+1,"message"),"system prompt + history",last.model_turn);
-    box("evl","z3",12,152,216,100,nIds?"":"idle","Evidence log",plural(nIds,"id"),Object.keys(s.ids).slice(-3).join(" ")||"ev-<tool>-<n> → result",last.tool_call);
-    // 2 · worker
-    zone("z2","<b>2</b> · Worker · investigator",256,140,420,270);
-    box("llm","z2",105,40,210,92,"k-llm"+(s.turns?"":" idle"),run.model||"LLMClient",(run.llm||"model")+" · "+plural(s.turns,"turn"),s.cut?s.cut+" cut off (output limit)":"reasons, picks the next tool",last.model_turn);
-    box("loop","z2",105,160,210,96,cap?"k-guard":"","Investigator loop","step "+steps+" of "+MAX_STEPS,cap?"cap reached":"dispatch · ids · guards",ev.length-1);
-    // 5 · self-critique
-    zone("z5","<b>5</b> · Self-critique · code",692,140,248,270);
-    // guards on top, the citation check level with the loop, so submit_report is a straight arrow
+    zone("z3","<b>3</b> · Memory",0,140,216,310);
+    box("msg","z3",12,40,192,92,s.turns?"":"idle","messages[]",plural(s.turns*2+1,"message"),"system prompt + history",last.model_turn);
+    box("evl","z3",12,160,192,100,nIds?"":"idle","Evidence log",plural(nIds,"id"),Object.keys(s.ids).slice(-3).join(" ")||"ev-<tool>-<n> → result",last.tool_call);
+    // 2 · worker: the model node proposes, the tools node runs read-only calls
+    zone("z2","<b>2</b> · Worker · graph nodes",232,140,436,310);
+    box("model","z2",14,40,152,96,"k-llm"+(s.turns?"":" idle"),"model",(run.model||"LLMClient")+" · "+plural(s.turns,"turn"),
+      s.cut?s.cut+" cut off (output limit)":"reasons, picks the next tool",last.model_turn);
+    box("tools","z2",268,40,152,96,"k-tool"+(lastTools>=0?"":" idle"),"tools","step "+steps+" of "+MAX_STEPS,
+      nIds?plural(nIds,"evidence id")+(s.errors.length?" · "+s.errors.length+" failed":""):"read-only · assigns ev-ids",lastTools>=0?lastTools:null);
+    box("nudge","z2",14,190,152,80,nudges?"k-warn":"idle","nudge",nudges?plural(nudges,"turn")+" without a tool":"no tool call",
+      "costs a step, reminds the model",nudges?s.nocall[nudges-1]:null);
+    // 5 · self-critique: rules in code
+    zone("z5","<b>5</b> · Self-critique · code",684,140,256,310);
     var ckind=!s.submits?"idle":s.retries&&!rep?"k-warn":rep&&rep.rejected_citations?"k-warn":rep?"k-pass":"";
-    box("cite","z5",12,160,224,96,ckind,"Citation check",
-      rep?(rep.rejected_citations?rep.rejected_citations+" dropped":"all "+Object.keys(cited).length+" cited ids resolve"):s.submits?"checking":"cited ids ⊆ evidence log",
-      s.retries?"sent back once: "+s.rejected.join(", "):"one retry, then drop",last.citation_retry!=null&&!rep?last.citation_retry:last.report);
-    var gkind=cap||(rep&&rep.incomplete_reason)?"k-guard":"idle";
-    box("guard","z5",12,40,224,92,gkind,"Completeness guards",cap?"step cap: "+cap.steps+" steps":rep&&rep.incomplete_reason?"downgraded":"step cap · coverage",
-      rep&&rep.incomplete_reason?rep.incomplete_reason:"incomplete is never safe",cap?last.step_cap:last.report);
+    box("check","z5",24,40,220,82,ckind,"check",
+      cap?"not reached (step cap)":rep?(rep.rejected_citations?rep.rejected_citations+" citations dropped":"all "+Object.keys(cited).length+" cited ids resolve"):s.submits?"checking":"cited ids ⊆ evidence log",
+      s.retries?"sent back once: "+s.rejected.join(", "):s.badReports?plural(s.badReports,"invalid report")+" sent back":"one retry, then drop",last.citation_retry!=null&&!rep?last.citation_retry:last.report);
+    var fkind=!rep||cap?"idle":rep.incomplete_reason?"k-guard":"k-pass";
+    box("finish","z5",24,142,220,72,fkind,"finish",rep&&!cap?(rep.incomplete_reason?"downgraded":"verdict stands"):"incomplete is never safe",
+      rep&&!cap&&rep.incomplete_reason?rep.incomplete_reason:"usage, deps, tickets read in full",cap?null:last.report);
+    box("cap","z5",24,226,220,72,cap?"k-guard":"idle","cap",cap?"step cap: "+cap.steps+" steps":"step "+(MAX_STEPS+1)+" → insufficient_evidence",
+      cap?"insufficient_evidence, confidence low":"never a delete",cap?last.step_cap:null);
     // 4 · tool execution boundary
-    zone("z4","<b>4</b> · Tool execution boundary",0,430,940,250,"zone-boundary");
+    zone("z4","<b>4</b> · Tool execution boundary",0,470,940,250,"zone-boundary");
     zone("ro","Read-only evidence tools · SQLite mode=ro",12,34,600,204,"zone-ro","No web, no writes, no code exec. Ticket text is data, never instructions.","z4");
     TOOLS5.forEach(function(t,i){var ids=s.calls[t]||[],errs=s.errors.filter(function(x){return x===t}).length;
       box("t-"+t,"ro",10+i*117,34,110,78,"k-tool"+(ids.length||errs?"":" idle")+(errs?" k-guard":""),t.replace("get_dependencies","get_deps"),
@@ -558,41 +566,48 @@ svg.thread circle{fill:var(--accent)}
     if(s.blocked.length)box("blocked","ro",10,124,580,40,"k-blocked","Refused: "+s.blocked.join(", ")+" (not a read-only tool)","","",last.blocked);
     zone("wp","Write path · week 3",628,34,300,204,"zone-planned","","z4");
     box("exec","wp",10,34,135,78,"planned","Executor","disable, undo","audit log",null);
-    box("hitl","wp",155,34,135,78,"planned","HITL approval","human + rules","not built",null);
+    box("hitl","wp",155,34,135,78,"planned","HITL approval","interrupt() · human","week 3",null);
 
-    // edges: what moves between the levels
-    edge("e-start","req","right","wf","left","start",last.request!=null?"used":"");
-    edge("e-run","wf","bottom","llm","top","runs",last.request!=null?"used":"");
-    edge("e-msg","msg","right","llm","left","prompt",s.turns?"used":"");
-    edge("e-calls","llm","bottom","loop","top","calls ⇅ results",s.turns?"used":"");
-    edge("e-results","loop","top","llm","bottom","",nIds||s.errors.length?"used":"");
-    edge("e-evl","loop","left","evl","right","ev-ids",nIds?"used":"");
+    // edges: the graph's routes, plus what moves between the levels
+    var used=function(b){return b?"used":""};
+    edge("e-start","req","right","wf","left","start",used(last.request!=null));
+    edge("e-run","wf","bottom","model","top","",used(last.request!=null));
+    edge("e-msg","msg","right","model","left","",used(s.turns));
+    edge("e-calls","model","right","tools","left","calls ⇄ results",used(lastTools>=0||s.submits));
+    edge("e-results","tools","left","model","right","",used(s.turns>1&&lastTools>=0));
+    edge("e-nudge","model","bottom","nudge","top","no call ⇅",used(nudges));
+    edge("e-renudge","nudge","top","model","bottom","",used(nudges));
+    edge("e-evl","tools","bottom","evl","bottom","ev-ids",used(nIds));
     TOOLS5.forEach(function(t){var n=(s.calls[t]||[]).length+s.errors.filter(function(x){return x===t}).length;
-      if(n)edge("e-"+t,"loop","bottom","t-"+t,"top",n>1?"×"+n:"","used")});
-    if(s.blocked.length)edge("e-blocked","loop","bottom","blocked","top","","used");
-    edge("e-submit","loop","right","cite","left","submit_report",s.submits?"used":"");
-    if(s.retries)edge("e-retry","cite","left","llm","right","retry{"+s.rejected.join(",")+"}","back used");
-    edge("e-accept","cite","right","rep","right","",rep?"used":"");
-    edge("e-guard","guard","top","rep","bottom",cap?"cap":rep&&rep.incomplete_reason?"downgrade":"",cap||(rep&&rep.incomplete_reason)?"back used":"");
+      if(n)edge("e-"+t,"tools","bottom","t-"+t,"top",n>1?"×"+n:"","used")});
+    if(s.blocked.length)edge("e-blocked","tools","bottom","blocked","top","","used");
+    edge("e-submit","tools","right","check","left","submit",used(s.submits));
+    if(s.retries)edge("e-retry","check","left","tools","right","","back used");
+    edge("e-ok","check","bottom","finish","top","ok",used(rep&&!cap));
+    edge("e-cap","tools","bottom","cap","left","step "+(MAX_STEPS+1),cap?"back used":"");
+    edge("e-accept","finish","right","rep","right","",used(rep&&!cap));
+    edge("e-capped","cap","right","rep","right","",cap&&rep?"back used":"");
     edge("e-hitl","rep","right","hitl","right","","planned");
     edge("e-exec","hitl","left","exec","right","","planned");
 
     // light the box and the edge of the event at the replay position
-    var e=cur;
-    if(e.type==="request"){nowNode="req";nowEdge="e-start"}
-    else if(e.type==="model_turn"){nowNode="llm";nowEdge="e-calls"}
+    var e=cur,i0=ev.length-1;
+    if(e.type==="request"){nowNode="wf";nowEdge="e-start"}
+    else if(e.type==="model_turn"){nowNode="model";var prev=ev.slice(0,i0).reverse().find(function(x){return x.type!=="tool_call"&&x.type!=="tool_error"&&x.type!=="citation_retry"})||{};
+      nowEdge=prev.type==="model_turn"?(prev.tool_calls||[]).length?"e-results":"e-renudge":"e-run"}
     else if(e.type==="tool_call"){nowNode="t-"+e.tool;nowEdge="e-"+e.tool}
-    else if(e.type==="tool_error"){nowNode=TOOLS5.indexOf(e.tool)>=0?"t-"+e.tool:"blocked";nowEdge=TOOLS5.indexOf(e.tool)>=0?"e-"+e.tool:"e-blocked"}
-    else if(e.type==="citation_retry"){nowNode="cite";nowEdge="e-retry"}
-    else if(e.type==="step_cap"){nowNode="guard";nowEdge="e-guard"}
-    else if(e.type==="report"){nowNode="rep";nowEdge=e.incomplete_reason&&!cap?"e-guard":"e-accept"}
+    else if(e.type==="tool_error"){nowNode=TOOLS5.indexOf(e.tool)>=0?"t-"+e.tool:e.tool==="submit_report"?"check":"blocked";
+      nowEdge=TOOLS5.indexOf(e.tool)>=0?"e-"+e.tool:e.tool==="submit_report"?"e-submit":"e-blocked"}
+    else if(e.type==="citation_retry"){nowNode="check";nowEdge="e-retry"}
+    else if(e.type==="step_cap"){nowNode="cap";nowEdge="e-cap"}
+    else if(e.type==="report"){nowNode=cap?"cap":"finish";nowEdge=cap?"e-capped":"e-ok"}
     else if(e.type==="run_error"){nowNode="rep"}
     return {nodes:nodes,edges:edges,now:nowNode,nowEdge:nowEdge};
   }
   function isDark(){var t=root.getAttribute("data-theme");return t?t==="dark":matchMedia("(prefers-color-scheme: dark)").matches}
   function atEnd(){return state.at==null||state.at>=state.events.length-1}
   function drawFlowTab(main){
-    main.appendChild(h("p",{class:"flowhint"},h("b",null,"How to read it: "),"the agent's five levels, filled with this run. Lit boxes and arrows were used; the blue one is the event at the replay position. Click a box for its step."));
+    main.appendChild(h("p",{class:"flowhint"},h("b",null,"How to read it: "),"the agent's five levels with the LangGraph nodes (model, tools, nudge, check, finish, cap) inside, filled with this run. Lit boxes and arrows were used; the blue one is the event at the replay position. Click a box for its step."));
     var n=state.events.length,at=atEnd()?n-1:state.at;
     var range=h("input",{type:"range",min:"0",max:String(Math.max(0,n-1)),value:String(Math.max(0,at)),"aria-label":"Replay position",
       oninput:function(){state.at=+this.value;stopPlay();drawFlow();label.textContent=posText()}});

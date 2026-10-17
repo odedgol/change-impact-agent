@@ -111,13 +111,14 @@ def test_an_empty_turn_is_sent_back_as_an_empty_string_not_null():
 
 
 def test_an_http_error_keeps_the_server_reason(monkeypatch):
+    import email.message
     import io
     import urllib.error
 
     from cia import llm
 
     def refuse(req, timeout):
-        raise urllib.error.HTTPError(req.full_url, 400, "Bad Request", {},
+        raise urllib.error.HTTPError(req.full_url, 400, "Bad Request", email.message.Message(),
                                      io.BytesIO(b'{"error":"invalid message content type"}'))
 
     monkeypatch.setattr(llm.urllib.request, "urlopen", refuse)

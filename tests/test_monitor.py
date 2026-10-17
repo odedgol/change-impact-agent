@@ -19,19 +19,24 @@ def script_for(identity):
                  "confidence": "high"}]}),))]
 
 
+class ScriptedFactory:
+    """The monitor's llm_factory in tests: a scripted run for ``identity``; model "broken" fails to start."""
+
+    identity = "u00000"
+
+    def __call__(self, llm, model):
+        if model == "broken":
+            raise RuntimeError("Connection refused")
+        return FakeLLM(script_for(self.identity))
+
+
 @pytest.fixture
 def server(tmp_path):
     db, truth_path = tmp_path / "org.db", tmp_path / "truth.json"
     truth = generate(db, n_identities=500, seed=7)
     truth_path.write_text(json.dumps(truth))
 
-    def factory(llm, model):
-        if model == "broken":
-            raise RuntimeError("Connection refused")
-        return FakeLLM(script_for(factory.identity))
-
-    factory.identity = "u00000"
-
+    factory = ScriptedFactory()
     mon = Monitor(str(db), str(truth_path), str(tmp_path / "runs"), llm_factory=factory)
     srv = serve(mon, port=0)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
@@ -137,3 +142,8 @@ def test_page_draws_the_flow_with_pinned_react_flow_and_filters_by_model():
     assert 'id="mfilter"' in page and '["flow","Flow"]' in page
     assert "innerHTML" not in page and "dangerouslySetInnerHTML" not in page
     assert "insufficient_evidence, confidence low" in page  # the step-cap card matches PR 2.4d
+    # the Flow tab draws the LangGraph nodes of cia.graph, not the old loop
+    assert "StateGraph" in page
+    for node in ("model", "tools", "nudge", "check", "finish", "cap"):
+        assert f'box("{node}"' in page
+    assert "Investigator loop" not in page and "Temporal" not in page
