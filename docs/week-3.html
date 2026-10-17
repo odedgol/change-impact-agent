@@ -272,7 +272,7 @@ ul.check ul{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}
   <h1>Week 3: approval and a reversible executor</h1>
   <p class="lead">The report becomes an action, but only through code-checked guardrails, a person's approval and an executor that disables first and can undo every step.</p>
   <dl class="contract">
-    <div><dt>Status</dt><dd><span class="st">draft</span> · plan for review; no code yet · updated 2026-10-17</dd></div>
+    <div><dt>Status</dt><dd><span class="st st-now">active</span> · plan approved with the recommended answers; next PR 3.1 · updated 2026-10-17</dd></div>
     <div><dt>Delivers</dt><dd><code>ChangeWorkflow</code>: investigate → guard → approve → act</dd></div>
     <div><dt>Done when</dt><dd><code>make bench-fake</code> prints <code>unsafe_deletes: 0</code> and <code>unapproved_actions: 0</code></dd></div>
   </dl>
@@ -376,38 +376,38 @@ ul.check ul{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}
 
 <section id="questions" class="doc">
   <h2>Open questions</h2>
-  <p>Each one has a recommended answer. Answer them in review of this plan; the code starts after.</p>
+  <p>All answered on 2026-10-17: the recommended answer was taken for each.</p>
   <div class="qs">
     <article class="q">
-      <div class="q-head"><span class="q-id">Q10</span><span class="st">from week 2</span></div>
+      <div class="q-head"><span class="q-id">Q10</span><span class="st st-done">decided</span></div>
       <p class="q-title">How do we model credential chains?</p>
       <p class="chain"><b>user</b>owns<b>API key</b>stored in<b>secret</b>read by<b>pipeline</b>owned by<b>team</b></p>
-      <p class="rec"><b>Recommended:</b> one new <code>credential_chain</code> command, added at the end of <code>COMMANDS</code> (the golden org hash changes on purpose). Four dependency kinds: <code>owns_credential</code>, <code>stored_in</code>, <code>read_by</code>, <code>owned_by</code>. <code>get_dependencies(identity_id, depth=1)</code> follows up to 4 hops; each row carries <code>hop</code> and <code>via</code>, and code clamps <code>depth</code> to 1–4. Expected verdict: <span class="v v-ask">ask_owner</span>.</p>
+      <p class="rec"><b>Decided (recommended):</b> one new <code>credential_chain</code> command, added at the end of <code>COMMANDS</code> (the golden org hash changes on purpose). Four dependency kinds: <code>owns_credential</code>, <code>stored_in</code>, <code>read_by</code>, <code>owned_by</code>. <code>get_dependencies(identity_id, depth=1)</code> follows up to 4 hops; each row carries <code>hop</code> and <code>via</code>, and code clamps <code>depth</code> to 1–4. Expected verdict: <span class="v v-ask">ask_owner</span>.</p>
     </article>
     <article class="q">
-      <div class="q-head"><span class="q-id">Q12</span><span class="st">new</span></div>
+      <div class="q-head"><span class="q-id">Q12</span><span class="st st-done">decided</span></div>
       <p class="q-title">Can a person approve more than the guardrails allow, for example a delete on <code>ask_owner</code>?</p>
-      <p class="rec"><b>Recommended:</b> no. A person can only narrow. To widen, record the owner's answer as a ticket and run the investigation again, so the reason is evidence.</p>
+      <p class="rec"><b>Decided (recommended):</b> no. A person can only narrow. To widen, record the owner's answer as a ticket and run the investigation again, so the reason is evidence.</p>
     </article>
     <article class="q">
-      <div class="q-head"><span class="q-id">Q13</span><span class="st">new</span></div>
+      <div class="q-head"><span class="q-id">Q13</span><span class="st st-done">decided</span></div>
       <p class="q-title">Which checkpointer holds the two waits?</p>
-      <p class="rec"><b>Recommended:</b> <code>SqliteSaver</code> (<code>langgraph-checkpoint-sqlite</code>) in <code>data/</code> now, with the same allow-listed serializer as week 2. Postgres later, behind the same LangGraph interface. A wait must survive a restart.</p>
+      <p class="rec"><b>Decided (recommended):</b> <code>SqliteSaver</code> (<code>langgraph-checkpoint-sqlite</code>) in <code>data/</code> now, with the same allow-listed serializer as week 2. Postgres later, behind the same LangGraph interface. A wait must survive a restart.</p>
     </article>
     <article class="q">
-      <div class="q-head"><span class="q-id">Q14</span><span class="st">new</span></div>
+      <div class="q-head"><span class="q-id">Q14</span><span class="st st-done">decided</span></div>
       <p class="q-title">How long is the quiet period, and what ends it early?</p>
-      <p class="rec"><b>Recommended:</b> 14 days, set in config. Any sign-in or key use while disabled ends it with a restore. A scheduler, or <code>make resume</code> in the demo, resumes the graph with the current time; tests use a fake clock.</p>
+      <p class="rec"><b>Decided (recommended):</b> 14 days, set in config. Any sign-in or key use while disabled ends it with a restore. A scheduler, or <code>make resume</code> in the demo, resumes the graph with the current time; tests use a fake clock.</p>
     </article>
     <article class="q">
-      <div class="q-head"><span class="q-id">Q15</span><span class="st">new</span></div>
+      <div class="q-head"><span class="q-id">Q15</span><span class="st st-done">decided</span></div>
       <p class="q-title">How old can a report be at approval time?</p>
-      <p class="rec"><b>Recommended:</b> 24 hours. An older report needs a new run before the guardrails allow anything, because a ticket or a job may have appeared since.</p>
+      <p class="rec"><b>Decided (recommended):</b> 24 hours. An older report needs a new run before the guardrails allow anything, because a ticket or a job may have appeared since.</p>
     </article>
     <article class="q">
-      <div class="q-head"><span class="q-id">Q16</span><span class="st">new</span></div>
+      <div class="q-head"><span class="q-id">Q16</span><span class="st st-done">decided</span></div>
       <p class="q-title">What makes the audit log trustworthy?</p>
-      <p class="rec"><b>Recommended:</b> JSON lines; each entry holds the hash of the one before. <code>verify()</code> finds any edit or gap. Each action has an idempotency key (<code>request_id</code> + action), so a retry or resume never acts twice.</p>
+      <p class="rec"><b>Decided (recommended):</b> JSON lines; each entry holds the hash of the one before. <code>verify()</code> finds any edit or gap. Each action has an idempotency key (<code>request_id</code> + action), so a retry or resume never acts twice.</p>
     </article>
   </div>
 </section>
