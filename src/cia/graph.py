@@ -13,8 +13,11 @@ on their own. ``python -m cia.graph`` prints the graph as Mermaid.
 """
 from __future__ import annotations
 
+import argparse
 import inspect
+import json
 from collections.abc import Callable
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
@@ -130,6 +133,7 @@ def build_graph(inv: Investigator, checkpointer: Any = None):
     # -- nodes
 
     def model(state: RunState) -> Update:
+        """Ask the model for its next turn; it only proposes tool calls."""
         turn = inv.llm.converse(SYSTEM_PROMPT, state["messages"], TOOLS)
         emit(state, {"type": "model_turn", "step": state["steps"], "text": turn.text, "reasoning": turn.reasoning,
                      "stop_reason": turn.stop_reason,
@@ -203,11 +207,13 @@ def build_graph(inv: Investigator, checkpointer: Any = None):
         return {"steps": steps, "cursor": state["cursor"] + 1, "results": [*state["results"], result]}
 
     def finish(state: RunState) -> Update:
+        """Incomplete is never safe: an unverified safe_to_delete becomes insufficient_evidence."""
         report = state["report"]
         assert report is not None, "check routes here only with a report"
         return {"report": finish_report(report, state["read_ok"], state["unread_pages"])}
 
     def cap(state: RunState) -> Update:
+        """The step cap: no step is left, so the run ends as insufficient_evidence, never a delete."""
         emit(state, {"type": "step_cap", "steps": state["steps"]})
         return {"report": cap_report(state["request"], state["steps"])}
 
@@ -270,7 +276,8 @@ def recursion_limit(max_steps: int) -> int:
     return 4 * max_steps + 10
 
 
-def mermaid() -> str:
+def drawing_graph():
+    """The compiled graph with a source and model that are never called, for drawing and describing it."""
     from .investigator import Investigator
     from .llm import FakeLLM
 
@@ -294,8 +301,79 @@ def mermaid() -> str:
         def get_owner(self, identity_id: str) -> dict[str, Any] | None:
             raise NotImplementedError
 
-    return build_graph(Investigator(_NoSource(), FakeLLM([]))).get_graph().draw_mermaid()
+    return build_graph(Investigator(_NoSource(), FakeLLM([]))).get_graph()
+
+
+def mermaid() -> str:
+    return drawing_graph().draw_mermaid()
+
+
+# ---- the graph as data, for the drawing in docs/index.html#engine ---------------------------------
+# Nodes, edges and which edges are conditional come from LangGraph itself; each node's subtitle is its
+# docstring. Only the colour of a node and the words on a route live here, and test_graph.py fails when
+# a node or route has none, so the drawing always matches the code. `make graph` rewrites the docs.
+
+NODE_KIND = {"model": "llm", "tools": "tool", "nudge": "node", "check": "rule", "finish": "rule", "cap": "rule"}
+ROUTE_LABELS = {
+    ("__start__", "model"): "",
+    ("model", "tools"): "tool calls",
+    ("model", "nudge"): "no tool call",
+    ("model", "cap"): "step cap",
+    ("nudge", "model"): "reminder",
+    ("tools", "model"): "results",
+    ("tools", "check"): "submit_report",
+    ("tools", "cap"): "step cap",
+    ("check", "finish"): "accepted",
+    ("check", "tools"): "sent back ×1",
+    ("finish", "__end__"): "",
+    ("cap", "__end__"): "",
+}
+DOCS_BEGIN, DOCS_END = "<!-- graph:begin (written by `make graph` from src/cia/graph.py; do not edit) -->", \
+    "<!-- graph:end -->"
+
+
+def describe() -> dict[str, Any]:
+    """The compiled graph as plain data: nodes with kind and docstring, edges with route labels."""
+    g = drawing_graph()
+    nodes = []
+    for node in g.nodes.values():
+        fn = getattr(node.data, "func", None)
+        doc = inspect.getdoc(fn) if fn is not None else None
+        kind = "start" if node.id == START else "end" if node.id == END else NODE_KIND.get(node.id, "")
+        nodes.append({"id": node.id, "kind": kind, "doc": (doc or "").split("\n")[0]})
+    edges = [{"source": e.source, "target": e.target, "conditional": e.conditional,
+              "label": ROUTE_LABELS.get((e.source, e.target), "")} for e in g.edges]
+    return {"nodes": nodes, "edges": edges}
+
+
+def docs_block(data: dict[str, Any]) -> str:
+    payload = json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
+    return f'{DOCS_BEGIN}\n<script type="application/json" id="engine-graph">{payload}</script>\n{DOCS_END}'
+
+
+def write_docs(path: str | Path = "docs/index.html") -> bool:
+    """Put the current graph into the docs page between the markers. Returns True if the page changed."""
+    p = Path(path)
+    page = p.read_text()
+    start, end = page.index(DOCS_BEGIN), page.index(DOCS_END) + len(DOCS_END)
+    new = page[:start] + docs_block(describe()) + page[end:]
+    if new != page:
+        p.write_text(new)
+    return new != page
+
+
+def main(argv: list[str] | None = None) -> None:
+    p = argparse.ArgumentParser(description="Print the investigator graph, or write it into the docs.")
+    p.add_argument("--json", action="store_true", help="print nodes and edges as JSON instead of Mermaid")
+    p.add_argument("--write-docs", metavar="HTML", help="update the graph data embedded in this page")
+    a = p.parse_args(argv)
+    if a.write_docs:
+        print(f"{a.write_docs}: {'updated' if write_docs(a.write_docs) else 'already current'}")
+    elif a.json:
+        print(json.dumps(describe(), ensure_ascii=False, indent=2))
+    else:
+        print(mermaid())
 
 
 if __name__ == "__main__":
-    print(mermaid())
+    main()
