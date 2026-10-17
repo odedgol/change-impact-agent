@@ -17,6 +17,9 @@ format:
 typecheck:
 	pyright --pythonpath "$$(command -v python)"  # the active Python: .venv locally, the runner in CI
 
+typecheck:
+	pyright --pythonpath "$$(command -v python)"  # the active Python: .venv locally, the runner in CI
+
 baseline: seed
 	PYTHONPATH=src python -m cia.baseline --db data/org.db --truth bench/ground_truth.json
 

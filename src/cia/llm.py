@@ -373,6 +373,38 @@ def make_client(
     raise ValueError(f"unknown llm {llm!r}; choose from {', '.join(LLM_CHOICES)}")
 
 
+class OpenRouterClient(OpenAICompatClient):
+    """Hosted open models through OpenRouter (default: Gemma 4 31B, free tier). Same wire format as Ollama.
+
+    Needs ``OPENROUTER_API_KEY``. Free models are rate-limited, so 429s are retried with backoff.
+    Prompts leave the machine: fine for the synthetic org, not for real IAM data.
+    """
+
+    def __init__(self, model: str | None = None, api_key: str | None = None, temperature: float = 0.0,
+                 max_tokens: int | None = None, transport: Transport | None = None):
+        key = api_key or os.environ.get(OPENROUTER_API_KEY_ENV)
+        if not key:
+            raise ValueError(f"set {OPENROUTER_API_KEY_ENV} or pass api_key")
+        super().__init__(model=model or os.environ.get(OPENROUTER_MODEL_ENV) or DEFAULT_OPENROUTER_MODEL,
+                         base_url=OPENROUTER_BASE_URL, api_key=key, temperature=temperature,
+                         max_tokens=max_tokens, transport=transport or retrying(_http_post))
+        self.extra_headers = {"X-Title": "change-impact-agent"}
+
+
+LLM_CHOICES = ("openai", "openrouter", "bedrock")  # openai = any OpenAI-compatible URL, Ollama by default
+
+
+def make_client(llm: str, model: str | None = None, max_tokens: int | None = None) -> LLMClient:
+    """The one place a CLI or the monitor turns a provider name into a client."""
+    if llm == "openai":
+        return OpenAICompatClient(model=model, max_tokens=max_tokens)
+    if llm == "openrouter":
+        return OpenRouterClient(model=model, max_tokens=max_tokens)
+    if llm == "bedrock":
+        return BedrockClient(model_id=model, max_tokens=max_tokens or 2048)
+    raise ValueError(f"unknown llm {llm!r}; choose from {', '.join(LLM_CHOICES)}")
+
+
 def to_openai_tools(tools: Sequence[ToolSpec]) -> list[dict[str, Any]]:
     return [
         {
