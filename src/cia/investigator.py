@@ -23,6 +23,7 @@ The model only proposes. Code owns everything that makes the report trustworthy:
 ``events`` receives one dict per step (request, model turn, tool call, tool error,
 citation retry, step cap, report); ``JsonlEvents`` writes them as JSON lines for the terminal UI.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -35,12 +36,26 @@ from typing import IO, Any
 
 from langchain_core.runnables import RunnableConfig
 
-from .graph import REQUIRED_FOR_DELETE, SUBMIT, build_graph, initial_state, recursion_limit
+from .graph import (
+    REQUIRED_FOR_DELETE,
+    SUBMIT,
+    build_graph,
+    initial_state,
+    recursion_limit,
+)
 from .llm import LLMClient, ToolSpec
 from .models import ChangeRequest, RiskReport
 from .sources import EvidenceSource
 
-__all__ = ["MAX_STEPS", "REQUIRED_FOR_DELETE", "SUBMIT", "TOOLS", "Investigator", "JsonlEvents", "main"]
+__all__ = [
+    "MAX_STEPS",
+    "REQUIRED_FOR_DELETE",
+    "SUBMIT",
+    "TOOLS",
+    "Investigator",
+    "JsonlEvents",
+    "main",
+]
 
 MAX_STEPS = 8
 
@@ -58,30 +73,103 @@ Every finding must cite the evidence_id values returned by the tools. Never cite
 EventSink = Callable[[dict[str, Any]], None]
 
 _ID = {"type": "string", "description": "identity id, for example u00042"}
-_OFFSET = {"type": "integer", "minimum": 0, "description": "row offset of the page, from next_offset"}
+_OFFSET = {
+    "type": "integer",
+    "minimum": 0,
+    "description": "row offset of the page, from next_offset",
+}
 
 TOOLS: tuple[ToolSpec, ...] = (
-    ToolSpec("get_identity", "The identity's record: kind, department, HR status, account status, owner id.",
-             {"type": "object", "properties": {"identity_id": _ID}, "required": ["identity_id"]}),
-    ToolSpec("get_usage", "Usage events in a window (at least 90 days): count, last seen, top callers.",
-             {"type": "object", "properties": {"identity_id": _ID, "days": {"type": "integer", "minimum": 1}},
-              "required": ["identity_id"]}),
-    ToolSpec("get_dependencies", "Things that point at the identity, plus consumers of accounts it owns. Paged.",
-             {"type": "object", "properties": {"identity_id": _ID, "offset": _OFFSET}, "required": ["identity_id"]}),
-    ToolSpec("get_tickets", "Tickets and notes about the identity, newest first. Paged.",
-             {"type": "object", "properties": {"identity_id": _ID, "offset": _OFFSET}, "required": ["identity_id"]}),
-    ToolSpec("get_owner", "The identity's owner record, if it has one.",
-             {"type": "object", "properties": {"identity_id": _ID}, "required": ["identity_id"]}),
-    ToolSpec(SUBMIT, "Submit the final risk report. Every finding cites evidence ids from the tool results.",
-             {"type": "object", "required": ["verdict", "confidence", "findings"], "properties": {
-                 "verdict": {"type": "string", "enum": ["safe_to_delete", "disable_first", "ask_owner", "insufficient_evidence"]},
-                 "confidence": {"type": "string", "enum": ["low", "medium", "high"]},
-                 "findings": {"type": "array", "items": {
-                     "type": "object", "required": ["kind", "summary", "evidence_ids", "confidence"],
-                     "properties": {"kind": {"type": "string"}, "summary": {"type": "string"},
-                                    "evidence_ids": {"type": "array", "items": {"type": "string"}, "minItems": 1},
-                                    "confidence": {"type": "string", "enum": ["low", "medium", "high"]}}}}}}),
+    ToolSpec(
+        "get_identity",
+        "The identity's record: kind, department, HR status, account status, owner id.",
+        {
+            "type": "object",
+            "properties": {"identity_id": _ID},
+            "required": ["identity_id"],
+        },
+    ),
+    ToolSpec(
+        "get_usage",
+        "Usage events in a window (at least 90 days): count, last seen, top callers.",
+        {
+            "type": "object",
+            "properties": {
+                "identity_id": _ID,
+                "days": {"type": "integer", "minimum": 1},
+            },
+            "required": ["identity_id"],
+        },
+    ),
+    ToolSpec(
+        "get_dependencies",
+        "Things that point at the identity, plus consumers of accounts it owns. Paged.",
+        {
+            "type": "object",
+            "properties": {"identity_id": _ID, "offset": _OFFSET},
+            "required": ["identity_id"],
+        },
+    ),
+    ToolSpec(
+        "get_tickets",
+        "Tickets and notes about the identity, newest first. Paged.",
+        {
+            "type": "object",
+            "properties": {"identity_id": _ID, "offset": _OFFSET},
+            "required": ["identity_id"],
+        },
+    ),
+    ToolSpec(
+        "get_owner",
+        "The identity's owner record, if it has one.",
+        {
+            "type": "object",
+            "properties": {"identity_id": _ID},
+            "required": ["identity_id"],
+        },
+    ),
+    ToolSpec(
+        SUBMIT,
+        "Submit the final risk report. Every finding cites evidence ids from the tool results.",
+        {
+            "type": "object",
+            "required": ["verdict", "confidence", "findings"],
+            "properties": {
+                "verdict": {
+                    "type": "string",
+                    "enum": [
+                        "safe_to_delete",
+                        "disable_first",
+                        "ask_owner",
+                        "insufficient_evidence",
+                    ],
+                },
+                "confidence": {"type": "string", "enum": ["low", "medium", "high"]},
+                "findings": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["kind", "summary", "evidence_ids", "confidence"],
+                        "properties": {
+                            "kind": {"type": "string"},
+                            "summary": {"type": "string"},
+                            "evidence_ids": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "minItems": 1,
+                            },
+                            "confidence": {
+                                "type": "string",
+                                "enum": ["low", "medium", "high"],
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    ),
 )
+
 
 def _utcnow() -> datetime:
     return datetime.now(UTC)
@@ -90,9 +178,15 @@ def _utcnow() -> datetime:
 class Investigator:
     """Runs the investigator graph (``cia.graph``) for one change request at a time."""
 
-    def __init__(self, source: EvidenceSource, llm: LLMClient, max_steps: int = MAX_STEPS,
-                 events: EventSink | None = None, clock: Callable[[], datetime] = _utcnow,
-                 checkpointer: Any = None):
+    def __init__(
+        self,
+        source: EvidenceSource,
+        llm: LLMClient,
+        max_steps: int = MAX_STEPS,
+        events: EventSink | None = None,
+        clock: Callable[[], datetime] = _utcnow,
+        checkpointer: Any = None,
+    ):
         if max_steps < 1:
             raise ValueError(f"max_steps must be >= 1 (got {max_steps})")
         self.source = source
@@ -109,8 +203,14 @@ class Investigator:
         self.graph = build_graph(self, checkpointer)
 
     def investigate(self, request: ChangeRequest) -> RiskReport:
-        self.events({"type": "request", "request_id": request.request_id,
-                     "identity_id": request.identity_id, "action": request.action})
+        self.events(
+            {
+                "type": "request",
+                "request_id": request.request_id,
+                "identity_id": request.identity_id,
+                "action": request.action,
+            }
+        )
         config: RunnableConfig = {"recursion_limit": recursion_limit(self.max_steps)}
         if self.checkpointer is not None:
             config["configurable"] = {"thread_id": request.request_id}
@@ -127,7 +227,9 @@ class JsonlEvents:
         self.stream = stream
 
     def __call__(self, event: dict[str, Any]) -> None:
-        self.stream.write(json.dumps({**event, "t": round(time.time(), 3)}, default=str) + "\n")
+        self.stream.write(
+            json.dumps({**event, "t": round(time.time(), 3)}, default=str) + "\n"
+        )
         self.stream.flush()
 
 
@@ -142,10 +244,19 @@ def main(argv: list[str] | None = None, llm: LLMClient | None = None) -> None:
     p.add_argument("--db", default="data/org.db")
     p.add_argument("--identity", required=True)
     p.add_argument("--request-id", default="REQ-CLI")
-    p.add_argument("--events", help="write JSON-lines events to this file, or - for stdout")
-    p.add_argument("--llm", choices=LLM_CHOICES, default="bedrock",
-                   help="openai = any OpenAI-compatible endpoint, Ollama by default; openrouter = hosted open models")
-    p.add_argument("--model", help="model id; default from CIA_BEDROCK_MODEL_ID or CIA_OPENAI_MODEL")
+    p.add_argument(
+        "--events", help="write JSON-lines events to this file, or - for stdout"
+    )
+    p.add_argument(
+        "--llm",
+        choices=LLM_CHOICES,
+        default="bedrock",
+        help="openai = any OpenAI-compatible endpoint, Ollama by default; openrouter = hosted open models",
+    )
+    p.add_argument(
+        "--model",
+        help="model id; default from CIA_BEDROCK_MODEL_ID or CIA_OPENAI_MODEL",
+    )
     a = p.parse_args(argv)
     out = None
     if a.events:
@@ -155,11 +266,22 @@ def main(argv: list[str] | None = None, llm: LLMClient | None = None) -> None:
             llm = make_client(a.llm, a.model)
         sink = JsonlEvents(out) if out else None
         if sink:
-            sink({"type": "run", "run_id": a.request_id, "llm": a.llm,
-                  "model": getattr(llm, "model", None) or getattr(llm, "model_id", None)})
+            sink(
+                {
+                    "type": "run",
+                    "run_id": a.request_id,
+                    "llm": a.llm,
+                    "model": getattr(llm, "model", None)
+                    or getattr(llm, "model_id", None),
+                }
+            )
         source = SyntheticSource(a.db)
-        inv = Investigator(source, llm, events=sink, clock=lambda: source.now)  # the org's simulated clock
-        report = inv.investigate(ChangeRequest(request_id=a.request_id, identity_id=a.identity))
+        inv = Investigator(
+            source, llm, events=sink, clock=lambda: source.now
+        )  # the org's simulated clock
+        report = inv.investigate(
+            ChangeRequest(request_id=a.request_id, identity_id=a.identity)
+        )
     finally:
         if out not in (None, sys.stdout):
             out.close()

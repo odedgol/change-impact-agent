@@ -38,15 +38,20 @@ def test_every_planted_dependency_is_discoverable_with_tools(org):
     for c in truth["cases"]:
         if not c["hidden_dependencies"]:
             continue
-        evidence = json.dumps({
-            "deps": tools.get_dependencies(c["identity_id"]),
-            "tickets": tools.get_tickets(c["identity_id"]),
-            "usage": tools.get_usage(c["identity_id"], 365),
-        })
+        evidence = json.dumps(
+            {
+                "deps": tools.get_dependencies(c["identity_id"]),
+                "tickets": tools.get_tickets(c["identity_id"]),
+                "usage": tools.get_usage(c["identity_id"], 365),
+            }
+        )
         for h in c["hidden_dependencies"]:
             ref = h["ref"]
-            hit = ref in evidence or (ref == "shared by finance" and "finance" in evidence) or (
-                ref == "break-glass" and "Break-glass" in evidence)
+            hit = (
+                ref in evidence
+                or (ref == "shared by finance" and "finance" in evidence)
+                or (ref == "break-glass" and "Break-glass" in evidence)
+            )
             assert hit, (c["case_type"], h)
 
 

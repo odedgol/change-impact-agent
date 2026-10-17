@@ -3,6 +3,7 @@
 The implementation moved to ``cia.sources.SyntheticSource``, behind the
 ``EvidenceSource`` interface.
 """
+
 from __future__ import annotations
 
 from .sources import EvidenceSource, SyntheticSource
