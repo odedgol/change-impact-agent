@@ -120,17 +120,19 @@ def test_safe_to_delete_with_a_rejected_citation_becomes_ask_owner(org):
 def test_safe_to_delete_with_valid_citations_is_kept(org):
     db, truth = org
     target = _case(truth, "decoy_safe")["identity_id"]
-    script = [call("get_usage", 1, identity_id=target), submit("safe_to_delete", "ev-usage-1")]
+    script = [call("get_usage", 1, identity_id=target), call("get_dependencies", 2, identity_id=target),
+              call("get_tickets", 3, identity_id=target), submit("safe_to_delete", "ev-usage-1")]
     report, _, _, _ = run(org, script, "decoy_safe")
-    assert report.verdict == "safe_to_delete"
+    assert report.verdict == "safe_to_delete" and report.permits_delete and report.incomplete_reason is None
 
 
-def test_step_cap_returns_ask_owner_never_a_delete(org):
+def test_step_cap_returns_insufficient_evidence_never_a_delete(org):
     db, truth = org
     target = _case(truth, "nightly_job")["identity_id"]
     script = [call("get_usage", i, identity_id=target) for i in range(20)] + [submit("safe_to_delete")]
     report, events, llm, _ = run(org, script)
-    assert (report.verdict, report.confidence, report.findings) == ("ask_owner", "low", [])
+    assert (report.verdict, report.confidence, report.findings) == ("insufficient_evidence", "low", [])
+    assert report.incomplete_reason == f"step cap reached after {MAX_STEPS} steps" and not report.permits_delete
     assert len(of(events, "tool_call")) == MAX_STEPS
     assert of(events, "step_cap")[0]["steps"] == MAX_STEPS
     assert len(llm.calls) == MAX_STEPS + 1
@@ -138,7 +140,7 @@ def test_step_cap_returns_ask_owner_never_a_delete(org):
 
 def test_turns_without_tool_calls_count_against_the_cap(org):
     report, events, llm, _ = run(org, [LLMTurn(text="thinking")] * 10, max_steps=3)
-    assert report.verdict == "ask_owner"
+    assert report.verdict == "insufficient_evidence"
     assert len(llm.calls) == 4
 
 
@@ -146,7 +148,7 @@ def test_the_retry_counts_against_the_cap(org):
     script = [submit("disable_first", "ev-x-1", n=1), submit("disable_first", "ev-x-1", n=2)]
     report, events, _, _ = run(org, script, max_steps=1)
     assert len(of(events, "citation_retry")) == 1
-    assert report.verdict == "ask_owner" and of(events, "step_cap")
+    assert report.verdict == "insufficient_evidence" and of(events, "step_cap")
 
 
 @pytest.mark.parametrize("bad_call", [

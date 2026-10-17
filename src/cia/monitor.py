@@ -149,7 +149,8 @@ class Monitor:
                 sink({"type": "run", "run_id": run_id, "llm": llm,
                       "model": getattr(client, "model", None) or getattr(client, "model_id", None) or model,
                       "case_type": case["case_type"], "expected_verdict": case["expected_verdict"]})
-                Investigator(SyntheticSource(self.db), client, events=sink).investigate(
+                source = SyntheticSource(self.db)
+                Investigator(source, client, events=sink, clock=lambda: source.now).investigate(
                     ChangeRequest(request_id=case["request_id"], identity_id=case["identity_id"]))
             except Exception as e:  # noqa: BLE001 - any failure is shown in the UI, never swallowed
                 sink({"type": "run_error", "error": f"{type(e).__name__}: {e}"})
