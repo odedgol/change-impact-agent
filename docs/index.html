@@ -202,6 +202,31 @@ svg.d{display:block;width:100%;height:auto}
   .top a.gh{display:none}
 }
 </style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xyflow/react@12.11.6/dist/style.css">
+<style>
+.graphfig{padding:0}
+.graphhost{height:980px;min-width:0}
+@media (max-width:700px){.graphhost{height:620px}}
+.graphmsg{margin:0;padding:24px;color:var(--ink-3);font-size:14px}
+.graphhost .react-flow{--xy-background-color:transparent;--xy-edge-stroke:var(--ink-3);--xy-edge-label-background-color:var(--bg);--xy-edge-label-color:var(--ink-2);--xy-controls-button-background-color:var(--bg);--xy-controls-button-color:var(--ink-2);--xy-controls-button-border-color:var(--line-2)}
+.gn{width:100%;height:100%;border:1.5px solid var(--line-2);background:var(--bg);border-radius:10px;padding:12px 16px;display:flex;flex-direction:column;justify-content:center;gap:6px;color:var(--ink)}
+.gn b{font:600 15px/1.2 var(--m)}
+.gn span{font-size:13px;line-height:1.5;color:var(--ink-2)}
+.gn-llm{border-color:var(--accent);background:var(--accent-bg)}
+.gn-tool{border-color:var(--safe);background:var(--safe-bg)}
+.gn-rule{border-color:var(--guard);background:var(--guard-bg)}
+.gn-start,.gn-end{border-radius:999px;align-items:center;background:var(--bg-2)}
+.gn .react-flow__handle{opacity:0;pointer-events:none}
+.gl{position:absolute;pointer-events:none;font:500 12px/1.2 var(--m);color:var(--ink);background:var(--bg);border:1px solid var(--line-2);border-radius:6px;padding:4px 9px;white-space:nowrap}
+.gl-cond{color:var(--ink-2);border-style:dashed}
+.legend .k-solid{border:0;border-top:2px solid var(--ink-3);border-radius:0;height:0;margin-top:6px}
+#engine + .doc{margin-bottom:18px}
+.graphfig{margin-bottom:16px}
+.graphfig + .legend{margin-bottom:14px}
+.routes{margin-top:14px;font-size:14px}
+.engine-after{margin-top:40px}
+.routes summary{cursor:pointer;color:var(--ink-2)}
+</style>
 </head>
 <body>
 
@@ -414,40 +439,24 @@ svg.d{display:block;width:100%;height:auto}
 
   <h3 id="engine">LangGraph engine</h3>
   <div class="doc">
-    <p>The investigator is a LangGraph <code>StateGraph</code> (<code>src/cia/graph.py</code>), not a <code>while True</code> loop. The model only proposes; each node calls a small rule function that is tested on its own. <code>make graph</code> prints this graph as Mermaid from the code.</p>
+    <p>The investigator is a LangGraph <code>StateGraph</code> (<code>src/cia/graph.py</code>), not a <code>while True</code> loop. The model only proposes; each node calls a small rule function that is tested on its own. The drawing below is that graph: <code>make graph</code> writes the nodes, routes and each node's docstring from the compiled graph into this page, React Flow draws them, and a test fails if the page is behind the code.</p>
   </div>
   <figure>
-    <div class="fig">
-      <svg class="d" viewBox="0 0 1000 250" style="min-width:860px" role="img" aria-label="The investigator graph. START goes to model. model goes to tools when it calls tools, or to nudge when it does not; nudge goes back to model. tools goes back to model with the results, or to check on submit_report. check goes to finish when the report is accepted, or back to tools once with the rejected ids. finish goes to END. Any node that would take step 9 goes to cap, which returns insufficient_evidence.">
-        <defs><marker id="a6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" class="ah"/></marker></defs>
-        <rect class="node" x="20" y="64" width="70" height="48" rx="24"/><text class="h" x="55" y="93" text-anchor="middle">START</text>
-        <rect class="llm" x="130" y="60" width="150" height="56" rx="8"/><text class="h" x="205" y="84" text-anchor="middle">model</text><text class="s" x="205" y="103" text-anchor="middle">LLMClient.converse</text>
-        <rect class="tool" x="330" y="60" width="160" height="56" rx="8"/><text class="h" x="410" y="84" text-anchor="middle">tools</text><text class="s" x="410" y="103" text-anchor="middle">read-only · ev-ids</text>
-        <rect class="guard" x="540" y="60" width="160" height="56" rx="8"/><text class="h" x="620" y="84" text-anchor="middle">check</text><text class="s" x="620" y="103" text-anchor="middle">cited ids ⊆ evidence</text>
-        <rect class="guard" x="745" y="60" width="150" height="56" rx="8"/><text class="h" x="820" y="84" text-anchor="middle">finish</text><text class="s" x="820" y="103" text-anchor="middle">incomplete ≠ safe</text>
-        <rect class="node" x="920" y="64" width="64" height="48" rx="24"/><text class="h" x="952" y="93" text-anchor="middle">END</text>
-        <rect class="node" x="130" y="176" width="150" height="56" rx="8"/><text class="h" x="205" y="200" text-anchor="middle">nudge</text><text class="s" x="205" y="219" text-anchor="middle">no tool call · +1 step</text>
-        <rect class="guard" x="330" y="176" width="160" height="56" rx="8"/><text class="h" x="410" y="200" text-anchor="middle">cap</text><text class="s" x="410" y="219" text-anchor="middle">→ insufficient_evidence</text>
-        <g marker-end="url(#a6)">
-          <path class="e" d="M90 88H126"/><path class="e" d="M280 88H326"/><path class="e" d="M490 88H536"/>
-          <path class="e" d="M700 88H741"/><path class="e" d="M895 88H916"/>
-          <path class="e" d="M410 60V30H205V56"/>
-          <path class="e" d="M600 116V146H470V120"/>
-          <path class="e" d="M180 116V172"/><path class="e" d="M230 176V120"/>
-          <path class="e" d="M370 116V172"/>
-        </g>
-        <text class="l" x="303" y="80" text-anchor="middle">calls</text><text class="l" x="513" y="80" text-anchor="middle">submit</text>
-        <text class="l" x="720" y="80" text-anchor="middle">ok</text><text class="l" x="308" y="24" text-anchor="middle">results → next turn</text>
-        <text class="l" x="535" y="162" text-anchor="middle">sent back ×1</text><text class="l" x="174" y="150" text-anchor="end">no call</text>
-        <text class="l" x="378" y="150">step 9</text>
-      </svg>
+    <div class="fig graphfig">
+      <div id="enginegraph" class="graphhost" role="img" aria-label="The investigator graph, drawn from src/cia/graph.py. The table below lists every route."><p class="graphmsg">Loading the graph…</p></div>
     </div>
-    <div class="legend"><span><i class="k-llm"></i>LLM call</span><span><i class="k-tool"></i>Read-only tools</span><span><i class="k-guard"></i>Rule in code</span><span><i class="k-code"></i>Graph node</span></div>
+    <div class="legend"><span><i class="k-llm"></i>LLM call</span><span><i class="k-tool"></i>Read-only tools</span><span><i class="k-guard"></i>Rule in code</span><span><i class="k-code"></i>Graph node</span><span><i class="k-solid"></i>Solid: always</span><span><i class="k-later"></i>Dashed: conditional route</span></div>
+    <details class="routes"><summary>Every route, as data from <code>graph.py</code></summary>
+      <div class="tbl"><table><thead><tr><th>From</th><th>To</th><th>Route</th><th>Kind</th></tr></thead><tbody id="engineroutes"></tbody></table></div>
+    </details>
   </figure>
+<!-- graph:begin (written by `make graph` from src/cia/graph.py; do not edit) -->
+<script type="application/json" id="engine-graph">{"nodes":[{"id":"__start__","kind":"start","doc":""},{"id":"model","kind":"llm","doc":"Ask the model for its next turn; it only proposes tool calls."},{"id":"nudge","kind":"node","doc":"A turn with no tool call costs a step and gets a reminder."},{"id":"tools","kind":"tool","doc":"Run this turn's read-only calls in order, up to a submit_report or the step cap."},{"id":"check","kind":"rule","doc":"The citation check: accept the report, or send it back once with the unknown ids."},{"id":"finish","kind":"rule","doc":"Incomplete is never safe: an unverified safe_to_delete becomes insufficient_evidence."},{"id":"cap","kind":"rule","doc":"The step cap: no step is left, so the run ends as insufficient_evidence, never a delete."},{"id":"__end__","kind":"end","doc":""}],"edges":[{"source":"__start__","target":"model","conditional":false,"label":""},{"source":"check","target":"finish","conditional":true,"label":"accepted"},{"source":"check","target":"tools","conditional":true,"label":"sent back ×1"},{"source":"model","target":"cap","conditional":true,"label":"step cap"},{"source":"model","target":"nudge","conditional":true,"label":"no tool call"},{"source":"model","target":"tools","conditional":true,"label":"tool calls"},{"source":"nudge","target":"model","conditional":false,"label":"reminder"},{"source":"tools","target":"cap","conditional":true,"label":"step cap"},{"source":"tools","target":"check","conditional":true,"label":"submit_report"},{"source":"tools","target":"model","conditional":true,"label":"results"},{"source":"cap","target":"__end__","conditional":false,"label":""},{"source":"finish","target":"__end__","conditional":false,"label":""}]}</script>
+<!-- graph:end -->
   <div class="doc">
-    <h3>Why LangGraph</h3>
+    <h3 class="engine-after">Why LangGraph</h3>
     <ul>
-      <li><b>Easy to read.</b> The graph is the design: nodes and routes are named, and <code>make graph</code> prints the same picture from the code, so the drawing can't drift.</li>
+      <li><b>Easy to read.</b> The graph is the design: nodes and routes are named, and the drawing above is generated from the compiled graph, so it can't drift.</li>
       <li><b>Explicit routing.</b> Each branch (more tools, submit, retry, cap) is a small routing function with a test, not a jump inside a loop.</li>
       <li><b>State and checkpoints.</b> Every step's state is saved under the request id, so a run can be inspected step by step and resumed.</li>
       <li><b>Human approval built in.</b> <code>interrupt()</code> pauses the graph before the executor and resumes on the human's answer (week 3). Durable waits use a Postgres checkpointer.</li>
@@ -465,7 +474,7 @@ svg.d{display:block;width:100%;height:auto}
         <tr><td>Events</td><td>Nodes emit the same JSON-lines events; the monitor and the Rust UI don't change</td><td><span class="st st-done">built</span></td></tr>
         <tr><td>Checkpointer</td><td><code>InMemorySaver</code> with an allow-list of our state types; Postgres saver later</td><td><span class="st st-done">built</span> · Postgres later</td></tr>
         <tr><td><code>interrupt()</code> + <code>Command(resume=…)</code></td><td>Human approval before the executor</td><td><span class="st">week 3</span></td></tr>
-        <tr><td>Graph drawing</td><td><code>make graph</code> → Mermaid (<code>draw_mermaid()</code>)</td><td><span class="st st-done">built</span></td></tr>
+        <tr><td>Graph drawing</td><td><code>get_graph()</code> → <code>make graph</code> writes it into this page (React Flow draws it); <code>python -m cia.graph</code> prints Mermaid</td><td><span class="st st-done">built</span></td></tr>
       </tbody>
     </table></div>
     <div class="note"><p><b>What stays in code:</b> LangGraph decides the order; it never decides what is safe. Evidence ids, the step cap, the citation check and "incomplete is never safe" are plain functions in <code>graph.py</code>, each with a unit test.</p></div>
@@ -534,6 +543,7 @@ svg.d{display:block;width:100%;height:auto}
       <tr><td class="n">2.5</td><td><code>w2/bench-results</code></td><td><code>bench.py</code> (fake, Ollama, OpenRouter, Bedrock), <code>make bench-fake</code> in CI, results on the plan. <code>OpenRouterClient</code> next to the Ollama client; one <code>make_client</code> factory. Fixes an empty model turn Ollama rejected (HTTP 400); <code>stop_reason</code> in events; configurable output limit</td><td><code>unsafe_deletes: 0</code>, <code>test_bench.py</code> (7), <code>test_openrouter.py</code> (11), <code>test_env.py</code> (4)</td><td><span class="st st-now">in review</span></td></tr>
       <tr><td class="n">2.4e</td><td><code>w2/monitor-flow</code></td><td>Monitor: <b>Flow</b> tab draws each run on the agent's five levels (React Flow): orchestration, worker (model ⇅ loop), memory (messages, evidence log), self-critique (guards, citation check) and the tool boundary (read-only tools, refused calls, the planned write path). Boxes carry the run's numbers; a replay bar steps through the events and lights the current arrow; click a box for its step. Runs filter by the model they used</td><td><code>test_monitor.py</code> (11), browser check light, dark, phone</td><td><span class="st st-now">in review</span></td></tr>
       <tr><td class="n"><a href="https://github.com/odedgol/change-impact-agent/pull/18">2.7</a></td><td><code>w2/langgraph-engine</code></td><td>Investigator runs as a LangGraph <code>StateGraph</code> (<code>graph.py</code>): nodes <code>model</code>, <code>tools</code>, <code>check</code>, <code>finish</code>, <code>nudge</code>, <code>cap</code>; the <code>while True</code> loop is gone. Same events, same verdicts. Optional checkpointer (allow-listed state types); <code>make graph</code> prints the Mermaid. Monitor Flow tab draws these nodes on the five levels. Pyright clean, <code>make typecheck</code> in CI. <a href="#engine">Why LangGraph</a></td><td>all 136 tests, <code>test_graph.py</code> (6), <code>make typecheck</code> 0 errors, <code>make bench-fake</code> 0 unsafe deletes</td><td><span class="st st-now">in review</span></td></tr>
+      <tr><td class="n"><a href="https://github.com/odedgol/change-impact-agent/pull/20">2.8</a></td><td><code>w2/docs-graph</code></td><td>The hub's <a href="#engine">LangGraph engine</a> diagram is generated: <code>graph.describe()</code> reads the compiled graph (nodes, routes, conditional or not, each node's docstring); <code>make graph</code> writes it into this page; React Flow draws it with a dagre layout. A routes table from the same data works offline</td><td><code>test_graph.py</code> (9): every node and route has a drawing entry, the page matches the code; browser check light and dark</td><td><span class="st st-now">in review</span></td></tr>
       <tr><td class="n"><a href="https://github.com/odedgol/change-impact-agent/pull/19">2.6</a></td><td><code>w2/tui-smoke</code></td><td>Rust terminal UI (<code>tui/</code>, ratatui): runs on the left, each step named by its graph node (model, nudge, tools, check, cap), the colour-coded verdict with its citations. Follows a live pipe or replays a file. <code>make smoke</code> pipes 8 offline runs into it (one per case type with the rule model, plus scripted guardrail and step-cap runs); <code>--plain</code> prints text and fails on an unsafe delete. New CI job <code>tui</code></td><td><code>make tui-test</code>: <code>cargo fmt</code>, <code>clippy -D warnings</code>, <code>cargo test</code> (10, replay of a recorded run); <code>make smoke SMOKE_FLAGS=--plain</code>; <code>test_smoke.py</code> (3)</td><td><span class="st st-now">in review</span></td></tr>
     </tbody>
   </table></div>
@@ -699,6 +709,106 @@ gh pr merge --squash --delete-branch</code></pre>
   }
   if(fig)btns.forEach(function(b){b.addEventListener("click",function(){go(+b.dataset.go)})});
 })();
+</script>
+<script>
+/* The routes table: built from the graph data, works offline. */
+(function(){
+  var data=JSON.parse(document.getElementById("engine-graph").textContent),tb=document.getElementById("engineroutes");
+  function name(id){return id==="__start__"?"START":id==="__end__"?"END":id}
+  data.edges.forEach(function(e){
+    var tr=document.createElement("tr");
+    [name(e.source),name(e.target),e.label||"—",e.conditional?"conditional":"always"].forEach(function(t,i){
+      var td=document.createElement("td");if(i<2){var c=document.createElement("code");c.textContent=t;td.appendChild(c)}else td.textContent=t;tr.appendChild(td)});
+    tb.appendChild(tr);
+  });
+})();
+</script>
+<script type="importmap">{"imports":{
+  "react":"https://esm.sh/react@19.2.8","react/jsx-runtime":"https://esm.sh/react@19.2.8/jsx-runtime",
+  "react-dom":"https://esm.sh/react-dom@19.2.8","react-dom/client":"https://esm.sh/react-dom@19.2.8/client",
+  "@xyflow/react":"https://esm.sh/@xyflow/react@12.11.6?external=react,react-dom",
+  "@dagrejs/dagre":"https://esm.sh/@dagrejs/dagre@1.1.4"}}</script>
+<script type="module">
+// The investigator graph from src/cia/graph.py: nodes and routes come from the embedded data,
+// dagre lays them out top to bottom (as LangGraph's own Mermaid does) and routes every edge around the
+// boxes with room for its label; React Flow draws the result.
+// Nothing here is hand-placed, so a new node or route shows up after `make graph`.
+import {createElement as e} from "react";
+import {createRoot} from "react-dom/client";
+import {ReactFlow, Controls, Handle, Position, MarkerType, BaseEdge, EdgeLabelRenderer} from "@xyflow/react";
+import dagre from "@dagrejs/dagre";
+
+const host = document.getElementById("enginegraph");
+const data = JSON.parse(document.getElementById("engine-graph").textContent);
+const SIZE = {start: [120, 44], end: [120, 44]}, BOX = [270, 104];
+const SIDES = {t: Position.Top, b: Position.Bottom, l: Position.Left, r: Position.Right};
+const name = id => id === "__start__" ? "START" : id === "__end__" ? "END" : id;
+
+function GraphNode({data: d}) {
+  const handles = Object.entries(SIDES).flatMap(([k, pos]) => [
+    e(Handle, {key: "s" + k, id: "s" + k, type: "source", position: pos, isConnectable: false}),
+    e(Handle, {key: "t" + k, id: "t" + k, type: "target", position: pos, isConnectable: false})]);
+  return e("div", {className: "gn gn-" + (d.kind || "node")}, ...handles, e("b", null, d.label), d.doc ? e("span", null, d.doc) : null);
+}
+
+// A route: dagre's points joined with rounded corners, its label as HTML at the spot dagre kept free.
+function rounded(pts, r = 10) {
+  const toward = (p, q) => {const d = Math.hypot(q.x - p.x, q.y - p.y) || 1, k = Math.min(r, d / 2) / d;
+    return {x: p.x + (q.x - p.x) * k, y: p.y + (q.y - p.y) * k}};
+  let d = `M${pts[0].x},${pts[0].y}`;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const a = toward(pts[i], pts[i - 1]), b = toward(pts[i], pts[i + 1]);
+    d += ` L${a.x},${a.y} Q${pts[i].x},${pts[i].y} ${b.x},${b.y}`;
+  }
+  const end = pts[pts.length - 1];
+  return d + ` L${end.x},${end.y}`;
+}
+
+function Route({id, markerEnd, style, data: d}) {
+  return e("g", null, e(BaseEdge, {id, path: rounded(d.points), markerEnd, style}),
+    d.label ? e(EdgeLabelRenderer, null, e("div", {className: "gl" + (d.conditional ? " gl-cond" : ""),
+      style: {transform: `translate(-50%, -50%) translate(${d.lx}px, ${d.ly}px)`}}, d.label)) : null);
+}
+
+function layout() {
+  const g = new dagre.graphlib.Graph({multigraph: true});
+  g.setGraph({rankdir: "TB", nodesep: 90, ranksep: 84, edgesep: 36, marginx: 28, marginy: 28});
+  g.setDefaultEdgeLabel(() => ({}));
+  data.nodes.forEach(n => {const [w, h] = SIZE[n.kind] || BOX; g.setNode(n.id, {width: w, height: h})});
+  // A labelled edge gets a label box, so dagre keeps that space free of boxes and other edges.
+  data.edges.forEach((x, i) => g.setEdge(x.source, x.target,
+    x.label ? {width: 7.6 * x.label.length + 28, height: 28, labelpos: "c"} : {}, "e" + i));
+  dagre.layout(g);
+  const nodes = data.nodes.map(n => {const p = g.node(n.id);
+    return {id: n.id, type: "graph", position: {x: p.x - p.width / 2, y: p.y - p.height / 2},
+            style: {width: p.width, height: p.height}, data: {label: name(n.id), kind: n.kind, doc: n.doc},
+            draggable: false, selectable: false}});
+  const edges = data.edges.map((x, i) => {
+    const r = g.edge({v: x.source, w: x.target, name: "e" + i});
+    return {id: "e" + i, source: x.source, target: x.target, sourceHandle: "sb", targetHandle: "tt", type: "route",
+            data: {points: r.points, lx: r.x, ly: r.y, label: x.label, conditional: x.conditional},
+            markerEnd: {type: MarkerType.ArrowClosed, width: 16, height: 16},
+            style: x.conditional ? {strokeDasharray: "6 4", strokeWidth: 1.4} : {strokeWidth: 1.8}};
+  });
+  return {nodes, edges};
+}
+
+const {nodes, edges} = layout();
+const dark = () => {const t = document.documentElement.getAttribute("data-theme");
+  return t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches};
+const root = createRoot(host);
+const draw = () => root.render(e(ReactFlow, {nodes, edges, nodeTypes: {graph: GraphNode}, edgeTypes: {route: Route},
+  fitView: true, fitViewOptions: {padding: 0.06}, minZoom: 0.3, colorMode: dark() ? "dark" : "light",
+  nodesDraggable: false, nodesConnectable: false, elementsSelectable: false, zoomOnScroll: false, preventScrolling: false},
+  e(Controls, {showInteractive: false, position: "bottom-right"})));
+draw();
+new MutationObserver(draw).observe(document.documentElement, {attributes: true, attributeFilter: ["data-theme"]});
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", draw);
+window.ciaGraphReady = true;
+</script>
+<script>
+setTimeout(function(){if(!window.ciaGraphReady){var h=document.getElementById("enginegraph");h.textContent="";
+  var p=document.createElement("p");p.className="graphmsg";p.textContent="The drawing needs internet (React Flow loads from a CDN). Every route is in the table below.";h.appendChild(p)}},10000);
 </script>
 </body>
 </html>

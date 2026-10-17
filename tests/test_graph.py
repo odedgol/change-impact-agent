@@ -1,15 +1,23 @@
+from pathlib import Path
+
 import pytest
 from langchain_core.runnables import RunnableConfig
 
 from cia.generator import generate
 from cia.graph import (
+    DOCS_BEGIN,
+    DOCS_END,
     REQUIRED_FOR_DELETE,
+    ROUTE_LABELS,
     coverage,
+    describe,
+    docs_block,
     drop_bad_citations,
     finish_report,
     memory_checkpointer,
     mermaid,
     recursion_limit,
+    write_docs,
 )
 from cia.investigator import Investigator
 from cia.llm import FakeLLM, LLMTurn, ToolCall
@@ -86,3 +94,26 @@ def test_checkpointer_saves_every_step_under_the_request_id(org):
     saved = inv.graph.get_state(config).values
     assert saved["report"] == report and sorted(saved["evidence"]) == ["ev-deps-2", "ev-usage-1"]
     assert len(list(inv.graph.get_state_history(config))) >= 5  # start, model, tools, model, check, finish
+
+
+def test_every_node_and_route_has_a_drawing_entry():
+    """Adding a node or a route to the graph fails here until it has a kind or a label for the docs."""
+    data = describe()
+    assert all(n["kind"] for n in data["nodes"])
+    assert {(e["source"], e["target"]) for e in data["edges"]} == set(ROUTE_LABELS)
+    assert all(n["doc"] for n in data["nodes"] if n["kind"] not in ("start", "end"))  # each node has a docstring
+
+
+def test_the_docs_drawing_matches_the_code():
+    """docs/index.html#engine draws the embedded data; run `make graph` after changing graph.py."""
+    page = (Path(__file__).resolve().parents[1] / "docs" / "index.html").read_text()
+    embedded = page[page.index(DOCS_BEGIN):page.index(DOCS_END) + len(DOCS_END)]
+    assert embedded == docs_block(describe()), "docs/index.html is behind src/cia/graph.py: run `make graph`"
+
+
+def test_write_docs_replaces_only_the_marked_block(tmp_path):
+    page = tmp_path / "page.html"
+    page.write_text(f"<p>before</p>\n{DOCS_BEGIN}\nold\n{DOCS_END}\n<p>after</p>\n")
+    assert write_docs(page) is True and write_docs(page) is False
+    text = page.read_text()
+    assert text.startswith("<p>before</p>") and text.endswith("<p>after</p>\n") and '"model"' in text

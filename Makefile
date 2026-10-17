@@ -37,8 +37,10 @@ tui-test:
 tui-fixture: seed
 	PYTHONPATH=src python -m cia.smoke > tui/tests/fixtures/smoke.jsonl
 
-# The investigator graph (LangGraph) as Mermaid text; paste into docs or mermaid.live.
+# The investigator graph (LangGraph): writes it into docs/index.html#engine (React Flow draws it there)
+# and prints it as Mermaid. Run after any change to src/cia/graph.py; test_graph.py fails until you do.
 graph:
+	PYTHONPATH=src python -m cia.graph --write-docs docs/index.html
 	PYTHONPATH=src python -m cia.graph
 
 # Bench: every change request, scored against the ground truth; fails if unsafe_deletes > 0.
