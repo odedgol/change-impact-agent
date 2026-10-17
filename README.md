@@ -49,7 +49,8 @@ make test
 
 # investigate one change request with a local model (Ollama, default gemma4:26b-mlx)
 make run-local ID=REQ-0003   # events in runs/REQ-0003.jsonl
-make monitor                 # http://127.0.0.1:8765: start runs, watch them live
+make monitor                 # http://127.0.0.1:8765: start runs, watch them live;
+                             # Flow tab draws each run as a graph, Model filter picks one model's runs
 
 # score every change request (fails if any risky account would be deleted)
 make bench-fake             # offline plumbing check, also in CI

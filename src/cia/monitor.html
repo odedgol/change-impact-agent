@@ -10,6 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xyflow/react@12.11.6/dist/style.css">
 <style>
 :root{
   --bg:#ffffff;--bg-2:#f7f8fa;--bg-3:#eef0f4;--ink:#0b0d12;--ink-2:#434955;--ink-3:#5f6672;--line:#e5e7eb;--line-2:#cfd4dc;
@@ -208,6 +209,45 @@ svg.thread circle{fill:var(--accent)}
   .top .conn .txt{display:none}
   svg.thread{display:none}
 }
+/* model filter */
+.mfilter{display:flex;align-items:center;gap:8px;padding:0 16px 10px;font-size:13px;color:var(--ink-3)}
+.mfilter select{flex:1;min-width:0;height:30px;border:1px solid var(--line);border-radius:7px;background:var(--bg);padding:0 8px;font-size:13px}
+
+/* flow graph (React Flow) */
+.flowhint{margin:0 0 10px;font-size:13px;color:var(--ink-3)}
+.flowhint b{color:var(--ink-2);font-weight:500}
+.flowhost{height:max(440px,calc(100vh - var(--top) - 250px));border:1px solid var(--line);border-radius:12px;background:var(--bg-2);overflow:hidden}
+.flowhost .react-flow{--xy-background-color:var(--bg-2);--xy-node-background-color:var(--bg);--xy-edge-stroke:var(--line-2);--xy-minimap-background-color:var(--bg);--xy-controls-button-background-color:var(--bg);--xy-controls-button-color:var(--ink-2);--xy-controls-button-border-color:var(--line);--xy-attribution-background-color:transparent;font-family:var(--f)}
+.flowhost .flowmsg{display:grid;place-items:center;height:100%;padding:24px;text-align:center;color:var(--ink-3);font-size:14px}
+.fn{width:250px;border:1px solid var(--line-2);border-radius:10px;background:var(--bg);color:var(--ink);padding:8px 11px;cursor:pointer;transition:box-shadow .15s,border-color .15s}
+.fn:hover{border-color:var(--ink-3)}
+.react-flow__node.selected .fn,.fn.focus{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 35%,transparent);border-color:var(--accent)}
+.fn .t{font-weight:600;font-size:14px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fn .s{font:500 12px/1.35 var(--m);color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.fn .d{font-size:12.5px;line-height:1.35;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:3px}
+.fn-request{border-color:var(--ink-3)}
+.fn-model{border-style:dashed}
+.fn-tool{border-color:var(--accent);background:var(--accent-bg)}
+.fn-tool .s{color:var(--accent-2)}
+.fn-submit{border-color:var(--ink-3);background:var(--bg-3)}
+.fn-guard,.fn-error{border-color:var(--guard);background:var(--guard-bg)}
+.fn-retry{border-color:var(--disable);background:var(--disable-bg)}
+.fn-v-safe_to_delete{border:2px solid var(--safe);background:var(--safe-bg)}
+.fn-v-disable_first{border:2px solid var(--disable);background:var(--disable-bg)}
+.fn-v-ask_owner{border:2px solid var(--ask);background:var(--ask-bg)}
+.fn-v-insufficient_evidence{border:2px dashed var(--ink-3);background:var(--bg-3)}
+.fn .react-flow__handle{opacity:0;pointer-events:none}
+.react-flow__edge.e-cite path{stroke:var(--accent);stroke-dasharray:5 4;stroke-width:1.5}
+.react-flow__edge.e-call path{stroke:var(--ink-3)}
+.react-flow__edge.e-seq path{stroke:var(--line-2);stroke-width:1.5}
+.react-flow__edge.e-back path{stroke:var(--disable);stroke-dasharray:3 3}
+.flowdetail{margin-top:14px}
+@media (max-width:700px){.flowhost .react-flow__minimap{display:none}.flowhost{height:520px}}
+.flowdetail .trace{margin:0}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin:10px 0 0;font-size:12px;color:var(--ink-3)}
+.legend i{display:inline-block;width:18px;height:0;border-top:2px solid var(--line-2);vertical-align:middle;margin-right:5px}
+.legend i.cite{border-top:2px dashed var(--accent)}.legend i.call{border-top-color:var(--ink-3)}.legend i.back{border-top:2px dashed var(--disable)}
+
 @media (max-width:420px){.brand span{display:none}.raw li{grid-template-columns:1fr;gap:2px}}
 </style>
 </head>
@@ -243,6 +283,7 @@ svg.thread circle{fill:var(--accent)}
       <button type="button" data-f="live" aria-pressed="false">Live</button>
       <button type="button" data-f="miss" aria-pressed="false">Mismatch</button>
     </div>
+    <label class="mfilter">Model <select id="mfilter" aria-label="Show runs of one model"></select></label>
     <ul class="list" id="list" aria-live="polite"></ul>
   </aside>
 
@@ -260,6 +301,7 @@ svg.thread circle{fill:var(--accent)}
   document.getElementById("theme").addEventListener("click",function(){
     var dark=root.getAttribute("data-theme")==="dark"||(!root.getAttribute("data-theme")&&matchMedia("(prefers-color-scheme: dark)").matches);
     var next=dark?"light":"dark";root.setAttribute("data-theme",next);try{localStorage.setItem("cia-theme",next)}catch(e){}
+    if(window.ciaFlow&&state.tab==="flow")drawFlow();
   });
 
   // ---- tiny DOM helper: every string goes in as text, never as HTML (model output is untrusted)
@@ -276,7 +318,7 @@ svg.thread circle{fill:var(--accent)}
   var I={ok:"M3.5 8.5l3 3 6-7",x:"M4.5 4.5l7 7|M11.5 4.5l-7 7",warn:"M8 2.5l6 11H2z|M8 6.5v3|M8 11.6v.1"};
 
   var MAX_STEPS=8;
-  var state={cases:[],models:[],runs:[],filter:"all",sel:null,events:[],es:null,tab:"trace",showAll:{}};
+  var state={cases:[],models:[],runs:[],filter:"all",model:"",sel:null,events:[],es:null,tab:"flow",showAll:{},pick:null,focus:null,flowHost:null,flowFailed:false};
   var $=function(id){return document.getElementById(id)};
 
   function api(path,opts){return fetch(path,opts).then(function(r){return r.json().then(function(b){if(!r.ok)throw new Error(b.error||r.statusText);return b})})}
@@ -322,9 +364,19 @@ svg.thread circle{fill:var(--accent)}
   document.querySelectorAll(".filter button").forEach(function(b){b.addEventListener("click",function(){
     state.filter=b.dataset.f;document.querySelectorAll(".filter button").forEach(function(x){x.setAttribute("aria-pressed",String(x===b))});renderList()})});
   function loadRuns(){return api("/api/runs").then(function(r){state.runs=r;renderList()}).catch(function(){})}
+  function renderModels(){
+    var counts={};state.runs.forEach(function(r){var m=r.model||"unknown";counts[m]=(counts[m]||0)+1});
+    var ms=$("mfilter"),names=Object.keys(counts).sort();
+    if(state.model&&!counts[state.model])state.model="";
+    ms.textContent="";ms.appendChild(h("option",{value:""},"All models ("+state.runs.length+")"));
+    names.forEach(function(m){ms.appendChild(h("option",{value:m},m+" ("+counts[m]+")"))});
+    ms.value=state.model;
+  }
+  $("mfilter").addEventListener("change",function(){state.model=this.value;renderList()});
   function renderList(){
+    renderModels();
     var ul=$("list");ul.textContent="";
-    var rows=state.runs.filter(function(r){return state.filter==="all"||(state.filter==="live"?r.running:verdictCase(r))});
+    var rows=state.runs.filter(function(r){return (!state.model||(r.model||"unknown")===state.model)&&(state.filter==="all"||(state.filter==="live"?r.running:verdictCase(r)))});
     if(!rows.length){
       ul.appendChild(h("li",{class:"empty"},state.runs.length?"No runs match this filter.":["No runs yet. Pick a change request above and start one, or run ",h("code",null,"make run-local ID=u00002")," in a terminal; it shows up here."]));return;
     }
@@ -339,7 +391,7 @@ svg.thread circle{fill:var(--accent)}
 
   // ---- select a run and stream its events
   function select(id){
-    state.sel=id;state.events=[];state.showAll={};
+    state.sel=id;state.events=[];state.showAll={};state.pick=null;state.focus=null;
     if(state.es){state.es.close();state.es=null}
     try{history.replaceState(null,"","#run="+encodeURIComponent(id))}catch(e){}
     renderList();render();
@@ -373,6 +425,112 @@ svg.thread circle{fill:var(--accent)}
     return null;
   }
 
+
+  // ---- one step of a run, as a card; the Steps tab lists them, the Flow tab shows the clicked one
+  function turnNo(idx){var n=0;for(var i=0;i<=idx;i++)if(state.events[i].type==="model_turn")n++;return n}
+  function stepCard(e,idx){
+    var li=null;
+    if(e.type==="model_turn"){
+      var key="m"+idx,txt=(e.reasoning||"").trim(),long=txt.length>260;
+      li=h("li",{class:"k-model"},h("span",{class:"node"}),h("div",{class:"card"},
+        h("div",{class:"who"},h("b",null,"Model"),"turn "+turnNo(idx)),
+        txt?h("p",{class:"think"+(long&&!state.showAll[key]?" clamp":"")},txt):null,
+        long?h("button",{class:"link",type:"button",onclick:function(){state.showAll[key]=!state.showAll[key];render()}},state.showAll[key]?"Show less":"Show full reasoning"):null,
+        e.text?h("p",{class:"think"},e.text):null,
+        e.tool_calls&&e.tool_calls.length?h("div",{class:"calls"},e.tool_calls.map(function(c){return h("div",null,"→ ",h("span",null,c.name),"(",c.name==="submit_report"?"verdict: "+JSON.stringify((c.input||{}).verdict)+", "+(((c.input||{}).findings)||[]).length+" findings":argText(c.input),")")})):null));
+    }else if(e.type==="tool_call"){
+      li=h("li",{class:"k-code"},h("span",{class:"node"}),h("div",{class:"card",id:"step-"+e.evidence_id},
+        h("div",{class:"who"},h("b",null,"Code"),"step "+e.step,h("span",{class:"ev"},e.evidence_id),
+          e.source_name?h("span",null,"from "+e.source_name+(e.source_updated_at?", updated "+String(e.source_updated_at).replace("T"," ").slice(0,16):", freshness unknown")):null),
+        h("div",null,h("span",{class:"tool"},e.tool)," ",h("span",{class:"args"},argText(e.args))),
+        summarize(e.tool,e.result),
+        h("details",null,h("summary",null,icon("M6 4l4 4-4 4"),"Raw result"),h("pre",{class:"json"},JSON.stringify(e.result,null,2)))));
+    }else if(e.type==="tool_error"){
+      li=h("li",{class:"k-guard"},h("span",{class:"node"}),h("div",{class:"card"},h("div",{class:"who"},h("b",null,"Guardrail"),"step "+e.step+" · "+e.tool),h("p",{class:"result"},e.error)));
+    }else if(e.type==="citation_retry"){
+      li=h("li",{class:"k-retry"},h("span",{class:"node"}),h("div",{class:"card"},h("div",{class:"who"},h("b",null,"Citation check"),"step "+e.step),
+        h("p",{class:"result"},"The report cited ids no tool returned: ",e.rejected_ids.map(function(i){return h("span",{class:"ev"},i)}),". Sent back once for a fix.")));
+    }else if(e.type==="step_cap"){
+      li=h("li",{class:"k-guard"},h("span",{class:"node"}),h("div",{class:"card"},h("div",{class:"who"},h("b",null,"Step cap")),h("p",{class:"result"},"Stopped after "+e.steps+" steps without a report. Verdict: insufficient_evidence, confidence low; never a delete.")));
+    }else if(e.type==="run_error"){
+      li=h("li",{class:"k-guard"},h("span",{class:"node"}),h("div",{class:"card"},h("div",{class:"who"},h("b",null,"Run failed")),h("p",{class:"result"},e.error),errHint(e.error)));
+    }else if(e.type==="report"){
+      li=h("li",{class:"k-report"},h("span",{class:"node"}),h("div",{class:"card"},h("div",{class:"who"},h("b",null,"Report accepted")),
+        h("p",{class:"result"},vpill(e.verdict)," confidence ",e.confidence,", "+e.findings.length+" finding"+(e.findings.length===1?"":"s")+(e.rejected_citations?". "+e.rejected_citations+" citation"+(e.rejected_citations===1?"":"s")+" rejected and dropped.":". Every citation resolves to a step."))));
+    }
+    return li;
+  }
+
+  // ---- the run as a graph: the spine (request, model turns, guards, verdict) runs down the left;
+  // the tools each turn called sit to its right; dashed blue edges are the evidence the verdict cites
+  function brief(tool,res){
+    if(res==null)return "no record";
+    if(tool==="get_usage")return res.event_count+" events in "+res.window_days+" days"+(res.last_seen?"":", never seen");
+    if(tool==="get_identity"||tool==="get_owner")return [res.kind,res.hr_status&&("HR "+res.hr_status),res.account_status].filter(Boolean).join(" · ");
+    if(res.rows)return res.total+" row"+(res.total===1?"":"s")+(res.rows[0]?": "+(res.rows[0].kind||res.rows[0].text||""):"")+(res.next_offset!=null?" (more pages)":"");
+    return "";
+  }
+  function flowGraph(evts){
+    var nodes=[],edges=[],y=0,prev=null,turn=null,turnY=0,side=0,back=null,evNode={};
+    var ROW=96,SIDE=84,TOOLX=330;
+    function node(id,kind,x,y,t,sub,d,ev){nodes.push({id:id,kind:kind,x:x,y:y,t:t,s:sub||"",d:d||"",ev:ev||null})}
+    function edge(a,b,kind,ah,bh){edges.push({id:"x"+edges.length,source:a,target:b,kind:kind,sh:ah,th:bh})}
+    function closeTurn(){if(turn){y=Math.max(y,turnY+side*SIDE+18);turn=null}}
+    function spine(id,kind,t,sub,d){closeTurn();node(id,kind,0,y,t,sub,d);if(prev)edge(prev,id,"seq","b","t");prev=id;y+=ROW}
+    function right(id,kind,t,sub,d,ev){var at=turn?turnY+side*SIDE:y;node(id,kind,TOOLX,at,t,sub,d,ev);if(turn)edge(turn,id,"call","r","l");side++;return id}
+    var n=0;
+    evts.forEach(function(e,i){
+      var id="e"+i;
+      if(e.type==="request")spine(id,"request","Change request "+e.request_id,(e.action||"delete")+" "+e.identity_id,"Code sends it to the model");
+      else if(e.type==="model_turn"){
+        var calls=(e.tool_calls||[]).map(function(c){return c.name});
+        spine(id,"model","Model turn "+(++n),calls.length?"→ "+calls.join(", "):"no tool call",
+          e.stop_reason==="length"?"cut off: ran out of output tokens":(e.reasoning?"reasoned "+e.reasoning.length+" chars":""));
+        turn=id;turnY=y-ROW;side=0;
+        if(back){edge(back,id,"back","b","rt");back=null}
+        (e.tool_calls||[]).forEach(function(c,k){if(c.name==="submit_report"){var f=(c.input||{}).findings||[];
+          right(id+"s"+k,"submit","submit_report","verdict "+((c.input||{}).verdict||"?"),f.length+" finding"+(f.length===1?"":"s"))}});
+      }
+      else if(e.type==="tool_call"){right(id,"tool",e.tool,e.evidence_id+" · step "+e.step,brief(e.tool,e.result),e.evidence_id);evNode[e.evidence_id]=id}
+      else if(e.type==="tool_error")right(id,"guard","Tool error","step "+e.step+" · "+e.tool,e.error);
+      else if(e.type==="citation_retry")back=right(id,"retry","Citation check: sent back",e.rejected_ids.join(", "),"unknown ids; one retry");
+      else if(e.type==="step_cap")spine(id,"guard","Step cap",e.steps+" steps, no report","never a delete");
+      else if(e.type==="run_error")spine(id,"error","Run failed","",e.error);
+      else if(e.type==="report"){
+        if(e.incomplete_reason&&!evts.some(function(x){return x.type==="step_cap"}))spine(id+"g","guard","Coverage guard","downgraded",e.incomplete_reason);
+        spine(id,"v-"+e.verdict,e.verdict,"confidence "+e.confidence,(e.rejected_citations?e.rejected_citations+" citation(s) dropped":"every citation checked"));
+        var cited={};(e.findings||[]).forEach(function(f){(f.evidence_ids||[]).forEach(function(ev){if(evNode[ev]&&!cited[ev]){cited[ev]=1;edge(id,evNode[ev],"cite","r","rt")}})});
+      }
+    });
+    return {nodes:nodes,edges:edges};
+  }
+  function isDark(){var t=root.getAttribute("data-theme");return t?t==="dark":matchMedia("(prefers-color-scheme: dark)").matches}
+  function drawFlowTab(main){
+    main.appendChild(h("p",{class:"flowhint"},h("b",null,"How to read it: "),"the run goes top to bottom; each model turn points to the tools it called; dashed blue lines lead from the verdict to the evidence it cites. Drag to pan, scroll to zoom, click a box for its details."));
+    var host=state.flowHost||(state.flowHost=h("div",{class:"flowhost",role:"img","aria-label":"Flow graph of the run"}));
+    main.appendChild(host);
+    main.appendChild(h("div",{class:"legend"},h("span",null,h("i",null),"order"),h("span",null,h("i",{class:"call"}),"tool call"),h("span",null,h("i",{class:"cite"}),"cited evidence"),h("span",null,h("i",{class:"back"}),"sent back to the model")));
+    main.appendChild(h("div",{class:"flowdetail",id:"flowdetail"}));
+    drawFlow();
+  }
+  function drawFlow(){
+    var host=state.flowHost;if(!host||!host.isConnected)return;
+    if(window.ciaFlow){var r=current();window.ciaFlow.render(host,flowGraph(state.events),{dark:isDark(),focus:state.focus,onPick:pick,host:host,
+      live:!!r.running&&!state.events.some(function(e){return e.type==="report"||e.type==="run_error"})})}
+    else if(state.flowFailed){host.textContent="";host.appendChild(h("div",{class:"flowmsg"},"The graph library (React Flow) did not load; it comes from a CDN, so this view needs internet. The Steps tab shows the same run offline."))}
+    else if(!host.firstChild){host.appendChild(h("div",{class:"flowmsg"},"Loading the graph…"))}
+    showPick();
+  }
+  function pick(id){state.pick=id;showPick()}
+  function showPick(){
+    var box=$("flowdetail");if(!box)return;box.textContent="";
+    var m=/^e(\d+)/.exec(state.pick||"");var e=m&&state.events[+m[1]];
+    if(!e){box.appendChild(h("p",{class:"flowhint"},"Click a box in the graph to see that step here."));return}
+    var li=stepCard(e,+m[1]);if(li)box.appendChild(h("ol",{class:"trace"},li));
+  }
+  addEventListener("ciaflow-ready",function(){if(state.tab==="flow"){var h0=state.flowHost;if(h0&&h0.firstChild&&h0.firstChild.className==="flowmsg")h0.textContent="";drawFlow()}});
+  setTimeout(function(){if(!window.ciaFlow){state.flowFailed=true;if(state.flowHost)state.flowHost.textContent="";drawFlow()}},10000);
+
   // ---- render the selected run
   function render(appended){
     var main=$("main"),rep=$("report");clearThread();
@@ -393,7 +551,7 @@ svg.thread circle{fill:var(--accent)}
           live?h("span",{class:"conn"},h("span",{class:"dot live"}),"live"):null)),
       h("div",{class:"meter"},h("span",{class:"lbl"},"Steps "+steps+" of "+MAX_STEPS+(cap?", cap reached":"")),seg)));
     var tabs=h("div",{class:"tabs",role:"tablist"});
-    [["trace","Trace"],["raw","Event log ("+state.events.length+")"]].forEach(function(t){
+    [["flow","Flow"],["trace","Steps"],["raw","Event log ("+state.events.length+")"]].forEach(function(t){
       tabs.appendChild(h("button",{type:"button",role:"tab","aria-selected":String(state.tab===t[0]),onclick:function(){state.tab=t[0];render()}},t[1]))});
     main.appendChild(tabs);
 
@@ -402,39 +560,13 @@ svg.thread circle{fill:var(--accent)}
       state.events.forEach(function(e){var c=Object.assign({},e);delete c.type;ul.appendChild(h("li",null,h("span",{class:"ty"},e.type),h("span",{class:"js"},JSON.stringify(c))))});
       if(!state.events.length)ul.appendChild(h("li",null,h("span",{class:"js"},"No events yet.")));
       main.appendChild(ul);
+    }else if(state.tab==="flow"){
+      drawFlowTab(main);
     }else{
-      var ol=h("ol",{class:"trace"}),n=0;
+      var ol=h("ol",{class:"trace"});
       state.events.forEach(function(e,idx){
-        var li=null,isNew=appended&&idx===state.events.length-1;
-        if(e.type==="model_turn"){
-          var key="m"+idx,txt=(e.reasoning||"").trim(),long=txt.length>260;
-          li=h("li",{class:"k-model"},h("span",{class:"node"}),h("div",{class:"card"},
-            h("div",{class:"who"},h("b",null,"Model"),"turn "+(++n)),
-            txt?h("p",{class:"think"+(long&&!state.showAll[key]?" clamp":"")},txt):null,
-            long?h("button",{class:"link",type:"button",onclick:function(){state.showAll[key]=!state.showAll[key];render()}},state.showAll[key]?"Show less":"Show full reasoning"):null,
-            e.text?h("p",{class:"think"},e.text):null,
-            e.tool_calls&&e.tool_calls.length?h("div",{class:"calls"},e.tool_calls.map(function(c){return h("div",null,"→ ",h("span",null,c.name),"(",c.name==="submit_report"?"verdict: "+JSON.stringify((c.input||{}).verdict)+", "+(((c.input||{}).findings)||[]).length+" findings":argText(c.input),")")})):null));
-        }else if(e.type==="tool_call"){
-          li=h("li",{class:"k-code"},h("span",{class:"node"}),h("div",{class:"card",id:"step-"+e.evidence_id},
-            h("div",{class:"who"},h("b",null,"Code"),"step "+e.step,h("span",{class:"ev"},e.evidence_id),
-              e.source_name?h("span",null,"from "+e.source_name+(e.source_updated_at?", updated "+String(e.source_updated_at).replace("T"," ").slice(0,16):", freshness unknown")):null),
-            h("div",null,h("span",{class:"tool"},e.tool)," ",h("span",{class:"args"},argText(e.args))),
-            summarize(e.tool,e.result),
-            h("details",null,h("summary",null,icon("M6 4l4 4-4 4"),"Raw result"),h("pre",{class:"json"},JSON.stringify(e.result,null,2)))));
-        }else if(e.type==="tool_error"){
-          li=h("li",{class:"k-guard"},h("span",{class:"node"}),h("div",{class:"card"},h("div",{class:"who"},h("b",null,"Guardrail"),"step "+e.step+" · "+e.tool),h("p",{class:"result"},e.error)));
-        }else if(e.type==="citation_retry"){
-          li=h("li",{class:"k-retry"},h("span",{class:"node"}),h("div",{class:"card"},h("div",{class:"who"},h("b",null,"Citation check"),"step "+e.step),
-            h("p",{class:"result"},"The report cited ids no tool returned: ",e.rejected_ids.map(function(i){return h("span",{class:"ev"},i)}),". Sent back once for a fix.")));
-        }else if(e.type==="step_cap"){
-          li=h("li",{class:"k-guard"},h("span",{class:"node"}),h("div",{class:"card"},h("div",{class:"who"},h("b",null,"Step cap")),h("p",{class:"result"},"Stopped after "+e.steps+" steps. Verdict forced to ask_owner, confidence low.")));
-        }else if(e.type==="run_error"){
-          li=h("li",{class:"k-guard"},h("span",{class:"node"}),h("div",{class:"card"},h("div",{class:"who"},h("b",null,"Run failed")),h("p",{class:"result"},e.error),errHint(e.error)));
-        }else if(e.type==="report"){
-          li=h("li",{class:"k-report"},h("span",{class:"node"}),h("div",{class:"card"},h("div",{class:"who"},h("b",null,"Report accepted")),
-            h("p",{class:"result"},vpill(e.verdict)," confidence ",e.confidence,", "+e.findings.length+" finding"+(e.findings.length===1?"":"s")+(e.rejected_citations?". "+e.rejected_citations+" citation"+(e.rejected_citations===1?"":"s")+" rejected and dropped.":". Every citation resolves to a step."))));
-        }
-        if(li){if(isNew)li.classList.add("new");ol.appendChild(li)}
+        var li=stepCard(e,idx);
+        if(li){if(appended&&idx===state.events.length-1)li.classList.add("new");ol.appendChild(li)}
       });
       if(live)ol.appendChild(h("li",{class:"waiting"},h("span",{class:"node"}),h("div",{class:"card"},h("span",{class:"dot live"}),"Waiting for the model…")));
       if(!ol.children.length)ol.appendChild(h("li",{class:"waiting"},h("span",{class:"node"}),h("div",{class:"card"},"No events in this run.")));
@@ -474,9 +606,11 @@ svg.thread circle{fill:var(--accent)}
       rep.appendChild(h("ul",{class:"findings"},report.findings.map(function(f){
         return h("li",null,h("div",{class:"fk"},h("span",null,f.kind),h("span",null,f.confidence)),h("p",null,f.summary),
           h("div",{class:"chips"},f.evidence_ids.map(function(id){
-            var go=function(){showThread(this,id)},stop=function(){clearThread()};
+            var go=function(){if(state.tab==="flow"){state.focus=id;drawFlow()}else showThread(this,id)},
+              stop=function(){if(state.tab==="flow"){state.focus=null;drawFlow()}else clearThread()};
             return h("button",{type:"button",class:"ev","aria-label":"Show evidence "+id,onmouseenter:go,onfocus:go,onmouseleave:stop,onblur:stop,
-              onclick:function(){var t=$("step-"+id);if(matchMedia("(max-width:900px)").matches&&t)t.scrollIntoView({block:"center"});showThread(this,id)}},
+              onclick:function(){if(state.tab==="flow"){var k=state.events.findIndex(function(x){return x.evidence_id===id});state.focus=id;if(k>=0)state.pick="e"+k;drawFlow();return}
+                var t=$("step-"+id);if(matchMedia("(max-width:900px)").matches&&t)t.scrollIntoView({block:"center"});showThread(this,id)}},
               id,stepOf[id]?h("span",{class:"at"}," · step "+stepOf[id]):null)})));
       })));
     }
@@ -508,7 +642,8 @@ svg.thread circle{fill:var(--accent)}
     main.appendChild(h("div",{class:"intro"},h("h1",null,"Watch the agent investigate a change"),
       h("p",null,"Each run sends one change request to the model. The model calls read-only tools; code logs every result as evidence, caps the run at "+MAX_STEPS+" steps and checks every citation before a report is accepted."),
       h("ol",null,h("li",null,"Pick a change request and a model on the left, then start the run."),
-        h("li",null,"Follow the trace: model turns, tool calls with their evidence ids, and any guardrail that fired."),
+        h("li",null,"Or pick a past run on the left. Bench runs are named after their model; the Model filter shows one model's runs."),
+        h("li",null,"Flow draws the run as a graph: model turns, the tools each one called, guardrails, the verdict, and lines to the evidence it cites. Steps lists the same thing as cards; Event log is the raw JSON."),
         h("li",null,"In the report, point at an evidence id to see the exact step it cites."))));
     rep.textContent="";rep.appendChild(h("h2",null,"Report"));rep.appendChild(h("p",{class:"blank"},"Select a run to see its verdict, the expected verdict and the cited evidence."));
   }
@@ -520,6 +655,66 @@ svg.thread circle{fill:var(--accent)}
   });
   setInterval(function(){if(document.visibilityState==="visible")loadRuns()},4000);
 })();
+</script>
+<script type="importmap">{"imports":{
+  "react":"https://esm.sh/react@19.2.8","react/jsx-runtime":"https://esm.sh/react@19.2.8/jsx-runtime",
+  "react-dom":"https://esm.sh/react-dom@19.2.8","react-dom/client":"https://esm.sh/react-dom@19.2.8/client",
+  "@xyflow/react":"https://esm.sh/@xyflow/react@12.11.6?external=react,react-dom"}}</script>
+<script type="module">
+// React Flow draws the graph; the page above builds it from the run's events. React renders every
+// string as text, so model output never becomes HTML.
+import {createElement as e, useEffect} from "react";
+import {createRoot} from "react-dom/client";
+import {ReactFlow, ReactFlowProvider, Background, Controls, MiniMap, Handle, Position, MarkerType,
+        useNodesState, useReactFlow} from "@xyflow/react";
+
+const H = (type, position, id) => e(Handle, {type, position, id, isConnectable: false});
+function Box({data}) {
+  const n = data.n;
+  return e("div", {className: "fn fn-" + n.kind + (data.focus ? " focus" : ""), title: [n.t, n.s, n.d].filter(Boolean).join("\n")},
+    H("target", Position.Top, "t"), H("target", Position.Left, "l"), H("target", Position.Right, "rt"),
+    e("div", {className: "t"}, n.t), n.s ? e("div", {className: "s"}, n.s) : null, n.d ? e("div", {className: "d"}, n.d) : null,
+    H("source", Position.Bottom, "b"), H("source", Position.Right, "r"));
+}
+const nodeTypes = {box: Box};
+const toNodes = (g, focus) => g.nodes.map(n => ({id: n.id, type: "box", position: {x: n.x, y: n.y}, data: {n, focus: !!focus && n.ev === focus}}));
+const toEdges = g => g.edges.map(x => ({id: x.id, source: x.source, target: x.target, sourceHandle: x.sh, targetHandle: x.th,
+  className: "e-" + x.kind, type: x.kind === "seq" ? "straight" : "smoothstep", animated: x.kind === "cite",
+  markerEnd: {type: MarkerType.ArrowClosed, width: 16, height: 16}}));
+
+// Open at a readable zoom (fit the width, never below 0.75): a finished run shows its top, a live run follows
+// its newest step. Fitting a long run whole would shrink the text past reading.
+function Fit({g, live, host}) {
+  const rf = useReactFlow();
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      if (!g.nodes.length) return;
+      const W = host.clientWidth, Ht = host.clientHeight, PAD = 28, LEFT = 60;  // LEFT clears the zoom buttons
+      const right = Math.max(...g.nodes.map(n => n.x)) + 250, bottom = Math.max(...g.nodes.map(n => n.y)) + 80;
+      const zoom = Math.max(0.75, Math.min(1.15, (W - LEFT - PAD) / right));
+      const x = Math.max(LEFT, (W - right * zoom) / 2);
+      const y = live ? Math.min(PAD, Ht - bottom * zoom - PAD) : PAD;
+      rf.setViewport({x, y, zoom}, {duration: 250});
+    });
+    return () => cancelAnimationFrame(id);
+  }, [g.nodes.length, live]);
+  return null;
+}
+function Graph({g, opts}) {
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  useEffect(() => setNodes(toNodes(g, opts.focus)), [g, opts.focus]);
+  return e(ReactFlow, {nodes, edges: toEdges(g), onNodesChange, nodeTypes, onNodeClick: (_, n) => opts.onPick(n.id),
+      nodesConnectable: false, minZoom: 0.2, maxZoom: 2, colorMode: opts.dark ? "dark" : "light"},
+    e(Background, {gap: 22, size: 1}), e(Controls, {showInteractive: false}),
+    e(MiniMap, {pannable: true, zoomable: true, nodeStrokeWidth: 2, style: {width: 120, height: 90}}), e(Fit, {g, live: opts.live, host: opts.host}));
+}
+const roots = new WeakMap();
+window.ciaFlow = {render(host, g, opts) {
+  let root = roots.get(host);
+  if (!root) { host.textContent = ""; root = createRoot(host); roots.set(host, root); }
+  root.render(e(ReactFlowProvider, null, e(Graph, {g, opts})));
+}};
+dispatchEvent(new Event("ciaflow-ready"));
 </script>
 </body>
 </html>
