@@ -153,7 +153,7 @@ class _Run:
             turn = self.inv.llm.converse(SYSTEM_PROMPT, self.messages, TOOLS)
             self.messages.append(AssistantTurn(turn))
             self.inv.events({"type": "model_turn", "request_id": self.request.request_id, "step": self.steps,
-                             "text": turn.text, "reasoning": turn.reasoning,
+                             "text": turn.text, "reasoning": turn.reasoning, "stop_reason": turn.stop_reason,
                              "tool_calls": [{"name": c.name, "input": c.input} for c in turn.tool_calls]})
             report = self.handle(turn)
             if report is not None:
@@ -279,16 +279,19 @@ class JsonlEvents:
 
 
 def main(argv: list[str] | None = None, llm: LLMClient | None = None) -> None:
-    from .llm import BedrockClient, OpenAICompatClient
+    from .env import load_env
+    from .llm import LLM_CHOICES, make_client
     from .sources import SyntheticSource
+
+    load_env()
 
     p = argparse.ArgumentParser(description="Investigate one change request.")
     p.add_argument("--db", default="data/org.db")
     p.add_argument("--identity", required=True)
     p.add_argument("--request-id", default="REQ-CLI")
     p.add_argument("--events", help="write JSON-lines events to this file, or - for stdout")
-    p.add_argument("--llm", choices=["bedrock", "openai"], default="bedrock",
-                   help="openai = any OpenAI-compatible endpoint, Ollama by default")
+    p.add_argument("--llm", choices=LLM_CHOICES, default="bedrock",
+                   help="openai = any OpenAI-compatible endpoint, Ollama by default; openrouter = hosted open models")
     p.add_argument("--model", help="model id; default from CIA_BEDROCK_MODEL_ID or CIA_OPENAI_MODEL")
     a = p.parse_args(argv)
     out = None
@@ -296,7 +299,7 @@ def main(argv: list[str] | None = None, llm: LLMClient | None = None) -> None:
         out = sys.stdout if a.events == "-" else open(a.events, "w")  # noqa: SIM115
     try:
         if llm is None:
-            llm = OpenAICompatClient(model=a.model) if a.llm == "openai" else BedrockClient(model_id=a.model)
+            llm = make_client(a.llm, a.model)
         sink = JsonlEvents(out) if out else None
         if sink:
             sink({"type": "run", "run_id": a.request_id, "llm": a.llm,

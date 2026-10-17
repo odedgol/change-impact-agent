@@ -187,6 +187,7 @@ def test_events_tell_the_whole_story_in_order(org):
     assert [e["type"] for e in events] == ["request", "model_turn", "tool_call", "model_turn", "report"]
     assert events[0]["identity_id"] == case["identity_id"]
     assert events[1]["tool_calls"] == [{"name": "get_tickets", "input": {"identity_id": target}}]
+    assert events[1]["stop_reason"] == "end_turn"  # a cut-off turn shows as "length"
     assert "Break-glass" in events[2]["result"]["rows"][0]["text"]
     assert events[-1]["verdict"] == "ask_owner"
 

@@ -3,7 +3,7 @@
 Messages, tool specs and turns are plain provider-neutral types. Each client
 maps them to its own wire format: ``BedrockClient`` to the Bedrock Converse
 API, ``OpenAICompatClient`` to an OpenAI-compatible chat endpoint (Ollama on a
-laptop, vLLM in a private cloud), ``FakeLLM`` to a script for tests. A new
+laptop, vLLM in a private cloud), ``OpenRouterClient`` to hosted open models, ``FakeLLM`` to a script for tests. A new
 provider is one more mapping, with no change to the investigator.
 
 ``boto3`` is imported only inside ``BedrockClient``, and only when no client is
@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import json
 import os
+import time
+import urllib.error
 import urllib.request
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
@@ -22,8 +24,13 @@ MODEL_ID_ENV = "CIA_BEDROCK_MODEL_ID"
 OPENAI_BASE_URL_ENV = "CIA_OPENAI_BASE_URL"
 OPENAI_MODEL_ENV = "CIA_OPENAI_MODEL"
 OPENAI_API_KEY_ENV = "CIA_OPENAI_API_KEY"
+OPENAI_MAX_TOKENS_ENV = "CIA_OPENAI_MAX_TOKENS"  # reasoning models need room to think before the tool call
 DEFAULT_OPENAI_BASE_URL = "http://localhost:11434/v1"  # Ollama
 DEFAULT_OPENAI_MODEL = "gemma4:26b-mlx"
+OPENROUTER_API_KEY_ENV = "OPENROUTER_API_KEY"
+OPENROUTER_MODEL_ENV = "CIA_OPENROUTER_MODEL"
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+DEFAULT_OPENROUTER_MODEL = "google/gemma-4-31b-it:free"
 
 
 @dataclass(frozen=True)
@@ -164,8 +171,33 @@ Transport = Callable[[str, dict[str, Any], dict[str, str]], dict[str, Any]]
 
 def _http_post(url: str, body: dict[str, Any], headers: dict[str, str], timeout: float = 300) -> dict[str, Any]:
     req = urllib.request.Request(url, data=json.dumps(body).encode(), headers=headers, method="POST")
-    with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 (URL comes from config)
-        return json.loads(resp.read())
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 (URL comes from config)
+            return json.loads(resp.read())
+    except urllib.error.HTTPError as e:  # keep the server's reason, it is what explains a 400
+        raise HTTPStatusError(e.code, f"HTTP {e.code} from {url}: {e.read()[:500].decode(errors='replace')}",
+                              retry_after=e.headers.get("Retry-After") if e.headers else None) from e
+
+
+class HTTPStatusError(RuntimeError):
+    def __init__(self, code: int, message: str, retry_after: str | None = None):
+        super().__init__(message)
+        self.code = code
+        self.retry_after = retry_after
+
+
+def retrying(post: Transport, tries: int = 4, wait: float = 10.0, sleep: Callable[[float], None] = time.sleep) -> Transport:
+    """Retry a rate-limited (429) or briefly unavailable (502, 503) request, honouring Retry-After."""
+    def call(url: str, body: dict[str, Any], headers: dict[str, str]) -> dict[str, Any]:
+        for attempt in range(tries):
+            try:
+                return post(url, body, headers)
+            except HTTPStatusError as e:
+                if e.code not in (429, 502, 503) or attempt == tries - 1:
+                    raise
+                sleep(float(e.retry_after) if (e.retry_after or "").isdigit() else wait * (attempt + 1))
+        raise AssertionError("unreachable")
+    return call
 
 
 class OpenAICompatClient:
@@ -175,23 +207,56 @@ class OpenAICompatClient:
     """
 
     def __init__(self, model: str | None = None, base_url: str | None = None, api_key: str | None = None,
-                 temperature: float = 0.0, max_tokens: int = 2048, transport: Transport | None = None):
+                 temperature: float = 0.0, max_tokens: int | None = None, transport: Transport | None = None):
         self.model = model or os.environ.get(OPENAI_MODEL_ENV) or DEFAULT_OPENAI_MODEL
         self.base_url = (base_url or os.environ.get(OPENAI_BASE_URL_ENV) or DEFAULT_OPENAI_BASE_URL).rstrip("/")
         self.api_key = api_key or os.environ.get(OPENAI_API_KEY_ENV)
         self.temperature = temperature
-        self.max_tokens = max_tokens
+        self.max_tokens = max_tokens or int(os.environ.get(OPENAI_MAX_TOKENS_ENV) or 2048)
         self._post = transport or _http_post
+        self.extra_headers: dict[str, str] = {}
 
     def converse(self, system: str, messages: Sequence[Message], tools: Sequence[ToolSpec]) -> LLMTurn:
         body: dict[str, Any] = {"model": self.model, "temperature": self.temperature, "max_tokens": self.max_tokens,
                                 "messages": [{"role": "system", "content": system}, *to_openai_messages(messages)]}
         if tools:
             body["tools"] = to_openai_tools(tools)
-        headers = {"Content-Type": "application/json"}
+        headers = {"Content-Type": "application/json", **self.extra_headers}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
         return from_openai_response(self._post(f"{self.base_url}/chat/completions", body, headers))
+
+
+class OpenRouterClient(OpenAICompatClient):
+    """Hosted open models through OpenRouter (default: Gemma 4 31B, free tier). Same wire format as Ollama.
+
+    Needs ``OPENROUTER_API_KEY``. Free models are rate-limited, so 429s are retried with backoff.
+    Prompts leave the machine: fine for the synthetic org, not for real IAM data.
+    """
+
+    def __init__(self, model: str | None = None, api_key: str | None = None, temperature: float = 0.0,
+                 max_tokens: int | None = None, transport: Transport | None = None):
+        key = api_key or os.environ.get(OPENROUTER_API_KEY_ENV)
+        if not key:
+            raise ValueError(f"set {OPENROUTER_API_KEY_ENV} or pass api_key")
+        super().__init__(model=model or os.environ.get(OPENROUTER_MODEL_ENV) or DEFAULT_OPENROUTER_MODEL,
+                         base_url=OPENROUTER_BASE_URL, api_key=key, temperature=temperature,
+                         max_tokens=max_tokens, transport=transport or retrying(_http_post))
+        self.extra_headers = {"X-Title": "change-impact-agent"}
+
+
+LLM_CHOICES = ("openai", "openrouter", "bedrock")  # openai = any OpenAI-compatible URL, Ollama by default
+
+
+def make_client(llm: str, model: str | None = None, max_tokens: int | None = None) -> LLMClient:
+    """The one place a CLI or the monitor turns a provider name into a client."""
+    if llm == "openai":
+        return OpenAICompatClient(model=model, max_tokens=max_tokens)
+    if llm == "openrouter":
+        return OpenRouterClient(model=model, max_tokens=max_tokens)
+    if llm == "bedrock":
+        return BedrockClient(model_id=model, **({"max_tokens": max_tokens} if max_tokens else {}))
+    raise ValueError(f"unknown llm {llm!r}; choose from {', '.join(LLM_CHOICES)}")
 
 
 def to_openai_tools(tools: Sequence[ToolSpec]) -> list[dict[str, Any]]:
@@ -205,7 +270,8 @@ def to_openai_messages(messages: Sequence[Message]) -> list[dict[str, Any]]:
         if isinstance(m, UserText):
             out.append({"role": "user", "content": m.text})
         elif isinstance(m, AssistantTurn):
-            msg: dict[str, Any] = {"role": "assistant", "content": m.turn.text or None}
+            # an empty turn still needs a string: Ollama rejects content null without tool calls (HTTP 400)
+            msg: dict[str, Any] = {"role": "assistant", "content": m.turn.text or (None if m.turn.tool_calls else "")}
             if m.turn.tool_calls:
                 msg["tool_calls"] = [{"id": c.id, "type": "function",
                                       "function": {"name": c.name, "arguments": json.dumps(c.input)}}
@@ -232,6 +298,8 @@ def _arguments(raw: Any) -> dict[str, Any]:
 
 
 def from_openai_response(response: dict[str, Any]) -> LLMTurn:
+    if response.get("error") or not response.get("choices"):  # OpenRouter can report a provider error in a 200
+        raise RuntimeError(f"model returned no choices: {str(response.get('error') or response)[:300]}")
     choice = response["choices"][0]
     msg = choice["message"]
     calls = tuple(ToolCall(id=c["id"], name=c["function"]["name"], input=_arguments(c["function"].get("arguments")))

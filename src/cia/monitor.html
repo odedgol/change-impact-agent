@@ -297,7 +297,7 @@ svg.thread circle{fill:var(--accent)}
         sel.appendChild(og);
       });
       var ms=$("model");ms.textContent="";
-      state.models.forEach(function(m){ms.appendChild(h("option",{value:m.llm+"|"+m.model},m.model+(m.llm==="bedrock"?" (Bedrock)":"")+(m.offline?" (Ollama offline)":"")))});
+      state.models.forEach(function(m){ms.appendChild(h("option",{value:m.llm+"|"+m.model},m.model+(m.llm==="bedrock"?" (Bedrock)":m.llm==="openrouter"?" (OpenRouter)":"")+(m.offline?" (Ollama offline)":"")))});
       var pref=state.models.find(function(m){return m.model==="gemma4:26b-mlx"});if(pref)ms.value=pref.llm+"|"+pref.model;
       var offline=state.models.some(function(m){return m.offline});
       setConn(!offline,offline?"Ollama not reachable":"Ollama · "+state.models.filter(function(m){return m.llm==="openai"}).length+" models");

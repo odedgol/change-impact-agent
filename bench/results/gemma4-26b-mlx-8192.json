@@ -1,0 +1,239 @@
+{
+  "label": "bench-gemma4-26b-mlx-20261017-202817",
+  "llm": "openai",
+  "model": "gemma4:26b-mlx",
+  "max_tokens": 8192,
+  "scores": {
+    "cases": 20,
+    "unsafe_deletes": 0,
+    "recall": 1.0,
+    "precision": 1.0,
+    "accuracy": 1.0,
+    "false_alarms": 0,
+    "insufficient_evidence": 0,
+    "rejected_citations": 0,
+    "errors": 0
+  },
+  "cases": [
+    {
+      "request_id": "REQ-0001",
+      "identity_id": "u00007",
+      "case_type": "nightly_job",
+      "expected_verdict": "disable_first",
+      "verdict": "disable_first",
+      "confidence": "high",
+      "rejected_citations": 0,
+      "incomplete_reason": null,
+      "steps": 5
+    },
+    {
+      "request_id": "REQ-0002",
+      "identity_id": "u00000",
+      "case_type": "nightly_job",
+      "expected_verdict": "disable_first",
+      "verdict": "disable_first",
+      "confidence": "high",
+      "rejected_citations": 0,
+      "incomplete_reason": null,
+      "steps": 6
+    },
+    {
+      "request_id": "REQ-0003",
+      "identity_id": "u00002",
+      "case_type": "orphaned_service_account",
+      "expected_verdict": "ask_owner",
+      "verdict": "ask_owner",
+      "confidence": "high",
+      "rejected_citations": 0,
+      "incomplete_reason": null,
+      "steps": 5
+    },
+    {
+      "request_id": "REQ-0004",
+      "identity_id": "u00010",
+      "case_type": "orphaned_service_account",
+      "expected_verdict": "ask_owner",
+      "verdict": "ask_owner",
+      "confidence": "high",
+      "rejected_citations": 0,
+      "incomplete_reason": null,
+      "steps": 6
+    },
+    {
+      "request_id": "REQ-0005",
+      "identity_id": "u00008",
+      "case_type": "policy_exception",
+      "expected_verdict": "disable_first",
+      "verdict": "disable_first",
+      "confidence": "high",
+      "rejected_citations": 0,
+      "incomplete_reason": null,
+      "steps": 5
+    },
+    {
+      "request_id": "REQ-0006",
+      "identity_id": "u00003",
+      "case_type": "policy_exception",
+      "expected_verdict": "disable_first",
+      "verdict": "disable_first",
+      "confidence": "high",
+      "rejected_citations": 0,
+      "incomplete_reason": null,
+      "steps": 5
+    },
+    {
+      "request_id": "REQ-0007",
+      "identity_id": "u00015",
+      "case_type": "shared_account",
+      "expected_verdict": "ask_owner",
+      "verdict": "ask_owner",
+      "confidence": "high",
+      "rejected_citations": 0,
+      "incomplete_reason": null,
+      "steps": 5
+    },
+    {
+      "request_id": "REQ-0008",
+      "identity_id": "u00005",
+      "case_type": "shared_account",
+      "expected_verdict": "ask_owner",
+      "verdict": "ask_owner",
+      "confidence": "high",
+      "rejected_citations": 0,
+      "incomplete_reason": null,
+      "steps": 5
+    },
+    {
+      "request_id": "REQ-0009",
+      "identity_id": "u00013",
+      "case_type": "break_glass",
+      "expected_verdict": "ask_owner",
+      "verdict": "ask_owner",
+      "confidence": "high",
+      "rejected_citations": 0,
+      "incomplete_reason": null,
+      "steps": 5
+    },
+    {
+      "request_id": "REQ-0010",
+      "identity_id": "u00009",
+      "case_type": "break_glass",
+      "expected_verdict": "ask_owner",
+      "verdict": "ask_owner",
+      "confidence": "high",
+      "rejected_citations": 0,
+      "incomplete_reason": null,
+      "steps": 5
+    },
+    {
+      "request_id": "REQ-0011",
+      "identity_id": "u00018",
+      "case_type": "decoy_safe",
+      "expected_verdict": "safe_to_delete",
+      "verdict": "safe_to_delete",
+      "confidence": "high",
+      "rejected_citations": 0,
+      "incomplete_reason": null,
+      "steps": 5
+    },
+    {
+      "request_id": "REQ-0012",
+      "identity_id": "u00006",
+      "case_type": "decoy_safe",
+      "expected_verdict": "safe_to_delete",
+      "verdict": "safe_to_delete",
+      "confidence": "high",
+      "rejected_citations": 0,
+      "incomplete_reason": null,
+      "steps": 5
+    },
+    {
+      "request_id": "REQ-0013",
+      "identity_id": "u00004",
+      "case_type": "decoy_safe",
+      "expected_verdict": "safe_to_delete",
+      "verdict": "safe_to_delete",
+      "confidence": "high",
+      "rejected_citations": 0,
+      "incomplete_reason": null,
+      "steps": 5
+    },
+    {
+      "request_id": "REQ-0014",
+      "identity_id": "u00017",
+      "case_type": "decoy_safe",
+      "expected_verdict": "safe_to_delete",
+      "verdict": "safe_to_delete",
+      "confidence": "high",
+      "rejected_citations": 0,
+      "incomplete_reason": null,
+      "steps": 5
+    },
+    {
+      "request_id": "REQ-0015",
+      "identity_id": "u00016",
+      "case_type": "decoy_safe",
+      "expected_verdict": "safe_to_delete",
+      "verdict": "safe_to_delete",
+      "confidence": "high",
+      "rejected_citations": 0,
+      "incomplete_reason": null,
+      "steps": 5
+    },
+    {
+      "request_id": "REQ-0016",
+      "identity_id": "u00019",
+      "case_type": "decoy_safe",
+      "expected_verdict": "safe_to_delete",
+      "verdict": "safe_to_delete",
+      "confidence": "high",
+      "rejected_citations": 0,
+      "incomplete_reason": null,
+      "steps": 5
+    },
+    {
+      "request_id": "REQ-0017",
+      "identity_id": "u00011",
+      "case_type": "decoy_safe",
+      "expected_verdict": "safe_to_delete",
+      "verdict": "safe_to_delete",
+      "confidence": "high",
+      "rejected_citations": 0,
+      "incomplete_reason": null,
+      "steps": 5
+    },
+    {
+      "request_id": "REQ-0018",
+      "identity_id": "u00012",
+      "case_type": "decoy_safe",
+      "expected_verdict": "safe_to_delete",
+      "verdict": "safe_to_delete",
+      "confidence": "high",
+      "rejected_citations": 0,
+      "incomplete_reason": null,
+      "steps": 5
+    },
+    {
+      "request_id": "REQ-0019",
+      "identity_id": "u00014",
+      "case_type": "decoy_safe",
+      "expected_verdict": "safe_to_delete",
+      "verdict": "safe_to_delete",
+      "confidence": "high",
+      "rejected_citations": 0,
+      "incomplete_reason": null,
+      "steps": 5
+    },
+    {
+      "request_id": "REQ-0020",
+      "identity_id": "u00001",
+      "case_type": "decoy_safe",
+      "expected_verdict": "safe_to_delete",
+      "verdict": "safe_to_delete",
+      "confidence": "high",
+      "rejected_citations": 0,
+      "incomplete_reason": null,
+      "steps": 5
+    }
+  ]
+}
