@@ -224,6 +224,7 @@ svg.d{display:block;width:100%;height:auto}
   <a href="#agent">Agentic workflow</a>
   <a class="sub" href="#loop">The request loop</a>
   <a class="sub" href="#layers">Five layers</a>
+  <a class="sub" href="#engine">LangGraph engine</a>
   <a href="#guardrails">Guardrails and proof</a>
   <h4>Delivery</h4>
   <a href="#roadmap">Roadmap</a>
@@ -250,7 +251,7 @@ svg.d{display:block;width:100%;height:auto}
     <div><dt>Output: one verdict, with confidence</dt><dd class="vs"><span class="v v-safe">safe_to_delete</span><span class="v v-disable">disable_first</span><span class="v v-ask">ask_owner</span><span class="v v-none">insufficient_evidence</span></dd></div>
     <div><dt>Hard gate</dt><dd><b>0</b> unsafe-delete recommendations. Recall ≥ 90%<span class="target">target</span> precision ≥ 80%<span class="target">target</span></dd></div>
   </dl>
-  <div class="note"><p><b>Status, 2026-10-17.</b> Week 1 is done (synthetic org, read-only tools, baseline). Week 2, the investigator loop, is in progress: the models and the evidence source interface are merged (PR 2.1, 2.2), and so are the LLM client and the generator refactor (PR 2.3, R1). The investigator loop is merged too (PR 2.4, then 2.4b–d: a local model, the run monitor, evidence freshness and incomplete runs). The bench is in review (PR 2.5, 129 tests): gemma4 made 0 unsafe deletes and got 20 of 20 on the synthetic org, locally on Ollama and hosted on OpenRouter (under 1 cent), which proves the plumbing, not production quality. Next: a Rust terminal UI for smoke runs; <a href="week-2.html">read the plan</a>. Numbers marked <span class="target">target</span> are goals, not results.</p></div>
+  <div class="note"><p><b>Status, 2026-10-17.</b> Week 1 is done (synthetic org, read-only tools, baseline). Week 2, the investigator loop, is in progress: the models and the evidence source interface are merged (PR 2.1, 2.2), and so are the LLM client and the generator refactor (PR 2.3, R1). The investigator loop is merged too (PR 2.4, then 2.4b–d: a local model, the run monitor, evidence freshness and incomplete runs). The bench is in review (PR 2.5): gemma4 made 0 unsafe deletes and got 20 of 20 on the synthetic org, locally on Ollama and hosted on OpenRouter (under 1 cent), which proves the plumbing, not production quality. The investigator now runs as a LangGraph graph (PR 2.7, in review, 136 tests). Next: a Rust terminal UI for smoke runs; <a href="week-2.html">read the plan</a>. Numbers marked <span class="target">target</span> are goals, not results.</p></div>
 </section>
 
 <section id="system" class="wide">
@@ -263,11 +264,11 @@ svg.d{display:block;width:100%;height:auto}
       <svg class="d" viewBox="0 0 1080 380" style="min-width:880px" role="img" aria-label="System diagram. A change request goes to the ChangeWorkflow, then the Investigator, which produces a RiskReport checked by guardrails, then human approval, then the executor, which writes an audit log. The investigator uses two interfaces, EvidenceSource implemented by SyntheticSource and LLMClient implemented by BedrockClient and FakeLLM.">
         <defs><marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" class="ah"/></marker></defs>
         <rect class="node" x="20" y="40" width="150" height="62" rx="8"/><text class="h" x="36" y="66">Change request</text><text class="s" x="36" y="86">identity_id · action</text>
-        <rect class="node later" x="200" y="40" width="160" height="62" rx="8"/><text class="h" x="216" y="66">ChangeWorkflow</text><text class="s" x="216" y="86">Temporal · week 3</text>
-        <rect class="llm" x="390" y="40" width="170" height="62" rx="8"/><text class="h" x="406" y="66">Investigator</text><text class="s" x="406" y="86">Claude tool loop · ≤ 8 calls</text>
+        <rect class="node later" x="200" y="40" width="160" height="62" rx="8"/><text class="h" x="216" y="66">ChangeWorkflow</text><text class="s" x="216" y="86">LangGraph · week 3</text>
+        <rect class="llm" x="390" y="40" width="170" height="62" rx="8"/><text class="h" x="406" y="66">Investigator</text><text class="s" x="406" y="86">LangGraph graph · ≤ 8 steps</text>
         <rect class="node" x="590" y="40" width="160" height="62" rx="8"/><text class="h" x="606" y="66">RiskReport</text><text class="s" x="606" y="86">verdict · findings · ev-ids</text>
         <rect class="guard" x="780" y="40" width="170" height="62" rx="8"/><text class="h" x="796" y="66">Guardrails</text><text class="s" x="796" y="86">code decides what may run</text>
-        <rect class="guard later" x="780" y="150" width="170" height="62" rx="8"/><text class="h" x="796" y="176">Human approval</text><text class="s" x="796" y="196">Temporal signal · week 3</text>
+        <rect class="guard later" x="780" y="150" width="170" height="62" rx="8"/><text class="h" x="796" y="176">Human approval</text><text class="s" x="796" y="196">LangGraph interrupt() · wk 3</text>
         <rect class="tool later" x="780" y="262" width="170" height="62" rx="8"/><text class="h" x="796" y="288">Executor</text><text class="s" x="796" y="308">dry-run · disable · undo</text>
         <rect class="node later" x="972" y="262" width="96" height="62" rx="8"/><text class="h" x="984" y="288">Audit log</text><text class="s" x="984" y="308">append-only</text>
 
@@ -296,7 +297,7 @@ svg.d{display:block;width:100%;height:auto}
       <thead><tr><th>System</th><th>Status</th><th>How</th></tr></thead>
       <tbody>
         <tr><td>Claude</td><td>Real (Bedrock)</td><td><code>FakeLLM</code> in unit tests</td></tr>
-        <tr><td>Workflow engine</td><td>Real</td><td><code>temporal server start-dev</code></td></tr>
+        <tr><td>Agent engine</td><td>Real</td><td>LangGraph, in process; checkpoints in memory now, Postgres later</td></tr>
         <tr><td>Database</td><td>Real</td><td>SQLite now, Postgres in Docker later</td></tr>
         <tr><td>IAM, logs, tickets</td><td>Simulated</td><td><code>SyntheticSource</code> with planted dependencies</td></tr>
         <tr><td>Internal docs</td><td>Simulated, week 4</td><td>Synthetic runbooks and threads that never name the account id</td></tr>
@@ -309,7 +310,7 @@ svg.d{display:block;width:100%;height:auto}
 <section id="agent" class="wide">
   <h2><a class="anchor" href="#agent">Agentic workflow</a></h2>
   <div class="doc">
-    <p>One LLM worker, not a team of agents. The steps around it are plain code, so the order can't be talked out of, and every exit from the loop carries evidence ids that code assigned.</p>
+    <p>One LLM worker, not a team of agents. The steps around it are a LangGraph state graph whose nodes call small rule functions, so the order can't be talked out of, and every exit from the graph carries evidence ids that code assigned. <a href="#engine">Why LangGraph</a>.</p>
   </div>
 
   <h3 id="loop">The request loop</h3>
@@ -333,7 +334,7 @@ svg.d{display:block;width:100%;height:auto}
         <g data-step="1"><rect class="node" x="30" y="58" width="150" height="60" rx="8"/><text class="h" x="46" y="84">Change request</text><text class="s" x="46" y="103">identity_id · action</text>
           <path class="e" d="M180 88H216" marker-end="url(#a2)"/></g>
 
-        <g data-step="2"><rect class="llm" x="220" y="58" width="170" height="60" rx="8"/><text class="h" x="236" y="84">Investigator</text><text class="s" x="236" y="103">Claude in a loop · ≤ 8 calls</text>
+        <g data-step="2"><rect class="llm" x="220" y="58" width="170" height="60" rx="8"/><text class="h" x="236" y="84">Investigator</text><text class="s" x="236" y="103">LangGraph · ≤ 8 steps</text>
           <rect class="tool" x="220" y="208" width="170" height="60" rx="8"/><text class="h" x="236" y="234">Read-only tools</text><text class="s" x="236" y="253">5 tools · SQLite mode=ro</text>
           <path class="e" d="M338 118V204" marker-end="url(#a2)"/><path class="e" d="M262 208V122" marker-end="url(#a2)"/>
           <text class="l" x="254" y="168" text-anchor="end">evidence + ev-id</text><text class="l" x="346" y="186">call</text></g>
@@ -368,11 +369,11 @@ svg.d{display:block;width:100%;height:auto}
   <p class="doc">The standard layers of an agentic system, mapped onto this project. Edge labels are the payload that moves along each edge.</p>
   <figure>
     <div class="fig">
-      <svg class="d" viewBox="0 0 900 600" style="min-width:860px" role="img" aria-label="Five layers: orchestration in plain code, the investigator worker with a tool loop, memory and state, the read-only tool boundary with the human approval gate before the executor, and a citation-check critique in code.">
+      <svg class="d" viewBox="0 0 900 600" style="min-width:860px" role="img" aria-label="Five layers: orchestration as a LangGraph graph, the investigator worker with model and tools nodes, memory and state, the read-only tool boundary with the human approval gate before the executor, and a citation-check critique in code.">
         <defs><marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" class="ah"/></marker></defs>
-        <rect class="zone" x="10" y="10" width="880" height="120" rx="12"/><text class="t" x="26" y="34">1 · ORCHESTRATION · PLAIN CODE, NO LLM ROUTER</text>
+        <rect class="zone" x="10" y="10" width="880" height="120" rx="12"/><text class="t" x="26" y="34">1 · ORCHESTRATION · LANGGRAPH, NO LLM ROUTER</text>
         <rect class="node" x="30" y="52" width="170" height="60" rx="8"/><text class="h" x="115" y="78" text-anchor="middle">ChangeRequest</text><text class="s" x="115" y="96" text-anchor="middle">identity_id · action</text>
-        <rect class="node later" x="350" y="52" width="200" height="60" rx="8"/><text class="h" x="450" y="78" text-anchor="middle">ChangeWorkflow</text><text class="s" x="450" y="96" text-anchor="middle">supervisor · Temporal · week 3</text>
+        <rect class="node later" x="350" y="52" width="200" height="60" rx="8"/><text class="h" x="450" y="78" text-anchor="middle">ChangeWorkflow</text><text class="s" x="450" y="96" text-anchor="middle">supervisor · LangGraph · week 3</text>
         <rect class="node later" x="690" y="52" width="180" height="60" rx="8"/><text class="h" x="780" y="78" text-anchor="middle">Fixed DAG</text><text class="s" x="780" y="96" text-anchor="middle">check → approve → act</text>
         <path class="e" d="M200 82H346" marker-end="url(#a3)"/><path class="e" d="M550 82H686" marker-end="url(#a3)"/><path class="e" d="M450 112V156" marker-end="url(#a3)"/>
 
@@ -383,7 +384,7 @@ svg.d{display:block;width:100%;height:auto}
 
         <rect class="zone" x="275" y="160" width="360" height="220" rx="12"/><text class="t" x="291" y="184">2 · WORKER · INVESTIGATOR</text>
         <rect class="llm" x="305" y="198" width="170" height="58" rx="8"/><text class="h" x="390" y="222" text-anchor="middle">Claude · LLMClient</text><text class="s" x="390" y="241" text-anchor="middle">Bedrock | FakeLLM</text>
-        <rect class="node" x="305" y="308" width="170" height="58" rx="8"/><text class="h" x="390" y="332" text-anchor="middle">Investigator loop</text><text class="s" x="390" y="351" text-anchor="middle">dispatch · ≤ 8 calls</text>
+        <rect class="node" x="305" y="308" width="170" height="58" rx="8"/><text class="h" x="390" y="332" text-anchor="middle">Investigator graph</text><text class="s" x="390" y="351" text-anchor="middle">tools node · ≤ 8 steps</text>
         <path class="e" d="M355 256V304" marker-end="url(#a3)"/><path class="e" d="M425 308V260" marker-end="url(#a3)"/>
         <path class="e" d="M245 224H301" marker-end="url(#a3)"/><path class="e" d="M305 338H249" marker-end="url(#a3)"/>
 
@@ -410,6 +411,66 @@ svg.d{display:block;width:100%;height:auto}
     </div>
     <div class="legend"><span><i class="k-llm"></i>LLM call</span><span><i class="k-code"></i>Code or state</span><span><i class="k-tool"></i>Tool or action</span><span><i class="k-guard"></i>Guardrail or human</span><span><i class="k-later"></i>Dashed: week 3 or later</span></div>
   </figure>
+
+  <h3 id="engine">LangGraph engine</h3>
+  <div class="doc">
+    <p>The investigator is a LangGraph <code>StateGraph</code> (<code>src/cia/graph.py</code>), not a <code>while True</code> loop. The model only proposes; each node calls a small rule function that is tested on its own. <code>make graph</code> prints this graph as Mermaid from the code.</p>
+  </div>
+  <figure>
+    <div class="fig">
+      <svg class="d" viewBox="0 0 1000 250" style="min-width:860px" role="img" aria-label="The investigator graph. START goes to model. model goes to tools when it calls tools, or to nudge when it does not; nudge goes back to model. tools goes back to model with the results, or to check on submit_report. check goes to finish when the report is accepted, or back to tools once with the rejected ids. finish goes to END. Any node that would take step 9 goes to cap, which returns insufficient_evidence.">
+        <defs><marker id="a6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" class="ah"/></marker></defs>
+        <rect class="node" x="20" y="64" width="70" height="48" rx="24"/><text class="h" x="55" y="93" text-anchor="middle">START</text>
+        <rect class="llm" x="130" y="60" width="150" height="56" rx="8"/><text class="h" x="205" y="84" text-anchor="middle">model</text><text class="s" x="205" y="103" text-anchor="middle">LLMClient.converse</text>
+        <rect class="tool" x="330" y="60" width="160" height="56" rx="8"/><text class="h" x="410" y="84" text-anchor="middle">tools</text><text class="s" x="410" y="103" text-anchor="middle">read-only · ev-ids</text>
+        <rect class="guard" x="540" y="60" width="160" height="56" rx="8"/><text class="h" x="620" y="84" text-anchor="middle">check</text><text class="s" x="620" y="103" text-anchor="middle">cited ids ⊆ evidence</text>
+        <rect class="guard" x="745" y="60" width="150" height="56" rx="8"/><text class="h" x="820" y="84" text-anchor="middle">finish</text><text class="s" x="820" y="103" text-anchor="middle">incomplete ≠ safe</text>
+        <rect class="node" x="920" y="64" width="64" height="48" rx="24"/><text class="h" x="952" y="93" text-anchor="middle">END</text>
+        <rect class="node" x="130" y="176" width="150" height="56" rx="8"/><text class="h" x="205" y="200" text-anchor="middle">nudge</text><text class="s" x="205" y="219" text-anchor="middle">no tool call · +1 step</text>
+        <rect class="guard" x="330" y="176" width="160" height="56" rx="8"/><text class="h" x="410" y="200" text-anchor="middle">cap</text><text class="s" x="410" y="219" text-anchor="middle">→ insufficient_evidence</text>
+        <g marker-end="url(#a6)">
+          <path class="e" d="M90 88H126"/><path class="e" d="M280 88H326"/><path class="e" d="M490 88H536"/>
+          <path class="e" d="M700 88H741"/><path class="e" d="M895 88H916"/>
+          <path class="e" d="M410 60V30H205V56"/>
+          <path class="e" d="M600 116V146H470V120"/>
+          <path class="e" d="M180 116V172"/><path class="e" d="M230 176V120"/>
+          <path class="e" d="M370 116V172"/>
+        </g>
+        <text class="l" x="303" y="80" text-anchor="middle">calls</text><text class="l" x="513" y="80" text-anchor="middle">submit</text>
+        <text class="l" x="720" y="80" text-anchor="middle">ok</text><text class="l" x="308" y="24" text-anchor="middle">results → next turn</text>
+        <text class="l" x="535" y="162" text-anchor="middle">sent back ×1</text><text class="l" x="174" y="150" text-anchor="end">no call</text>
+        <text class="l" x="378" y="150">step 9</text>
+      </svg>
+    </div>
+    <div class="legend"><span><i class="k-llm"></i>LLM call</span><span><i class="k-tool"></i>Read-only tools</span><span><i class="k-guard"></i>Rule in code</span><span><i class="k-code"></i>Graph node</span></div>
+  </figure>
+  <div class="doc">
+    <h3>Why LangGraph</h3>
+    <ul>
+      <li><b>Easy to read.</b> The graph is the design: nodes and routes are named, and <code>make graph</code> prints the same picture from the code, so the drawing can't drift.</li>
+      <li><b>Explicit routing.</b> Each branch (more tools, submit, retry, cap) is a small routing function with a test, not a jump inside a loop.</li>
+      <li><b>State and checkpoints.</b> Every step's state is saved under the request id, so a run can be inspected step by step and resumed.</li>
+      <li><b>Human approval built in.</b> <code>interrupt()</code> pauses the graph before the executor and resumes on the human's answer (week 3). Durable waits use a Postgres checkpointer.</li>
+      <li><b>The standard for agentic Python.</b> Reviewers know it; it keeps our own interfaces (<code>LLMClient</code>, <code>EvidenceSource</code>, Pydantic <code>RiskReport</code>). We don't use LangChain models or tools.</li>
+    </ul>
+    <h3>Features we use</h3>
+    <div class="tbl"><table>
+      <thead><tr><th>LangGraph feature</th><th>How we use it</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>Typed state</td><td><code>RunState</code>: messages, evidence log, steps, coverage, retry spent, report</td><td><span class="st st-done">built</span></td></tr>
+        <tr><td>Nodes</td><td><code>model</code>, <code>tools</code>, <code>check</code>, <code>finish</code>, <code>nudge</code>, <code>cap</code></td><td><span class="st st-done">built</span></td></tr>
+        <tr><td>Conditional edges</td><td>After model: tools, nudge or cap. After tools: model, check or cap. After check: finish or back to tools</td><td><span class="st st-done">built</span></td></tr>
+        <tr><td>Step cap</td><td>Our step counter routes to <code>cap</code> (<span class="v v-none">insufficient_evidence</span>); <code>recursion_limit</code> is only a backstop</td><td><span class="st st-done">built</span></td></tr>
+        <tr><td>Loop with a limit</td><td>Citation check sends a report back once with the rejected ids, then drops bad findings</td><td><span class="st st-done">built</span></td></tr>
+        <tr><td>Events</td><td>Nodes emit the same JSON-lines events; the monitor and the Rust UI don't change</td><td><span class="st st-done">built</span></td></tr>
+        <tr><td>Checkpointer</td><td><code>InMemorySaver</code> with an allow-list of our state types; Postgres saver later</td><td><span class="st st-done">built</span> · Postgres later</td></tr>
+        <tr><td><code>interrupt()</code> + <code>Command(resume=…)</code></td><td>Human approval before the executor</td><td><span class="st">week 3</span></td></tr>
+        <tr><td>Graph drawing</td><td><code>make graph</code> → Mermaid (<code>draw_mermaid()</code>)</td><td><span class="st st-done">built</span></td></tr>
+      </tbody>
+    </table></div>
+    <div class="note"><p><b>What stays in code:</b> LangGraph decides the order; it never decides what is safe. Evidence ids, the step cap, the citation check and "incomplete is never safe" are plain functions in <code>graph.py</code>, each with a unit test.</p></div>
+  </div>
+
 </section>
 
 <section id="guardrails" class="doc">
@@ -446,8 +507,8 @@ svg.d{display:block;width:100%;height:auto}
   <h2><a class="anchor" href="#roadmap">Roadmap</a></h2>
   <ol class="weeks">
     <li class="done"><span class="wk">Week 1</span><div><h3>Synthetic org and baseline <span class="st st-done">done</span></h3><p>Org generator with planted dependencies, five read-only tools, naive baseline that breaks 6 of 10 risky cases.</p></div></li>
-    <li class="now"><span class="wk">Week 2</span><div><h3>Investigator loop <span class="st st-now">in progress</span></h3><p><code>LLMClient</code>, <code>FakeLLM</code>, Bedrock Converse, the tool loop and a Pydantic <code>RiskReport</code> with the citation check. <a href="week-2.html">Week 2 plan</a></p></div></li>
-    <li><span class="wk">Week 3</span><div><h3>Chains, guardrails, approval <span class="st">planned</span></h3><p>Credential chains with multi-hop dependencies (Q10), guardrails in code, Temporal approval signal, reversible executor and audit log.</p></div></li>
+    <li class="now"><span class="wk">Week 2</span><div><h3>Investigator loop <span class="st st-now">in progress</span></h3><p><code>LLMClient</code>, <code>FakeLLM</code>, Bedrock Converse, the investigator as a LangGraph graph and a Pydantic <code>RiskReport</code> with the citation check. <a href="week-2.html">Week 2 plan</a></p></div></li>
+    <li><span class="wk">Week 3</span><div><h3>Chains, guardrails, approval <span class="st">planned</span></h3><p>Credential chains with multi-hop dependencies (Q10), guardrails in code, human approval with LangGraph <code>interrupt()</code>, reversible executor and audit log.</p></div></li>
     <li><span class="wk">Week 4</span><div><h3>Proof and launch <span class="st">planned</span></h3><p>Full benchmark, red-team cases, results table, demo page. Experiment: doc index on pgvector with multi-round search (Q9, Q11).</p></div></li>
   </ol>
 </section>
@@ -472,12 +533,13 @@ svg.d{display:block;width:100%;height:auto}
       <tr><td class="n"><a href="https://github.com/odedgol/change-impact-agent/pull/14">2.4d</a></td><td><code>w2/evidence-freshness</code></td><td>Evidence freshness fields; <code>insufficient_evidence</code> verdict for incomplete runs (step cap, unread required evidence, failing source)</td><td><code>test_incomplete_and_freshness.py</code> (15)</td><td><span class="st st-done">merged</span></td></tr>
       <tr><td class="n">2.5</td><td><code>w2/bench-results</code></td><td><code>bench.py</code> (fake, Ollama, OpenRouter, Bedrock), <code>make bench-fake</code> in CI, results on the plan. <code>OpenRouterClient</code> next to the Ollama client; one <code>make_client</code> factory. Fixes an empty model turn Ollama rejected (HTTP 400); <code>stop_reason</code> in events; configurable output limit</td><td><code>unsafe_deletes: 0</code>, <code>test_bench.py</code> (7), <code>test_openrouter.py</code> (11), <code>test_env.py</code> (4)</td><td><span class="st st-now">in review</span></td></tr>
       <tr><td class="n">2.4e</td><td><code>w2/monitor-flow</code></td><td>Monitor: <b>Flow</b> tab draws each run on the agent's five levels (React Flow): orchestration, worker (model ⇅ loop), memory (messages, evidence log), self-critique (guards, citation check) and the tool boundary (read-only tools, refused calls, the planned write path). Boxes carry the run's numbers; a replay bar steps through the events and lights the current arrow; click a box for its step. Runs filter by the model they used</td><td><code>test_monitor.py</code> (11), browser check light, dark, phone</td><td><span class="st st-now">in review</span></td></tr>
+      <tr><td class="n">2.7</td><td><code>w2/langgraph-engine</code></td><td>Investigator runs as a LangGraph <code>StateGraph</code> (<code>graph.py</code>): nodes <code>model</code>, <code>tools</code>, <code>check</code>, <code>finish</code>, <code>nudge</code>, <code>cap</code>; the <code>while True</code> loop is gone. Same events, same verdicts. Optional checkpointer (allow-listed state types); <code>make graph</code> prints the Mermaid. <a href="#engine">Why LangGraph</a></td><td>all 136 tests, <code>test_graph.py</code> (6), <code>make bench-fake</code> 0 unsafe deletes</td><td><span class="st st-now">in review</span></td></tr>
       <tr><td class="n">2.6</td><td><code>w2/tui-smoke</code></td><td>Rust terminal UI (<code>tui/</code>, ratatui) that replays the event stream; <code>make smoke</code> = <code>FakeLLM</code> run piped into it</td><td><code>cargo fmt</code>, <code>clippy</code>, <code>cargo test</code> (replay of a recorded run)</td><td><span class="st">to do</span></td></tr>
     </tbody>
   </table></div>
   <h3>Later sprints</h3>
   <div class="two">
-    <div class="box"><h3>Sprint 3</h3><p>3.1 credential chain (Q10), one new command · 3.2 guardrails in code · 3.3 Temporal approval · 3.4 executor and audit log</p></div>
+    <div class="box"><h3>Sprint 3</h3><p>3.1 credential chain (Q10), one new command · 3.2 guardrails in code · 3.3 human approval with LangGraph <code>interrupt()</code> · 3.4 executor and audit log</p></div>
     <div class="box"><h3>Sprint 4</h3><p>4.1 full benchmark · 4.2 red-team cases · 4.3 doc index experiment (Q9, Q11) · 4.4 results, demo (the Rust UI on a Bedrock run), README</p></div>
   </div>
 </section>
@@ -489,7 +551,7 @@ svg.d{display:block;width:100%;height:auto}
     <tbody>
       <tr><td>Language</td><td>Python 3.12, Pydantic v2, pytest, Ruff</td><td>Pydantic rejects a finding without evidence ids before anyone sees it</td><td class="n">now</td></tr>
       <tr><td>LLM</td><td>Claude Sonnet 5.5 on Bedrock; gemma4:26b on Ollama locally; Gemma 4 31B (free) on OpenRouter</td><td>Converse API via boto3, temperature 0, model id from <code>CIA_BEDROCK_MODEL_ID</code>. Locally, <code>OpenAICompatClient</code> talks to Ollama (standard library only): free, offline, and the same path as vLLM in a private cloud. <code>OpenRouterClient</code> reuses that mapping for hosted open models (<code>OPENROUTER_API_KEY</code>, 429s retried), so a bench doesn't tie up the laptop; prompts leave the machine, so synthetic data only</td><td class="n">week 2</td></tr>
-      <tr><td>Orchestration</td><td>Temporal</td><td>A durable wait for approval that can last days; LLM and DB calls run as activities</td><td class="n">week 3</td></tr>
+      <tr><td>Orchestration</td><td>LangGraph 1.2</td><td>The investigator is a state graph: readable, each route tested, checkpoints per step, and <code>interrupt()</code> for human approval. Our own <code>LLMClient</code> and tools; no LangChain models. Temporal stays an option if waits must outlive the process store</td><td class="n">now</td></tr>
       <tr><td>Data</td><td>SQLite read-only → Postgres + pgvector</td><td>Read-only enforced by the engine; pgvector for the doc index</td><td class="n">now → wk 4</td></tr>
       <tr><td>Terminal UI</td><td>Rust, ratatui</td><td>Watch a run step by step: tool calls with their <code>ev-…</code> ids, then the verdict. A separate binary that only reads JSON lines, so it never touches the agent or a cloud</td><td class="n">week 2</td></tr>
       <tr><td>Run monitor</td><td>One HTML page + Python stdlib server; React Flow 12 for the graph</td><td>Test and watch runs in a browser: live trace over server-sent events, a flow graph of each run (React Flow, pinned, loaded from a CDN with no build step; the Steps tab works offline), citation threads, guardrail events, a model filter. Same JSON-lines stream as the Rust UI</td><td class="n">week 2</td></tr>
@@ -505,7 +567,7 @@ svg.d{display:block;width:100%;height:auto}
     <tbody>
       <tr><td>LLM</td><td><code>LLMClient</code></td><td><code>BedrockClient</code> (Claude)</td><td><code>OpenAICompatClient</code> (built, PR 2.4b) to vLLM or Ollama; <code>OpenRouterClient</code> (built, PR 2.5) for hosted open models when egress is allowed; or the Anthropic API</td></tr>
       <tr><td>Identity evidence</td><td><code>EvidenceSource</code></td><td><code>AwsSource</code> (IAM, CloudTrail)</td><td><code>KeycloakSource</code>, LDAP or Active Directory</td></tr>
-      <tr><td>Approval workflow</td><td>Temporal (open source)</td><td>Temporal on ECS or Temporal Cloud</td><td>Self-hosted Temporal on Kubernetes</td></tr>
+      <tr><td>Agent graph and approval</td><td>LangGraph (open source) + checkpointer</td><td>Postgres checkpointer on RDS</td><td>Postgres checkpointer on Kubernetes or a VM</td></tr>
       <tr><td>Database</td><td>Postgres + pgvector (plain SQL)</td><td>RDS</td><td>Postgres on Kubernetes or a VM</td></tr>
       <tr><td>Audit log</td><td><code>AuditSink</code></td><td>S3 with Object Lock</td><td>MinIO with object locking, or an append-only Postgres table with a hash chain</td></tr>
       <tr><td>Compute</td><td>OCI container image</td><td>ECS Fargate</td><td>Kubernetes</td></tr>
@@ -575,7 +637,7 @@ gh pr merge --squash --delete-branch</code></pre>
       <tr><td class="n">FR2</td><td>Investigate with read-only evidence tools: usage, dependencies, tickets, owner.</td></tr>
       <tr><td class="n">FR3</td><td>Return a structured <code>RiskReport</code>; each finding cites evidence ids and has a confidence.</td></tr>
       <tr><td class="n">FR4</td><td>Guardrails in code decide what may proceed; the prompt is not a control.</td></tr>
-      <tr><td class="n">FR5</td><td>Wait for human approval (Temporal signal) before any action.</td></tr>
+      <tr><td class="n">FR5</td><td>Wait for human approval (LangGraph <code>interrupt()</code>) before any action.</td></tr>
       <tr><td class="n">FR6</td><td>Executor: dry-run, disable first, undo, idempotent.</td></tr>
       <tr><td class="n">FR7</td><td>Append-only audit log.</td></tr>
       <tr><td class="n">FR8</td><td>Benchmark harness: recall, precision, calibration, stability, cost.</td></tr>
@@ -626,7 +688,7 @@ gh pr merge --squash --delete-branch</code></pre>
     "<b>2 · Investigate.</b> Claude calls read-only tools, at most 8 times. Each result is logged with an id code assigns, such as <span class=\"ev\">ev-deps-3</span>.",
     "<b>3 · Check citations.</b> Code compares every cited id with the evidence log. Unknown ids drop the finding, the model gets one retry, and a safe_to_delete with any rejection becomes ask_owner.",
     "<b>4 · Report.</b> A Pydantic RiskReport: one verdict, a confidence, and findings that each cite at least one evidence id.",
-    "<b>5 · Approve.</b> A person reads the report. If they decline, nothing changes and the owner is asked. Temporal holds the wait, week 3.",
+    "<b>5 · Approve.</b> A person reads the report. If they decline, nothing changes and the owner is asked. LangGraph <code>interrupt()</code> holds the wait, week 3.",
     "<b>6 · Execute.</b> Only after approval: dry-run, disable first, wait a quiet period, then delete or restore. Every step goes to an append-only audit log."
   ];
   function go(n){

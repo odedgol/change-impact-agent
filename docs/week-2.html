@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <script>try{var t=localStorage.getItem("cia-theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
 <title>Week 2 Plan</title>
-<meta name="description" content="Plan 001: the investigator tool loop, LLMClient interfaces and the RiskReport with a citation check.">
+<meta name="description" content="Plan 001: the investigator (a LangGraph graph), LLMClient interfaces and the RiskReport with a citation check.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
@@ -291,7 +291,7 @@ ul.check ul{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}
     </ul></div>
     <div class="box out"><h3>Out, week 3 and later</h3><ul>
       <li>Guardrails beyond the citation check</li>
-      <li>Temporal approval, executor, audit log</li>
+      <li>Human approval (LangGraph <code>interrupt()</code>), executor, audit log</li>
       <li>Credential chain (Q10), doc index (Q9, Q11)</li>
       <li>FastAPI, Postgres, red-team cases</li>
     </ul></div>
@@ -319,6 +319,7 @@ ul.check ul{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}
       <tr><td class="n">Incomplete</td><td>What if the run can't check everything?</td><td><span class="v v-none">insufficient_evidence</span>: step cap, a failing source, or a <code>safe_to_delete</code> without usage, dependencies and tickets read in full. Never permits a delete</td></tr>
       <tr><td class="n">Fresh</td><td>How old is the evidence?</td><td>Optional <code>collected_at</code>, <code>source_name</code>, <code>source_updated_at</code> on each <code>Evidence</code>; <code>None</code> when the source doesn't say, never invented. Event timestamps are not freshness</td></tr>
       <tr><td class="n">UI</td><td>How do we watch a smoke run?</td><td>In a browser now: the run monitor (<code>make monitor</code>). Later also A Rust terminal UI (ratatui) in <code>tui/</code> that reads the investigator's JSON-lines events. Decoupled: it never imports the agent, and it can replay a saved run with no cloud access</td></tr>
+      <tr><td class="n">Engine</td><td>Hand-written loop or a framework?</td><td>LangGraph <code>StateGraph</code> (PR 2.7): easy to read, each route tested, checkpoints per step, <code>interrupt()</code> for the week-3 approval. The rules stay plain functions; our <code>LLMClient</code> and tools stay. Human approval moves from Temporal to <code>interrupt()</code> (<a href="index.html#engine">why</a>)</td></tr>
       <tr><td class="n">PR</td><td>How does the work land?</td><td>Small PRs into <code>main</code> (2.1–2.6, plus 2.4b–d), each tested and reviewed (<a href="index.html#workflow">PR workflow</a>)</td></tr>
     </tbody>
   </table></div>
@@ -367,6 +368,7 @@ ul.check ul{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}
     <li><span><span class="step-file">src/cia/investigator.py</span>Loop until <code>submit_report</code> or the cap; citation check with one retry. <code>--events</code> writes one JSON line per step (request, tool call with its evidence id, verdict) for the UI. Code sets <code>request_id</code> and <code>rejected_citations</code>; a report that tries to is sent back.</span><span class="step-pr done">PR 2.4 · merged</span></li>
     <li><span><span class="step-file">src/cia/llm.py</span><code>OpenRouterClient</code>, a second OpenAI-compatible adapter next to the Ollama one (same <code>LLMClient</code> interface): OpenRouter URL, <code>OPENROUTER_API_KEY</code>, default <code>google/gemma-4-31b-it:free</code>, retries on 429/502/503. <code>make_client(llm, model)</code> is the one place the CLIs and the monitor build a client. Empty model turns are sent as <code>""</code> (Ollama rejected <code>null</code> with HTTP 400); HTTP errors keep the server's reason; <code>model_turn</code> events carry <code>stop_reason</code>; output limit via <code>CIA_OPENAI_MAX_TOKENS</code>. Settings load from a git-ignored <code>.env</code> (<code>src/cia/env.py</code>, <code>.env.example</code>); the shell always wins.</span><span class="step-pr">PR 2.5 · in review</span></li>
     <li><span><span class="step-file">src/cia/bench.py · Makefile · ci.yml</span><code>--llm fake|openai|bedrock</code>; prints <code>unsafe_deletes</code>, recall, precision, accuracy, false alarms, incomplete runs and errors, and exits 1 if <code>unsafe_deletes &gt; 0</code>. <code>make bench-fake</code> (in CI), <code>make bench-local MODEL=…</code>, <code>make bench-bedrock</code>. Each case writes <code>runs/bench-*.jsonl</code>, so the monitor lists it. Fake mode is a rule standing in for the model: a plumbing check, not a quality claim.</span><span class="step-pr">PR 2.5 · in review</span></li>
+    <li><span><span class="step-file">src/cia/graph.py · investigator.py</span>The investigator as a LangGraph <code>StateGraph</code>: nodes <code>model</code>, <code>tools</code>, <code>check</code>, <code>finish</code>, <code>nudge</code>, <code>cap</code> with conditional routes; the rules (coverage, finish, citation drop, cap) are plain functions. Same events and verdicts as the loop it replaces. Optional checkpointer with an allow-list of our state types; <code>make graph</code> prints the Mermaid.</span><span class="step-pr">PR 2.7 · in review</span></li>
     <li><span><span class="step-file">tests/</span>The tests under Validation; <code>ruff check</code> clean.</span><span class="step-pr">each PR</span></li>
     <li><span><span class="step-file">tui/ · Makefile · ci.yml</span>Rust terminal UI (ratatui) that reads the event stream from stdin or a file and shows each request step by step, then a colour-coded verdict with its citations. <code>make smoke</code> runs a few requests with <code>FakeLLM</code> and pipes them in. New CI job <code>tui</code>.</span><span class="step-pr">PR 2.6</span></li>
     <li><span><span class="step-file">docs/</span>Record results here and update the roadmap.</span><span class="step-pr">PR 2.5 · in review</span></li>
@@ -377,7 +379,7 @@ ul.check ul{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}
   <h2>Validation</h2>
   <p>Each item is provable by a command or a test. CI runs <code>make test</code> and <code>make lint</code> on every PR; <code>make bench-fake</code> joins in PR 2.5.</p>
   <ul class="check">
-    <li class="done"><span><code>make test</code> passes; the 7 week-1 tests are unchanged. <em>130 passed after PR 2.4e.</em></span></li>
+    <li class="done"><span><code>make test</code> passes; the 7 week-1 tests are unchanged. <em>136 passed after PR 2.7.</em></span></li>
     <li class="done"><span><code>make lint</code> exits 0, in CI from PR 2.1.</span></li>
     <li class="done"><span><code>test_models.py</code>: empty <code>evidence_ids</code> and an invalid verdict both raise; also bad confidence, unknown fields, malformed evidence ids, JSON parsing and immutability (11 tests).</span></li>
     <li class="done"><span><code>test_llm_fake.py</code>: scripted turns come back in order, calls are recorded, an exhausted script raises (4 tests).</span></li>
@@ -394,6 +396,7 @@ ul.check ul{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}
     <li class="done"><span><code>test_bedrock_mapping.py</code>: Converse request, response, tool-result and error mapping with a stubbed client, no network or AWS (7 tests).</span></li>
     <li class="done"><span><code>test_incomplete_and_freshness.py</code>: old evidence and reports still validate; freshness recorded, unknown update time stays <code>None</code>; a missing ticket check, unread pages or a failing source turn <code>safe_to_delete</code> into <code>insufficient_evidence</code>; only <code>safe_to_delete</code> permits a delete (15 tests).</span></li>
     <li class="done"><span><code>test_monitor.py</code>: start a run over HTTP, stream its events, list it with verdict and expected verdict; a failing model shows as an error; bad request ids, model names and path traversal are rejected; the page pins React Flow and renders model output as text only (11 tests).</span></li>
+    <li class="done"><span><code>test_graph.py</code> (6 tests): the graph has the agreed nodes and routes; coverage, finish and citation-drop rules on their own; the step cap fires before LangGraph's <code>recursion_limit</code>; a checkpointer saves each step under the request id. The 20 investigator tests pass unchanged on the graph.</span></li>
     <li class="done"><span><code>make bench-fake</code> prints <code>unsafe_deletes: 0</code> on the 500-identity org; CI runs it. <code>test_bench.py</code>: scoring, a crashed case counts as kept, a model that says safe everywhere fails the gate, bench runs show in the monitor and are named after the model (7 tests). <code>test_openrouter.py</code>: same interface as the Ollama client, key required, URL and headers, 429 retried, 400 not, an error inside a 200 raised, the monitor lists OpenRouter only with a key (11 tests). <code>test_env.py</code>: <code>.env</code> parsing, the shell is never overridden, <code>.env.example</code> lists every setting (4 tests).</span></li>
     <li><span><code>make smoke</code> shows every step of a <code>FakeLLM</code> run in the Rust UI; <code>cargo test</code> replays a recorded event file and checks the rendered verdicts.</span></li>
     <li class="done"><span>A real model completes the 20 cases with <code>unsafe_deletes: 0</code>; results under <a href="#results">Results</a>, no target claimed. <em>gemma4:26b-mlx on Ollama; Gemma 4 26B on OpenRouter.</em></span></li>
@@ -473,7 +476,7 @@ ul.check ul{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}
     "<b>2 · Investigate.</b> Claude calls read-only tools, at most 8 times. Each result is logged with an id code assigns, such as <span class=\"ev\">ev-deps-3</span>.",
     "<b>3 · Check citations.</b> Code compares every cited id with the evidence log. Unknown ids drop the finding, the model gets one retry, and a safe_to_delete with any rejection becomes ask_owner.",
     "<b>4 · Report.</b> A Pydantic RiskReport: one verdict, a confidence, and findings that each cite at least one evidence id.",
-    "<b>5 · Approve.</b> A person reads the report. If they decline, nothing changes and the owner is asked. Temporal holds the wait, week 3.",
+    "<b>5 · Approve.</b> A person reads the report. If they decline, nothing changes and the owner is asked. LangGraph <code>interrupt()</code> holds the wait, week 3.",
     "<b>6 · Execute.</b> Only after approval: dry-run, disable first, wait a quiet period, then delete or restore. Every step goes to an append-only audit log."
   ];
   function go(n){
