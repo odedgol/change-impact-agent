@@ -46,6 +46,7 @@ cp .env.example .env   # model settings and keys; git-ignored, the shell overrid
 make seed       # 500 identities, 20 change requests, writes bench/ground_truth.json
 make baseline   # shows what the naive rule breaks
 make test
+make typecheck # pyright, 0 errors (also in CI)
 
 # investigate one change request with a local model (Ollama, default gemma4:26b-mlx)
 make run-local ID=REQ-0003   # events in runs/REQ-0003.jsonl

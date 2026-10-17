@@ -142,3 +142,8 @@ def test_page_draws_the_flow_with_pinned_react_flow_and_filters_by_model():
     assert 'id="mfilter"' in page and '["flow","Flow"]' in page
     assert "innerHTML" not in page and "dangerouslySetInnerHTML" not in page
     assert "insufficient_evidence, confidence low" in page  # the step-cap card matches PR 2.4d
+    # the Flow tab draws the LangGraph nodes of cia.graph, not the old loop
+    assert "StateGraph" in page
+    for node in ("model", "tools", "nudge", "check", "finish", "cap"):
+        assert f'box("{node}"' in page
+    assert "Investigator loop" not in page and "Temporal" not in page
