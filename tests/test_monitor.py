@@ -122,3 +122,18 @@ def test_terminal_runs_show_up_and_junk_files_are_skipped(server):
     runs = {r["run_id"]: r for r in json.loads(get(base + "/api/runs")[2])}
     assert "junk" not in runs
     assert runs["u00002"]["verdict"] == "ask_owner" and runs["u00002"]["seconds"] == 2.5
+
+
+def test_page_draws_the_flow_with_pinned_react_flow_and_filters_by_model():
+    """The Flow tab uses React Flow from a CDN at exact versions; model output is rendered as text only."""
+    import re
+
+    from cia.monitor import PAGE
+
+    page = PAGE.read_text()
+    urls = re.findall(r"https://(?:esm\.sh|cdn\.jsdelivr\.net/npm)/[^\"'\s]+", page)
+    assert urls and all(re.search(r"@\d+\.\d+\.\d+", u) for u in urls), urls  # every library pinned
+    assert "@xyflow/react@12.11.6" in page and "react@19.2.8" in page
+    assert 'id="mfilter"' in page and '["flow","Flow"]' in page
+    assert "innerHTML" not in page and "dangerouslySetInnerHTML" not in page
+    assert "insufficient_evidence, confidence low" in page  # the step-cap card matches PR 2.4d
