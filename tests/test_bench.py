@@ -49,16 +49,16 @@ def test_a_crashed_run_is_kept_and_listed_as_an_error():
 def test_rule_bench_passes_the_gate_on_the_synthetic_org(org, tmp_path):
     db, truth = org
     result = run(db, truth, RuleLLM(), "fake", str(tmp_path), label="bench-t")
-    assert result["scores"]["cases"] == 20 and result["scores"]["unsafe_deletes"] == 0
+    assert result["scores"]["cases"] == 24 and result["scores"]["unsafe_deletes"] == 0
     assert result["scores"]["errors"] == 0
-    assert len(list(tmp_path.glob("bench-t-REQ-*.jsonl"))) == 20
+    assert len(list(tmp_path.glob("bench-t-REQ-*.jsonl"))) == 24
 
 
 def test_bench_runs_show_up_in_the_monitor(org, tmp_path):
     db, truth = org
     run(db, truth, RuleLLM(), "fake", str(tmp_path), label="bench-m")
     runs = Monitor(db, truth, str(tmp_path)).runs()
-    assert len(runs) == 20
+    assert len(runs) == 24
     first = next(r for r in runs if r["run_id"] == "bench-m-REQ-0001")
     assert (
         first["model"] == "rule"
@@ -82,7 +82,7 @@ def test_a_model_that_says_safe_everywhere_fails_the_gate(org, tmp_path, capsys)
         client=SaysSafe(),
     )
     result = json.loads(out.read_text())
-    assert code == 1 and result["scores"]["unsafe_deletes"] == 10
+    assert code == 1 and result["scores"]["unsafe_deletes"] == 12
     assert "UNSAFE" in capsys.readouterr().out
 
 
@@ -97,7 +97,7 @@ def test_a_failing_case_does_not_stop_the_bench(org):
         "fake",
         None,
     )
-    assert result["scores"]["cases"] == 20 and result["scores"]["errors"] >= 19
+    assert result["scores"]["cases"] == 24 and result["scores"]["errors"] >= 23
     assert result["scores"]["unsafe_deletes"] == 0
 
 

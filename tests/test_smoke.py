@@ -33,7 +33,7 @@ def test_smoke_reaches_every_guardrail_and_deletes_nothing_unsafe(events):
     }  # run_error needs a crashing model
     runs = [e for e in events if e["type"] == "run"]
     reports = [e for e in events if e["type"] == "report"]
-    assert len(runs) == len(reports) == 8
+    assert len(runs) == len(reports) == 9
     for header, report in zip(runs, reports, strict=True):
         assert not (
             report["verdict"] == "safe_to_delete"

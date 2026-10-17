@@ -123,12 +123,36 @@ class BreakGlass:
         return [{"kind": "ticket_note", "ref": "break-glass"}]
 
 
+class CredentialChain:
+    """A dormant leaver whose API key still feeds a pipeline, three hops away.
+
+    user <- API key (owns_credential) <- secret (stored_in) <- pipeline (read_by)
+    <- team (owned_by). The account shows no use of its own; only following the
+    hops finds the pipeline and the team that has to be asked.
+    """
+
+    expected = "ask_owner"
+
+    def execute(self, org, target):
+        key = f"credential:es-api-key-{target}"
+        secret = f"secret:vault/es-ingest-{target}"
+        pipeline = f"pipeline:logs/es-ingest-{target}.yaml"
+        org.deps += [
+            (key, target, "owns_credential", "API key issued to the account"),
+            (secret, key, "stored_in", "the key is stored in this secret"),
+            (pipeline, secret, "read_by", "reads the secret on every run"),
+            ("team:data-platform", pipeline, "owned_by", "owns the pipeline"),
+        ]
+        return [{"kind": "credential_chain", "ref": pipeline}]
+
+
 COMMANDS = {
     "nightly_job": NightlyJob(),
     "orphaned_service_account": OrphanedServiceAccount(),
     "policy_exception": PolicyException(),
     "shared_account": SharedAccount(),
     "break_glass": BreakGlass(),
+    "credential_chain": CredentialChain(),
 }
 CASE_TYPES = list(COMMANDS)
 EXPECTED = {name: command.expected for name, command in COMMANDS.items()}

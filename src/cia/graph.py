@@ -177,9 +177,9 @@ def build_graph(inv: Investigator, checkpointer: Any = None):
         )
         return ToolResult(call.id, {"error": message}, is_error=True)
 
-    def paged(list_fn: Callable[[str], list[dict]]) -> Callable[..., dict]:
-        def page(identity_id: str, offset: int = 0) -> dict:
-            return paginate(list_fn(identity_id), offset=offset)
+    def paged(list_fn: Callable[..., list[dict]]) -> Callable[..., dict]:
+        def page(identity_id: str, offset: int = 0, **kwargs: Any) -> dict:
+            return paginate(list_fn(identity_id, **kwargs), offset=offset)
 
         return page
 
@@ -474,7 +474,9 @@ def drawing_graph():
         def get_usage(self, identity_id: str, days: int = 90) -> dict[str, Any]:
             raise NotImplementedError
 
-        def get_dependencies(self, identity_id: str) -> list[dict[str, Any]]:
+        def get_dependencies(
+            self, identity_id: str, depth: int = 2
+        ) -> list[dict[str, Any]]:
             raise NotImplementedError
 
         def get_tickets(self, identity_id: str) -> list[dict[str, Any]]:

@@ -10,11 +10,12 @@ permits a delete. Execution is a separate, reversible step that needs human appr
 
 ## Status
 
-Week 2 of 4. Done: synthetic org, read-only evidence tools, naive baseline, the
+Week 3 of 4 (plan: `docs/week-3.html`): approval and a reversible executor. Done: synthetic org, read-only evidence tools, naive baseline, the
 `EvidenceSource` and `LLMClient` interfaces, and the investigator as a LangGraph state
 graph (code-assigned evidence ids, an 8-step cap, citation check; `make graph` draws it). It runs on a local model through Ollama, a
-hosted open model through OpenRouter, or on Bedrock, and a local run monitor shows each run live. In review: the benchmark. On
-the 20 synthetic cases, gemma4:26b on Ollama made 0 unsafe deletes and got all 20 right
+hosted open model through OpenRouter, or on Bedrock, and a local run monitor shows each run live, plus a benchmark. Week 3 added a credential
+chain case (a leaver's API key still read by a pipeline, three hops away). On the earlier
+20 synthetic cases (before that case existed), gemma4:26b on Ollama made 0 unsafe deletes and got all 20 right
 (with an 8192-token output limit; 19 of 20 at 2048, the miss safely marked incomplete).
 The same model hosted on OpenRouter also got 20 of 20, in about 3 minutes, for under 1 cent.
 
@@ -34,16 +35,17 @@ a measurable target.
 | policy_exception | The leaver is named in an access policy exception |
 | shared_account | A ticket says finance shares the login; usage is quarterly |
 | break_glass | Dormant on purpose; only a ticket says so |
+| credential_chain | The leaver's API key sits in a secret that a pipeline reads; the pipeline is 3 hops away |
 | decoy_safe | Truly safe to delete; measures false alarms |
 
-On the default 500-identity org, the naive rule would delete 6 of the 10 risky accounts.
+On the default 500-identity org, the naive rule would delete 8 of the 12 risky accounts.
 
 ## Run it
 
 ```bash
 pip install -e ".[dev]"
 cp .env.example .env   # model settings and keys; git-ignored, the shell overrides it
-make seed       # 500 identities, 20 change requests, writes bench/ground_truth.json
+make seed       # 500 identities, 24 change requests, writes bench/ground_truth.json
 make baseline   # shows what the naive rule breaks
 make test
 make typecheck # pyright, 0 errors (also in CI)
@@ -51,7 +53,7 @@ make format    # ruff format at 88 columns; make lint checks it (also in CI)
 
 # investigate one change request with a local model (Ollama, default gemma4:26b-mlx)
 make run-local ID=REQ-0003   # events in runs/REQ-0003.jsonl
-make smoke                   # Rust terminal UI (tui/, needs cargo) with 8 offline runs piped in; q quits
+make smoke                   # Rust terminal UI (tui/, needs cargo) with 9 offline runs piped in; q quits
 make graph                   # redraw docs/index.html#engine from graph.py; print Mermaid
 make monitor                 # http://127.0.0.1:8765: start runs, watch them live;
                              # Flow tab: the run on the agent's five levels, with replay; Model filter

@@ -120,3 +120,13 @@ def test_usage_aggregates_match_raw_rows(org):
     assert (usage["event_count"], usage["last_seen"]) == (count, last)
     assert usage["callers_omitted"] == 0
     assert sum(usage["callers"].values()) == count
+
+
+@pytest.mark.parametrize(
+    "depth,hops", [(0, {1}), (1, {1}), (3, {1, 2, 3}), (9, {1, 2, 3, 4})]
+)
+def test_dependency_depth_is_clamped_to_one_to_four_hops(org, depth, hops):
+    db, truth = org
+    case = _case(truth, "credential_chain")
+    rows = SyntheticSource(db).get_dependencies(case["identity_id"], depth=depth)
+    assert {r["hop"] for r in rows} == hops
