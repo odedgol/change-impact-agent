@@ -2,21 +2,28 @@
 
 Messages, tool specs and turns are plain provider-neutral types. Each client
 maps them to its own wire format: ``BedrockClient`` to the Bedrock Converse
-API, ``FakeLLM`` to a script for tests. A private-cloud client (for example an
-OpenAI-compatible endpoint on vLLM) would be one more mapping, with no change
-to the investigator.
+API, ``OpenAICompatClient`` to an OpenAI-compatible chat endpoint (Ollama on a
+laptop, vLLM in a private cloud), ``FakeLLM`` to a script for tests. A new
+provider is one more mapping, with no change to the investigator.
 
 ``boto3`` is imported only inside ``BedrockClient``, and only when no client is
 injected, so the package and its tests never need AWS.
 """
 from __future__ import annotations
 
+import json
 import os
-from collections.abc import Sequence
+import urllib.request
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
 MODEL_ID_ENV = "CIA_BEDROCK_MODEL_ID"
+OPENAI_BASE_URL_ENV = "CIA_OPENAI_BASE_URL"
+OPENAI_MODEL_ENV = "CIA_OPENAI_MODEL"
+OPENAI_API_KEY_ENV = "CIA_OPENAI_API_KEY"
+DEFAULT_OPENAI_BASE_URL = "http://localhost:11434/v1"  # Ollama
+DEFAULT_OPENAI_MODEL = "gemma4:26b-mlx"
 
 
 @dataclass(frozen=True)
@@ -38,6 +45,7 @@ class LLMTurn:
     text: str = ""
     tool_calls: tuple[ToolCall, ...] = ()
     stop_reason: str = "end_turn"
+    reasoning: str = ""  # the model's thinking, when the provider returns it; shown, never trusted
 
 
 @dataclass(frozen=True)
@@ -149,3 +157,84 @@ def from_converse_response(response: dict[str, Any]) -> LLMTurn:
     calls = tuple(ToolCall(id=b["toolUse"]["toolUseId"], name=b["toolUse"]["name"], input=b["toolUse"]["input"])
                   for b in blocks if "toolUse" in b)
     return LLMTurn(text=text, tool_calls=calls, stop_reason=response.get("stopReason", "end_turn"))
+
+
+Transport = Callable[[str, dict[str, Any], dict[str, str]], dict[str, Any]]
+
+
+def _http_post(url: str, body: dict[str, Any], headers: dict[str, str], timeout: float = 300) -> dict[str, Any]:
+    req = urllib.request.Request(url, data=json.dumps(body).encode(), headers=headers, method="POST")
+    with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 (URL comes from config)
+        return json.loads(resp.read())
+
+
+class OpenAICompatClient:
+    """Any OpenAI-compatible ``/chat/completions`` endpoint: Ollama locally, vLLM in a private cloud.
+
+    Standard library only. ``transport`` is injectable so tests never open a socket.
+    """
+
+    def __init__(self, model: str | None = None, base_url: str | None = None, api_key: str | None = None,
+                 temperature: float = 0.0, max_tokens: int = 2048, transport: Transport | None = None):
+        self.model = model or os.environ.get(OPENAI_MODEL_ENV) or DEFAULT_OPENAI_MODEL
+        self.base_url = (base_url or os.environ.get(OPENAI_BASE_URL_ENV) or DEFAULT_OPENAI_BASE_URL).rstrip("/")
+        self.api_key = api_key or os.environ.get(OPENAI_API_KEY_ENV)
+        self.temperature = temperature
+        self.max_tokens = max_tokens
+        self._post = transport or _http_post
+
+    def converse(self, system: str, messages: Sequence[Message], tools: Sequence[ToolSpec]) -> LLMTurn:
+        body: dict[str, Any] = {"model": self.model, "temperature": self.temperature, "max_tokens": self.max_tokens,
+                                "messages": [{"role": "system", "content": system}, *to_openai_messages(messages)]}
+        if tools:
+            body["tools"] = to_openai_tools(tools)
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        return from_openai_response(self._post(f"{self.base_url}/chat/completions", body, headers))
+
+
+def to_openai_tools(tools: Sequence[ToolSpec]) -> list[dict[str, Any]]:
+    return [{"type": "function", "function": {"name": t.name, "description": t.description,
+                                              "parameters": t.input_schema}} for t in tools]
+
+
+def to_openai_messages(messages: Sequence[Message]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for m in messages:
+        if isinstance(m, UserText):
+            out.append({"role": "user", "content": m.text})
+        elif isinstance(m, AssistantTurn):
+            msg: dict[str, Any] = {"role": "assistant", "content": m.turn.text or None}
+            if m.turn.tool_calls:
+                msg["tool_calls"] = [{"id": c.id, "type": "function",
+                                      "function": {"name": c.name, "arguments": json.dumps(c.input)}}
+                                     for c in m.turn.tool_calls]
+            out.append(msg)
+        elif isinstance(m, ToolResults):
+            out += [{"role": "tool", "tool_call_id": r.tool_call_id, "content": json.dumps(r.content, default=str)}
+                    for r in m.results]
+        else:
+            raise TypeError(f"unknown message type: {type(m).__name__}")
+    return out
+
+
+def _arguments(raw: Any) -> dict[str, Any]:
+    # Arguments arrive as a JSON string. Anything that is not a JSON object is passed on as-is under
+    # "_unparsed", so the investigator answers with a tool error instead of the client crashing.
+    if isinstance(raw, dict):
+        return raw
+    try:
+        parsed = json.loads(raw or "{}")
+    except (TypeError, json.JSONDecodeError):
+        return {"_unparsed": raw}
+    return parsed if isinstance(parsed, dict) else {"_unparsed": raw}
+
+
+def from_openai_response(response: dict[str, Any]) -> LLMTurn:
+    choice = response["choices"][0]
+    msg = choice["message"]
+    calls = tuple(ToolCall(id=c["id"], name=c["function"]["name"], input=_arguments(c["function"].get("arguments")))
+                  for c in msg.get("tool_calls") or ())
+    return LLMTurn(text=msg.get("content") or "", tool_calls=calls, stop_reason=choice.get("finish_reason") or "stop",
+                   reasoning=msg.get("reasoning") or msg.get("reasoning_content") or "")
