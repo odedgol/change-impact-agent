@@ -1,4 +1,4 @@
-.PHONY: seed test lint baseline run-local monitor
+.PHONY: seed test lint baseline run-local monitor bench-fake bench-local bench-openrouter bench-bedrock
 
 seed:
 	PYTHONPATH=src python -m cia.generator --identities 500 --out data/org.db --truth bench/ground_truth.json
@@ -20,3 +20,21 @@ run-local: seed
 PORT ?= 8765
 monitor: seed
 	PYTHONPATH=src python -m cia.monitor --port $(PORT)
+
+# Bench: every change request, scored against the ground truth; fails if unsafe_deletes > 0.
+# Per-case events go to runs/bench-*.jsonl, so `make monitor` shows them.
+bench-fake: seed
+	PYTHONPATH=src python -m cia.bench --llm fake
+
+MODEL ?= gemma4:26b-mlx
+MAX_TOKENS ?= 2048
+bench-local: seed
+	PYTHONPATH=src python -m cia.bench --llm openai --model $(MODEL) --max-tokens $(MAX_TOKENS) \
+	  --out bench/results/$(subst :,-,$(MODEL))-$(MAX_TOKENS).json
+
+# Hosted Gemma 4 31B on OpenRouter's free tier; needs OPENROUTER_API_KEY. Prompts leave the machine (synthetic data only).
+bench-openrouter: seed
+	PYTHONPATH=src python -m cia.bench --llm openrouter --max-tokens $(MAX_TOKENS) --out bench/results/openrouter-gemma-4-31b-$(MAX_TOKENS).json
+
+bench-bedrock: seed
+	PYTHONPATH=src python -m cia.bench --llm bedrock --out bench/results/bedrock.json

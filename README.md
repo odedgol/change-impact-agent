@@ -12,9 +12,10 @@ permits a delete. Execution is a separate, reversible step that needs human appr
 
 Week 2 of 4. Done: synthetic org, read-only evidence tools, naive baseline, the
 `EvidenceSource` and `LLMClient` interfaces, and the investigator loop (code-assigned
-evidence ids, an 8-step cap, citation check). It runs on a local model through Ollama or
-on Bedrock, and a local run monitor shows each run live. In review: evidence freshness
-and the `insufficient_evidence` verdict. Next: the benchmark across models.
+evidence ids, an 8-step cap, citation check). It runs on a local model through Ollama, a
+hosted open model through OpenRouter, or on Bedrock, and a local run monitor shows each run live. In review: the benchmark. On
+the 20 synthetic cases, gemma4:26b on Ollama made 0 unsafe deletes and got all 20 right
+(with an 8192-token output limit; 19 of 20 at 2048, the miss safely marked incomplete).
 
 Results so far come from a synthetic org. They show the guardrails work as designed; they
 are not evidence of production readiness.
@@ -40,6 +41,7 @@ On the default 500-identity org, the naive rule would delete 6 of the 10 risky a
 
 ```bash
 pip install -e ".[dev]"
+cp .env.example .env   # model settings and keys; git-ignored, the shell overrides it
 make seed       # 500 identities, 20 change requests, writes bench/ground_truth.json
 make baseline   # shows what the naive rule breaks
 make test
@@ -47,6 +49,11 @@ make test
 # investigate one change request with a local model (Ollama, default gemma4:26b-mlx)
 make run-local ID=REQ-0003   # events in runs/REQ-0003.jsonl
 make monitor                 # http://127.0.0.1:8765: start runs, watch them live
+
+# score every change request (fails if any risky account would be deleted)
+make bench-fake             # offline plumbing check, also in CI
+make bench-local MAX_TOKENS=8192   # Ollama; results in bench/results/
+OPENROUTER_API_KEY=... make bench-openrouter   # Gemma 4 31B, OpenRouter free tier
 ```
 
 `python -m cia.generator --identities 20000` builds the 20,000-identity org in a few seconds.

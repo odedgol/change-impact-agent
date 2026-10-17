@@ -250,7 +250,7 @@ svg.d{display:block;width:100%;height:auto}
     <div><dt>Output: one verdict, with confidence</dt><dd class="vs"><span class="v v-safe">safe_to_delete</span><span class="v v-disable">disable_first</span><span class="v v-ask">ask_owner</span><span class="v v-none">insufficient_evidence</span></dd></div>
     <div><dt>Hard gate</dt><dd><b>0</b> unsafe-delete recommendations. Recall ≥ 90%<span class="target">target</span> precision ≥ 80%<span class="target">target</span></dd></div>
   </dl>
-  <div class="note"><p><b>Status, 2026-10-17.</b> Week 1 is done (synthetic org, read-only tools, baseline). Week 2, the investigator loop, is in progress: the models and the evidence source interface are merged (PR 2.1, 2.2), and so are the LLM client and the generator refactor (PR 2.3, R1). The investigator loop is merged too (PR 2.4, then 2.4b–d: a local model, the run monitor, evidence freshness and incomplete runs; 104 tests). Next: the bench and a Rust terminal UI for smoke runs; <a href="week-2.html">read the plan</a>. Numbers marked <span class="target">target</span> are goals, not results.</p></div>
+  <div class="note"><p><b>Status, 2026-10-17.</b> Week 1 is done (synthetic org, read-only tools, baseline). Week 2, the investigator loop, is in progress: the models and the evidence source interface are merged (PR 2.1, 2.2), and so are the LLM client and the generator refactor (PR 2.3, R1). The investigator loop is merged too (PR 2.4, then 2.4b–d: a local model, the run monitor, evidence freshness and incomplete runs). The bench is in review (PR 2.5, 129 tests): gemma4 on Ollama made 0 unsafe deletes and got 20 of 20 on the synthetic org, which proves the plumbing, not production quality. Next: a Rust terminal UI for smoke runs; <a href="week-2.html">read the plan</a>. Numbers marked <span class="target">target</span> are goals, not results.</p></div>
 </section>
 
 <section id="system" class="wide">
@@ -470,7 +470,7 @@ svg.d{display:block;width:100%;height:auto}
       <tr><td class="n"><a href="https://github.com/odedgol/change-impact-agent/pull/12">2.4b</a></td><td><code>w2/openai-compat</code></td><td><code>OpenAICompatClient</code> (Ollama, vLLM), model reasoning in events, <code>make run-local</code>. First real run: gemma4 found the orphaned service account, <span class="v v-ask">ask_owner</span>, 0 bad citations</td><td><code>test_openai_compat.py</code> (9)</td><td><span class="st st-done">merged</span></td></tr>
       <tr><td class="n"><a href="https://github.com/odedgol/change-impact-agent/pull/13">2.4c</a></td><td><code>w2/run-monitor</code></td><td>Run monitor (<code>make monitor</code>): launch a run, watch model turns and tool calls stream live, check each citation against its step, browse <code>runs/*.jsonl</code>. Stdlib server on 127.0.0.1</td><td><code>test_monitor.py</code> (10)</td><td><span class="st st-done">merged</span></td></tr>
       <tr><td class="n"><a href="https://github.com/odedgol/change-impact-agent/pull/14">2.4d</a></td><td><code>w2/evidence-freshness</code></td><td>Evidence freshness fields; <code>insufficient_evidence</code> verdict for incomplete runs (step cap, unread required evidence, failing source)</td><td><code>test_incomplete_and_freshness.py</code> (15)</td><td><span class="st st-done">merged</span></td></tr>
-      <tr><td class="n">2.5</td><td><code>w2/bench-results</code></td><td><code>bench.py</code>, results on the plan</td><td><code>unsafe_deletes: 0</code></td><td><span class="st">to do</span></td></tr>
+      <tr><td class="n">2.5</td><td><code>w2/bench-results</code></td><td><code>bench.py</code> (fake, Ollama, OpenRouter, Bedrock), <code>make bench-fake</code> in CI, results on the plan. <code>OpenRouterClient</code> next to the Ollama client; one <code>make_client</code> factory. Fixes an empty model turn Ollama rejected (HTTP 400); <code>stop_reason</code> in events; configurable output limit</td><td><code>unsafe_deletes: 0</code>, <code>test_bench.py</code> (7), <code>test_openrouter.py</code> (11), <code>test_env.py</code> (4)</td><td><span class="st st-now">in review</span></td></tr>
       <tr><td class="n">2.6</td><td><code>w2/tui-smoke</code></td><td>Rust terminal UI (<code>tui/</code>, ratatui) that replays the event stream; <code>make smoke</code> = <code>FakeLLM</code> run piped into it</td><td><code>cargo fmt</code>, <code>clippy</code>, <code>cargo test</code> (replay of a recorded run)</td><td><span class="st">to do</span></td></tr>
     </tbody>
   </table></div>
@@ -487,7 +487,7 @@ svg.d{display:block;width:100%;height:auto}
     <thead><tr><th>Layer</th><th>Choice</th><th>Why</th><th>When</th></tr></thead>
     <tbody>
       <tr><td>Language</td><td>Python 3.12, Pydantic v2, pytest, Ruff</td><td>Pydantic rejects a finding without evidence ids before anyone sees it</td><td class="n">now</td></tr>
-      <tr><td>LLM</td><td>Claude Sonnet 5.5 on Bedrock; gemma4:26b on Ollama locally</td><td>Converse API via boto3, temperature 0, model id from <code>CIA_BEDROCK_MODEL_ID</code>. Locally, <code>OpenAICompatClient</code> talks to Ollama (standard library only): free, offline, and the same path as vLLM in a private cloud</td><td class="n">week 2</td></tr>
+      <tr><td>LLM</td><td>Claude Sonnet 5.5 on Bedrock; gemma4:26b on Ollama locally; Gemma 4 31B (free) on OpenRouter</td><td>Converse API via boto3, temperature 0, model id from <code>CIA_BEDROCK_MODEL_ID</code>. Locally, <code>OpenAICompatClient</code> talks to Ollama (standard library only): free, offline, and the same path as vLLM in a private cloud. <code>OpenRouterClient</code> reuses that mapping for hosted open models (<code>OPENROUTER_API_KEY</code>, 429s retried), so a bench doesn't tie up the laptop; prompts leave the machine, so synthetic data only</td><td class="n">week 2</td></tr>
       <tr><td>Orchestration</td><td>Temporal</td><td>A durable wait for approval that can last days; LLM and DB calls run as activities</td><td class="n">week 3</td></tr>
       <tr><td>Data</td><td>SQLite read-only → Postgres + pgvector</td><td>Read-only enforced by the engine; pgvector for the doc index</td><td class="n">now → wk 4</td></tr>
       <tr><td>Terminal UI</td><td>Rust, ratatui</td><td>Watch a run step by step: tool calls with their <code>ev-…</code> ids, then the verdict. A separate binary that only reads JSON lines, so it never touches the agent or a cloud</td><td class="n">week 2</td></tr>
@@ -502,7 +502,7 @@ svg.d{display:block;width:100%;height:auto}
   <div class="tbl"><table>
     <thead><tr><th>Concern</th><th>Seam in the code</th><th>On AWS</th><th>On a private cloud</th></tr></thead>
     <tbody>
-      <tr><td>LLM</td><td><code>LLMClient</code></td><td><code>BedrockClient</code> (Claude)</td><td><code>OpenAICompatClient</code> (built, PR 2.4b) to vLLM or Ollama, or the Anthropic API if egress is allowed</td></tr>
+      <tr><td>LLM</td><td><code>LLMClient</code></td><td><code>BedrockClient</code> (Claude)</td><td><code>OpenAICompatClient</code> (built, PR 2.4b) to vLLM or Ollama; <code>OpenRouterClient</code> (built, PR 2.5) for hosted open models when egress is allowed; or the Anthropic API</td></tr>
       <tr><td>Identity evidence</td><td><code>EvidenceSource</code></td><td><code>AwsSource</code> (IAM, CloudTrail)</td><td><code>KeycloakSource</code>, LDAP or Active Directory</td></tr>
       <tr><td>Approval workflow</td><td>Temporal (open source)</td><td>Temporal on ECS or Temporal Cloud</td><td>Self-hosted Temporal on Kubernetes</td></tr>
       <tr><td>Database</td><td>Postgres + pgvector (plain SQL)</td><td>RDS</td><td>Postgres on Kubernetes or a VM</td></tr>
@@ -552,7 +552,7 @@ svg.d{display:block;width:100%;height:auto}
   <div class="tbl"><table>
     <thead><tr><th>Gate</th><th>Checked by</th><th>Fails when</th></tr></thead>
     <tbody>
-      <tr><td>Tested</td><td><code>test (3.12)</code>, <code>test (3.13)</code></td><td>Any pytest test fails or <code>ruff check</code> reports an issue. From PR 2.5: <code>unsafe_deletes &gt; 0</code></td></tr>
+      <tr><td>Tested</td><td><code>test (3.12)</code>, <code>test (3.13)</code></td><td>Any pytest test fails, <code>ruff check</code> reports an issue, or <code>make bench-fake</code> reports <code>unsafe_deletes &gt; 0</code></td></tr>
       <tr><td>Tested (UI)</td><td><code>tui</code>, from PR 2.6</td><td><code>cargo fmt --check</code>, <code>cargo clippy -D warnings</code> or <code>cargo test</code> fails</td></tr>
       <tr><td>Explained</td><td><code>pr-description</code></td><td>No <code>## What changed</code>, no <code>## How to test</code>, or no link to a <code>docs/*.html</code> page</td></tr>
       <tr><td>Reviewed</td><td>Branch protection</td><td>A review comment is unresolved. Review today: <code>/code-review --comment</code>; 1 approval once a teammate joins</td></tr>
