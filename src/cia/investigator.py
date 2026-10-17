@@ -5,14 +5,20 @@ The model only proposes. Code owns everything that makes the report trustworthy:
 - Evidence ids. Every tool result is logged as ``ev-<tool>-<n>`` by this loop and
   handed to the model with the data; the model can cite ids, never invent them.
 - The step cap. At most ``max_steps`` tool calls (``submit_report`` and a turn
-  with no tool call count too). Hitting the cap returns ``ask_owner`` with low
-  confidence, never a delete.
+  with no tool call count too). Hitting the cap returns ``insufficient_evidence``
+  with low confidence, never a delete.
 - The citation check. A report citing an unknown id goes back once with the
   rejected ids (the retry counts against the cap). After that, findings with
   unknown ids are dropped, the unknown ids are counted in
   ``rejected_citations``, and ``safe_to_delete`` with any rejection becomes
   ``ask_owner``.
 - Paging. List tools return 50-row pages with ``next_offset``; nothing is cut.
+- Incomplete is not safe. ``safe_to_delete`` stands only if usage, dependencies
+  and tickets were all read successfully, with no unread pages; otherwise it
+  becomes ``insufficient_evidence``. A failing source is a tool error, never an
+  empty result.
+- Freshness. Each piece of evidence records ``collected_at`` (from ``clock``),
+  the source's ``name`` and, only if the source exposes it, ``updated_at``.
 
 ``events`` receives one dict per step (request, model turn, tool call, tool error,
 citation retry, step cap, report); ``JsonlEvents`` writes them as JSON lines for the terminal UI.
@@ -25,6 +31,7 @@ import json
 import sys
 import time
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import IO, Any
 
 from pydantic import ValidationError
@@ -35,6 +42,8 @@ from .sources import EvidenceSource, paginate
 
 MAX_STEPS = 8
 SUBMIT = "submit_report"
+# A delete needs all three read in full; break-glass and shared accounts show up only in tickets.
+REQUIRED_FOR_DELETE = ("get_usage", "get_dependencies", "get_tickets")
 
 SYSTEM_PROMPT = """You investigate whether an IAM identity can be safely deleted.
 Use the tools to gather evidence: usage, dependencies (including consumers of accounts it owns), tickets and the owner.
@@ -44,6 +53,7 @@ When done, call submit_report once. Verdicts:
 - safe_to_delete: nothing depends on the identity.
 - disable_first: something may depend on it; disabling is reversible, deleting is not.
 - ask_owner: a person must decide (an owned service account, a shared or break-glass account, unclear evidence).
+- insufficient_evidence: you could not check what you needed (a tool failed, a source was unavailable).
 Every finding must cite the evidence_id values returned by the tools. Never cite an id you were not given."""
 
 EventSink = Callable[[dict[str, Any]], None]
@@ -65,7 +75,7 @@ TOOLS: tuple[ToolSpec, ...] = (
              {"type": "object", "properties": {"identity_id": _ID}, "required": ["identity_id"]}),
     ToolSpec(SUBMIT, "Submit the final risk report. Every finding cites evidence ids from the tool results.",
              {"type": "object", "required": ["verdict", "confidence", "findings"], "properties": {
-                 "verdict": {"type": "string", "enum": ["safe_to_delete", "disable_first", "ask_owner"]},
+                 "verdict": {"type": "string", "enum": ["safe_to_delete", "disable_first", "ask_owner", "insufficient_evidence"]},
                  "confidence": {"type": "string", "enum": ["low", "medium", "high"]},
                  "findings": {"type": "array", "items": {
                      "type": "object", "required": ["kind", "summary", "evidence_ids", "confidence"],
@@ -79,22 +89,30 @@ _EVIDENCE_PREFIX = {"get_identity": "identity", "get_usage": "usage", "get_depen
                     "get_tickets": "tickets", "get_owner": "owner"}
 
 
-_REPORT_FIELDS = {"verdict", "confidence", "findings"}
+_REPORT_FIELDS = {"verdict", "confidence", "findings"}  # request_id, rejected_citations, incomplete_reason: code
 
 
 class _CapReached(Exception):
     pass
 
 
+def _utcnow() -> datetime:
+    return datetime.now(UTC)
+
+
 class Investigator:
     def __init__(self, source: EvidenceSource, llm: LLMClient, max_steps: int = MAX_STEPS,
-                 events: EventSink | None = None):
+                 events: EventSink | None = None, clock: Callable[[], datetime] = _utcnow):
         if max_steps < 1:
             raise ValueError(f"max_steps must be >= 1 (got {max_steps})")
         self.source = source
         self.llm = llm
         self.max_steps = max_steps
         self.events = events or (lambda event: None)
+        self.clock = clock
+        # Optional source metadata; never invented when the source does not expose it.
+        self.source_name = getattr(source, "name", None) or type(source).__name__
+        self.source_updated_at = getattr(source, "updated_at", None)
 
     def investigate(self, request: ChangeRequest) -> RiskReport:
         run = _Run(self, request)
@@ -103,7 +121,8 @@ class Investigator:
         try:
             report = run.loop()
         except _CapReached:
-            report = RiskReport(request_id=request.request_id, verdict="ask_owner", confidence="low")
+            report = RiskReport(request_id=request.request_id, verdict="insufficient_evidence", confidence="low",
+                                incomplete_reason=f"step cap reached after {run.steps} steps")
             self.events({"type": "step_cap", "request_id": request.request_id, "steps": run.steps})
         self.events({"type": "report", **report.model_dump(), "steps": run.steps})
         return report
@@ -119,6 +138,8 @@ class _Run:
             f"Change request {request.request_id}: {request.action} identity {request.identity_id}. "
             "Investigate, then call submit_report.")]
         self.evidence: dict[str, Evidence] = {}
+        self.read_ok: set[str] = set()  # tools that returned data at least once
+        self.unread_pages: set[str] = set()  # paged tools whose last page the model never reached
         self.steps = 0
         self.retried = False
 
@@ -149,7 +170,7 @@ class _Run:
             if call.name == SUBMIT:
                 result = self.submit(call)
                 if isinstance(result, RiskReport):
-                    return result
+                    return self.finish(result)
             else:
                 result = self.dispatch(call)
             results.append(result)
@@ -168,12 +189,41 @@ class _Run:
             data = fn(**call.input)
         except (TypeError, ValueError) as e:
             return self.error(call, f"bad arguments for {call.name}: {e}")
+        except Exception as e:  # noqa: BLE001 - an unavailable source is an error, never "no rows"
+            return self.error(call, f"source unavailable for {call.name}: {type(e).__name__}: {e}")
+        self.track_coverage(call.name, data)
         ev = Evidence(id=f"ev-{_EVIDENCE_PREFIX[call.name]}-{len(self.evidence) + 1}", tool=call.name,
-                      args=dict(call.input), result=data)
+                      args=dict(call.input), result=data, collected_at=self.inv.clock(),
+                      source_name=self.inv.source_name, source_updated_at=self.inv.source_updated_at)
         self.evidence[ev.id] = ev
         self.inv.events({"type": "tool_call", "request_id": self.request.request_id, "step": self.steps,
-                         "evidence_id": ev.id, "tool": call.name, "args": ev.args, "result": data})
+                         "evidence_id": ev.id, "tool": call.name, "args": ev.args, "result": data,
+                         "collected_at": ev.collected_at, "source_name": ev.source_name,
+                         "source_updated_at": ev.source_updated_at})
         return ToolResult(call.id, {"evidence_id": ev.id, "data": data})
+
+    def track_coverage(self, tool: str, data: Any) -> None:
+        self.read_ok.add(tool)
+        if isinstance(data, dict) and "next_offset" in data:
+            if data["next_offset"] is None:
+                self.unread_pages.discard(tool)
+            else:
+                self.unread_pages.add(tool)
+
+    def unverified(self) -> list[str]:
+        """What a delete would rest on but this run never read in full."""
+        missing = [f"{t} not read" for t in REQUIRED_FOR_DELETE if t not in self.read_ok]
+        return missing + [f"{t} has unread pages" for t in sorted(self.unread_pages)]
+
+    def finish(self, report: RiskReport) -> RiskReport:
+        """A model-reported or unverified result is insufficient_evidence, never safe_to_delete."""
+        if report.verdict == "insufficient_evidence" and not report.incomplete_reason:
+            return report.model_copy(update={"confidence": "low", "incomplete_reason": "reported by the model"})
+        gaps = self.unverified() if report.verdict == "safe_to_delete" else []
+        if gaps:
+            return report.model_copy(update={"verdict": "insufficient_evidence", "confidence": "low",
+                                             "incomplete_reason": "safe_to_delete not verified: " + "; ".join(gaps)})
+        return report
 
     @staticmethod
     def _paged(list_fn: Callable[[str], list[dict]]) -> Callable[..., dict]:
@@ -251,7 +301,8 @@ def main(argv: list[str] | None = None, llm: LLMClient | None = None) -> None:
         if sink:
             sink({"type": "run", "run_id": a.request_id, "llm": a.llm,
                   "model": getattr(llm, "model", None) or getattr(llm, "model_id", None)})
-        inv = Investigator(SyntheticSource(a.db), llm, events=sink)
+        source = SyntheticSource(a.db)
+        inv = Investigator(source, llm, events=sink, clock=lambda: source.now)  # the org's simulated clock
         report = inv.investigate(ChangeRequest(request_id=a.request_id, identity_id=a.identity))
     finally:
         if out not in (None, sys.stdout):

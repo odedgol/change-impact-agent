@@ -79,10 +79,11 @@ select:hover{border-color:var(--ink-3)}
 
 /* run list */
 .list{list-style:none;margin:0;padding:4px 8px 24px}
-.list button{width:100%;text-align:left;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 10px;padding:10px;border:1px solid transparent;border-radius:9px;background:none;cursor:pointer}
+.list button{width:100%;text-align:left;display:grid;gap:4px;padding:10px;border:1px solid transparent;border-radius:9px;background:none;cursor:pointer}
+.list .row{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0}
 .list button:hover{background:var(--bg-3)}
 .list button[aria-current="true"]{background:var(--bg);border-color:var(--line)}
-.list .rid{font:500 13.5px var(--m);display:flex;align-items:center;gap:7px}
+.list .rid{font:500 13.5px var(--m);display:flex;align-items:center;gap:7px;white-space:nowrap}
 .list .when{font-size:12px;color:var(--ink-3);text-align:right;font-variant-numeric:tabular-nums}
 .list .meta{font-size:12.5px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .empty{padding:20px 16px;color:var(--ink-3);font-size:14px}
@@ -92,6 +93,8 @@ select:hover{border-color:var(--ink-3)}
 .v{display:inline-flex;align-items:center;gap:6px;font:500 12.5px/1 var(--m);padding:4px 8px 4px 7px;border-radius:999px;white-space:nowrap}
 .v::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
 .v-safe_to_delete{color:var(--safe);background:var(--safe-bg)}.v-disable_first{color:var(--disable);background:var(--disable-bg)}.v-ask_owner{color:var(--ask);background:var(--ask-bg)}
+.v-insufficient_evidence{color:var(--ink-2);background:var(--bg-3);box-shadow:inset 0 0 0 1px var(--line-2)}
+.v-insufficient_evidence::before{background:none;box-shadow:inset 0 0 0 1.5px currentColor}
 .v-live{color:var(--accent-2);background:var(--accent-bg)}.v-error{color:var(--guard);background:var(--guard-bg)}
 .v.big{font-size:15px;padding:8px 13px 8px 11px}.v.big::before{width:9px;height:9px}
 .ev{font:500 12px/1 var(--m);color:var(--accent-2);background:var(--accent-bg);padding:4px 6px;border-radius:5px;white-space:nowrap;border:1px solid transparent}
@@ -329,10 +332,8 @@ svg.thread circle{fill:var(--accent)}
       var status=r.running?h("span",{class:"v v-live"},"live"):r.error?h("span",{class:"v v-error"},"error"):r.verdict?vpill(r.verdict):h("span",{class:"v v-error"},"no report");
       var mk=verdictCase(r)?h("span",{class:"match "+(r.verdict==="safe_to_delete"?"unsafe":"differs"),title:"expected "+r.expected_verdict},icon(r.verdict==="safe_to_delete"?I.warn:I.x)):null;
       ul.appendChild(h("li",null,h("button",{type:"button","aria-current":state.sel===r.run_id?"true":null,onclick:function(){select(r.run_id)}},
-        h("span",{class:"rid"},r.request_id||r.run_id,mk),
-        h("span",{class:"when"},ago(r.started)),
-        h("span",{class:"meta"},[(r.case_type||"").replace(/_/g," "),r.model].filter(Boolean).join(" · ")||r.run_id),
-        status)));
+        h("span",{class:"row"},h("span",{class:"rid"},r.request_id||r.run_id,mk),h("span",{class:"when"},ago(r.started))),
+        h("span",{class:"row"},h("span",{class:"meta"},[(r.case_type||"").replace(/_/g," "),r.model].filter(Boolean).join(" · ")||r.run_id),status))));
     });
   }
 
@@ -415,7 +416,8 @@ svg.thread circle{fill:var(--accent)}
             e.tool_calls&&e.tool_calls.length?h("div",{class:"calls"},e.tool_calls.map(function(c){return h("div",null,"→ ",h("span",null,c.name),"(",c.name==="submit_report"?"verdict: "+JSON.stringify((c.input||{}).verdict)+", "+(((c.input||{}).findings)||[]).length+" findings":argText(c.input),")")})):null));
         }else if(e.type==="tool_call"){
           li=h("li",{class:"k-code"},h("span",{class:"node"}),h("div",{class:"card",id:"step-"+e.evidence_id},
-            h("div",{class:"who"},h("b",null,"Code"),"step "+e.step,h("span",{class:"ev"},e.evidence_id)),
+            h("div",{class:"who"},h("b",null,"Code"),"step "+e.step,h("span",{class:"ev"},e.evidence_id),
+              e.source_name?h("span",null,"from "+e.source_name+(e.source_updated_at?", updated "+String(e.source_updated_at).replace("T"," ").slice(0,16):", freshness unknown")):null),
             h("div",null,h("span",{class:"tool"},e.tool)," ",h("span",{class:"args"},argText(e.args))),
             summarize(e.tool,e.result),
             h("details",null,h("summary",null,icon("M6 4l4 4-4 4"),"Raw result"),h("pre",{class:"json"},JSON.stringify(e.result,null,2)))));
@@ -449,11 +451,12 @@ svg.thread circle{fill:var(--accent)}
       rep.appendChild(h("p",{class:"blank"},live?"Investigating. The report appears when the model submits it and the citation check passes.":err?"No report: the run failed.":"No report in this run."));
     }else{
       rep.appendChild(h("div",{class:"verdict"},vpill(report.verdict,true),h("span",{class:"conf"},"confidence "+report.confidence)));
+      if(report.incomplete_reason)rep.appendChild(h("p",{class:"note info"},h("b",null,"Investigation incomplete. "),report.incomplete_reason+". This never permits a delete; rerun or check the source."));
       var exp=run.expected_verdict;
       if(exp){
         if(report.verdict==="safe_to_delete"&&exp!=="safe_to_delete")rep.appendChild(h("p",{class:"note unsafe"},h("b",null,"Unsafe delete. "),"The ground truth says "+exp+"; this verdict would break a hidden dependency. This is the one result the bench must never see."));
         else if(exp===report.verdict)rep.appendChild(h("p",null,h("span",{class:"match ok"},icon(I.ok),"Matches the expected verdict")));
-        else rep.appendChild(h("p",null,h("span",{class:"match differs"},icon(I.x),"Differs: expected "),h("span",{class:"mono"},exp)));
+        else rep.appendChild(h("p",null,h("span",{class:"match differs"},icon(I.x),report.verdict==="insufficient_evidence"?"Incomplete; expected":"Differs; expected"),"\u00a0",h("span",{class:"mono"},exp)));
       }
     }
     var dl=h("dl",{class:"facts"});

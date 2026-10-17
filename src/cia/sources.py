@@ -45,6 +45,11 @@ def paginate(rows: list[dict], offset: int = 0, limit: int = PAGE_SIZE) -> dict:
 
 
 class SyntheticSource:
+    name = "synthetic"
+    # Optional freshness metadata (not part of the five-method interface). The generated org records
+    # no "last updated" time, so this stays None: unknown, never invented. Event timestamps are not it.
+    updated_at: datetime | None = None
+
     def __init__(self, db_path: str, now: datetime = NOW, max_callers: int = MAX_CALLERS):
         if max_callers < 1:
             raise ValueError(f"max_callers must be >= 1 (got {max_callers})")
