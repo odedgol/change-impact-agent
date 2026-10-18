@@ -78,7 +78,7 @@ hr-event:  # ID=u00034, CASE=nightly_job (first identity of that case type) or W
 	  $(if $(WHO),--who "$(WHO)") --db $(ORG_DB) --truth $(ORG_TRUTH)
 # One command for the Slack demo: builds the demo org once, then runs the agent on it (Ctrl-C stops).
 demo:
-	@test -f data/demo/org.db || $(MAKE) demo-org
+	@grep -qx 2 data/demo/VERSION 2>/dev/null || $(MAKE) demo-org  # missing or older: rebuild
 	$(MAKE) agent ORG=demo
 # The realistic demo org: 120 people with names, the same traps. Starts over (drops data/demo, runs/demo).
 demo-org:

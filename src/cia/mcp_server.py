@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +35,16 @@ from .sources import SyntheticSource
 from .workflow import DATA, events_file, open_workflow
 
 MAX_RESULT_CHARS = 1500  # one evidence result, cut for the chat
+AWS = "acme-prod"
+APP = {  # usage resources in the synthetic org, as the apps a company would name
+    "wiki": "Confluence",
+    "git": "GitHub",
+    "mail": "Google Workspace",
+    "crm": "Salesforce",
+    "warehouse": "Snowflake",
+    "ledger": "NetSuite",
+    "api": "internal API",
+}
 
 
 class Desk:
@@ -114,6 +125,10 @@ class Desk:
         for r in rows:
             r["request_id"] = change.get(r["id"])
             r["state"] = states.get(r["request_id"]) or "not investigated yet"
+            prof = self.profile(r["id"]) or {}
+            r["account_status"] = prof.get("account", r["account_status"])
+            r["title"] = dict(prof.get("fields", [])).get("Title")
+            r["last_day"] = prof.get("last_day")
         return rows
 
     def people(self, text: str) -> list[str]:
@@ -130,45 +145,148 @@ class Desk:
             )
         ]
 
-    def facts(self, identity_id: str) -> list[str]:
-        """What the org data says about one identity, read-only: who, use, what depends
-        on it, tickets, owner. Plain facts, no model."""
+    def account_status(self, identity_id: str) -> str:
+        """The account as the target system has it now (disabled or deleted after an
+        approved action), else as the org has it."""
+        target = self.data / "target.db"
+        db = str(target) if target.exists() else self.db
+        row = SyntheticSource(db).get_identity(identity_id)
+        return row["account_status"] if row else "deleted"
+
+    def profile(self, identity_id: str) -> dict[str, Any] | None:
+        """One person or service, read-only and in code: the mocked HR and access record
+        (demo org only) next to the live evidence: use per app, what depends on it, hop
+        by hop, tickets, owner. Warnings when they disagree (used after the last day)."""
         src = SyntheticSource(self.db)
         who = src.get_identity(identity_id)
         if not who:
-            return []
-        out = [
-            f"{who['kind']} · {who['department'] or 'no department'} · "
-            f"HR: {who['hr_status'] or 'n/a'} · account {who['account_status']}"
-        ]
+            return None
+        has = src._rows(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='profiles'"
+        )
+        rec = (
+            src._rows("SELECT data FROM profiles WHERE identity_id = ?", identity_id)
+            if has
+            else []
+        )
+        p = json.loads(rec[0]["data"]) if rec else {}
+        status = self.account_status(identity_id)
         use = src.get_usage(identity_id)
-        if use["event_count"]:
-            callers = ", ".join(f"{c} ({n})" for c, n in use["callers"].items())
-            out.append(
-                f"Used {use['event_count']} times in {use['window_days']} days, "
-                f"last {str(use['last_seen'])[:10]}, by {callers}"
+        since = (src.now - timedelta(days=use["window_days"])).isoformat()
+        per_app = src._rows(
+            "SELECT resource, caller, COUNT(*) AS n, MAX(ts) AS last FROM usage_events "
+            "WHERE identity_id = ? AND ts >= ? AND ts <= ? GROUP BY resource, caller "
+            "ORDER BY n DESC",
+            identity_id,
+            since,
+            src._now(),
+        )
+        names = {
+            r["id"]: r["name"] for r in src._rows("SELECT id, name FROM identities")
+        }
+        last_day = p.get("last_day")
+        warnings = []
+        activity = []
+        for r in per_app:
+            caller = r["caller"]
+            by = (
+                "interactive login"
+                if caller == "interactive"
+                else names.get(caller.removeprefix("service:"), caller)
             )
-        else:
-            out.append(f"Not used in the last {use['window_days']} days")
-        deps = src.get_dependencies(identity_id, depth=4)
-        if deps:
-            shown = "; ".join(
-                f"{d['source']} ({d['kind']}{', hop ' + str(d['hop']) if d['hop'] > 1 else ''})"
-                for d in deps[:3]
+            activity.append(
+                f"{r['n']}× {APP.get(r['resource'], r['resource'])} by {by}, "
+                f"last {r['last'][:10]}"
             )
-            more = f" +{len(deps) - 3} more" if len(deps) > 3 else ""
-            out.append(f"Depends on it: {shown}{more}")
-        else:
-            out.append("Nothing depends on it")
-        tickets = src.get_tickets(identity_id)
-        for t in tickets[:2]:
-            out.append(f"Ticket {t['id']} {t['ts'][:10]} by {t['author']}: {t['text']}")
-        if not tickets:
-            out.append("No tickets")
+        if not activity:
+            activity.append(f"No activity in {use['window_days']} days")
+        last_seen = use["last_seen"]
+        if last_day and last_seen and last_seen[:10] > last_day:
+            warnings.append(
+                f"Used on {last_seen[:10]}, after the last day ({last_day})"
+            )
+        if who["hr_status"] == "left" and status == "active":
+            warnings.append("HR says gone, but the account is still active")
+        if p.get("mfa") == "off":
+            warnings.append("MFA is off")
+        keys = p.get("keys", [])
+        machine_last = max(
+            (r["last"] for r in per_app if r["caller"] != "interactive"), default=None
+        )
+        creds = [
+            f"Access key {k['id'][:4]}…{k['id'][-4:]} · created {k['created']} · "
+            + (
+                f"last used {machine_last[:10]}"
+                if machine_last
+                else "not used in 90 days"
+            )
+            for k in keys
+        ]
+        if p.get("mfa"):
+            creds.append(
+                f"MFA: {p['mfa']} · password age {p.get('password_age_days')} days"
+            )
+        access = []
+        if p.get("apps"):
+            access.append("Okta apps: " + ", ".join(p["apps"]))
+        if p.get("aws_roles"):
+            access.append(f"AWS roles in {AWS}: " + ", ".join(p["aws_roles"]))
+        if p.get("aws_policies"):
+            access.append(f"AWS policies in {AWS}: " + ", ".join(p["aws_policies"]))
+        if p.get("repos"):
+            access.append("GitHub: " + ", ".join(p["repos"]))
+        if p.get("groups"):
+            access.append("Groups: " + ", ".join(p["groups"]))
+        deps = [
+            f"{d['source']} — {d['kind'].replace('_', ' ')}"
+            + (f" (hop {d['hop']}, via {' → '.join(d['via'])})" if d["hop"] > 1 else "")
+            for d in src.get_dependencies(identity_id, depth=4)
+        ] or ["Nothing found"]
+        tickets = [
+            f"{t['id']} · {t['ts'][:10]} · {t['author']}: {t['text']}"
+            for t in src.get_tickets(identity_id)
+        ] or ["None"]
         owner = src.get_owner(identity_id)
-        if owner:
-            out.append(f"Owner: {owner['name']} (HR: {owner['hr_status'] or 'n/a'})")
-        return out
+        if who["kind"] == "service":
+            fields = [
+                ("Type", p.get("type", "service account")),
+                ("Purpose", p.get("purpose", "-")),
+                (
+                    "Owner",
+                    f"{owner['name']} ({owner['hr_status'] or 'employed'})"
+                    if owner
+                    else "nobody",
+                ),
+                ("Created", p.get("created", "-")),
+            ]
+            if owner and owner["hr_status"] == "left":
+                warnings.append(f"Its owner {owner['name']} has left")
+        else:
+            fields = [
+                ("Title", p.get("title", "-")),
+                ("Department", (who["department"] or "-").title()),
+                ("Manager", p.get("manager", "-")),
+                ("Location", p.get("location", "-")),
+                ("Email", p.get("email", "-")),
+                ("Joined", f"{p.get('joined', '-')} · {p.get('employment', '-')}"),
+            ]
+        return {
+            "id": identity_id,
+            "name": who["name"],
+            "kind": who["kind"],
+            "hr_status": who["hr_status"],
+            "last_day": last_day,
+            "account": status,
+            "fields": fields,
+            "warnings": warnings,
+            "sections": [
+                ("Access", access or ["No access record"]),
+                ("Credentials", creds or ["No keys"]),
+                (f"Activity ({use['window_days']} days)", activity),
+                ("Depends on it", deps),
+                ("Tickets", tickets),
+            ],
+        }
 
     def mentioned(self, text: str) -> list[str]:
         """Request ids whose request id, identity id or full name appears in free text,
