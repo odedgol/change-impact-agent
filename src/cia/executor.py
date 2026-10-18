@@ -133,7 +133,7 @@ class Executor:
                 }
             )
             status = after if status == before else status
-        self._log(request, "plan", "dry_run", steps=steps)
+        self.log(request, "plan", "dry_run", steps=steps)
         return steps
 
     def disable(self, request: ChangeRequest, approval: Approval) -> dict[str, Any]:
@@ -172,7 +172,7 @@ class Executor:
         getattr(self.target, "enable" if action == "restore" else action)(
             request.identity_id
         )
-        return self._log(
+        return self.log(
             request,
             action,
             "done",
@@ -192,12 +192,13 @@ class Executor:
         )
 
     def _refuse(self, request: ChangeRequest, action: str, reason: str) -> None:
-        self._log(request, action, "refused", reason=reason)
+        self.log(request, action, "refused", reason=reason)
         raise ExecutorError(reason)
 
-    def _log(
+    def log(
         self, request: ChangeRequest, action: str, outcome: str, **detail: Any
     ) -> dict[str, Any]:
+        """One audit entry for this request; the workflow logs its decisions here too."""
         return self.audit.append(
             {
                 "at": self.clock().isoformat(timespec="seconds"),

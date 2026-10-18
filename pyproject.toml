@@ -3,7 +3,11 @@ name = "change-impact-agent"
 version = "0.1.0"
 description = "An agent that investigates what could break before an IAM change is made."
 requires-python = ">=3.12"
-dependencies = ["pydantic>=2.7", "langgraph>=1.2.12,<2"]
+dependencies = [
+    "pydantic>=2.7",
+    "langgraph>=1.2.12,<2",
+    "langgraph-checkpoint-sqlite>=3.1.2,<4",  # approval and quiet-period waits survive a restart
+]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6", "pyright>=1.1.409"]
