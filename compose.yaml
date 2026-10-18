@@ -1,0 +1,20 @@
+# Local services for the agent (week 5). `make db-up` starts them, `make db-down` stops them.
+# Postgres with pgvector: the agent's document index (cia.docindex.PgVectorIndex). Local only:
+# the password is for this container on 127.0.0.1, not a secret.
+services:
+  pgvector:
+    image: pgvector/pgvector:0.8.0-pg17
+    environment:
+      POSTGRES_USER: cia
+      POSTGRES_PASSWORD: cia
+      POSTGRES_DB: cia
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cia"]
+      interval: 2s
+      retries: 30
+volumes:
+  pgdata:

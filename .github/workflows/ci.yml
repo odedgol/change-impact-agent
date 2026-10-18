@@ -22,6 +22,18 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.12", "3.13"]
+    services:
+      pgvector:  # the document index contract tests run on real pgvector too (CIA_PG_DSN)
+        image: pgvector/pgvector:0.8.0-pg17
+        env:
+          POSTGRES_USER: cia
+          POSTGRES_PASSWORD: cia
+          POSTGRES_DB: cia
+        ports: ["5433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U cia" --health-interval 2s --health-retries 30
+    env:
+      CIA_PG_DSN: postgresql://cia:cia@localhost:5433/cia
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
