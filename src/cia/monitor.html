@@ -803,6 +803,15 @@ svg.thread circle{fill:var(--accent)}
     }
     return box;
   }
+  // tokens and cost from the model turns; a cost only when every turn reported one (never guessed)
+  function tokenText(){
+    var turns=state.events.filter(function(e){return e.type==="model_turn"});
+    var used=turns.map(function(e){return e.usage}).filter(Boolean);
+    if(!used.length)return "not reported";
+    var i=0,o=0,c=0,priced=used.length===turns.length;
+    used.forEach(function(u){i+=u.input_tokens;o+=u.output_tokens;if(u.cost_usd==null)priced=false;else c+=u.cost_usd});
+    return i.toLocaleString()+" in · "+o.toLocaleString()+" out"+(priced?" · $"+c.toFixed(4):"");
+  }
   function renderReport(rep,r,run,report,err,live,steps,secs){
     rep.textContent="";
     var slot=h("div",{id:"desk-slot"});rep.appendChild(slot);renderReportOnly(true);
@@ -820,7 +829,7 @@ svg.thread circle{fill:var(--accent)}
       }
     }
     var dl=h("dl",{class:"facts"});
-    [["Model",run.model||"unknown"],["Steps",steps+" of "+MAX_STEPS],["Duration",secs?secs+" s":"–"],["Rejected citations",report?String(report.rejected_citations):"–"],["Run",r.run_id||state.sel]].forEach(function(f){dl.appendChild(h("dt",null,f[0]));dl.appendChild(h("dd",null,f[1]))});
+    [["Model",run.model||"unknown"],["Steps",steps+" of "+MAX_STEPS],["Duration",secs?secs+" s":"–"],["Rejected citations",report?String(report.rejected_citations):"–"],["Tokens",tokenText()],["Run",r.run_id||state.sel]].forEach(function(f){dl.appendChild(h("dt",null,f[0]));dl.appendChild(h("dd",null,f[1]))});
     rep.appendChild(dl);
     var stepOf={};state.events.forEach(function(e){if(e.type==="tool_call")stepOf[e.evidence_id]=e.step});
     if(report){

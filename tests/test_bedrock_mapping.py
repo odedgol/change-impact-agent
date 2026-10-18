@@ -150,3 +150,16 @@ def test_missing_model_id_fails_fast(monkeypatch):
     monkeypatch.delenv("CIA_BEDROCK_MODEL_ID", raising=False)
     with pytest.raises(ValueError, match="CIA_BEDROCK_MODEL_ID"):
         BedrockClient(client=StubConverse(_response([])))
+
+
+def test_converse_usage_becomes_tokens():
+    from cia.llm import from_converse_response
+
+    response = {
+        "output": {"message": {"content": [{"text": "ok"}]}},
+        "stopReason": "end_turn",
+        "usage": {"inputTokens": 900, "outputTokens": 45, "totalTokens": 945},
+    }
+    usage = from_converse_response(response).usage
+    assert usage is not None and (usage.input_tokens, usage.output_tokens) == (900, 45)
+    assert usage.cost_usd is None  # Bedrock reports tokens; the bench prices them

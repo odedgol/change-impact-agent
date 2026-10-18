@@ -91,5 +91,7 @@ bench-openrouter: seed
 	PYTHONPATH=src python -m cia.bench --llm openrouter --model $(OR_MODEL) --max-tokens $(MAX_TOKENS) \
 	  --out bench/results/openrouter-$(subst :,-,$(subst /,-,$(OR_MODEL)))-$(MAX_TOKENS).json
 
+# Bedrock reports tokens, not prices: give the model's USD per million tokens to price the run
 bench-bedrock: seed
-	PYTHONPATH=src python -m cia.bench --llm bedrock --out bench/results/bedrock.json
+	PYTHONPATH=src python -m cia.bench --llm bedrock --out bench/results/bedrock.json \
+	  $(if $(PRICE_IN),--price-in $(PRICE_IN) --price-out $(PRICE_OUT))

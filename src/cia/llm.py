@@ -51,6 +51,16 @@ class ToolCall:
 
 
 @dataclass(frozen=True)
+class Usage:
+    """Tokens one turn used, as the provider reports them. ``cost_usd`` only when the
+    provider reports it (OpenRouter does); otherwise the bench prices tokens itself."""
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cost_usd: float | None = None
+
+
+@dataclass(frozen=True)
 class LLMTurn:
     text: str = ""
     tool_calls: tuple[ToolCall, ...] = ()
@@ -58,6 +68,7 @@ class LLMTurn:
     reasoning: str = (
         ""  # the model's thinking, when the provider returns it; shown, never trusted
     )
+    usage: Usage | None = None  # None: the provider (or a fake) reported nothing
 
 
 @dataclass(frozen=True)
@@ -213,8 +224,14 @@ def from_converse_response(response: dict[str, Any]) -> LLMTurn:
         for b in blocks
         if "toolUse" in b
     )
+    used = response.get("usage") or {}
     return LLMTurn(
-        text=text, tool_calls=calls, stop_reason=response.get("stopReason", "end_turn")
+        text=text,
+        tool_calls=calls,
+        stop_reason=response.get("stopReason", "end_turn"),
+        usage=Usage(used.get("inputTokens", 0), used.get("outputTokens", 0))
+        if used
+        else None,
     )
 
 
@@ -299,6 +316,7 @@ class OpenAICompatClient:
         )
         self._post = transport or _http_post
         self.extra_headers: dict[str, str] = {}
+        self.extra_body: dict[str, Any] = {}
 
     def converse(
         self, system: str, messages: Sequence[Message], tools: Sequence[ToolSpec]
@@ -314,6 +332,7 @@ class OpenAICompatClient:
         }
         if tools:
             body["tools"] = to_openai_tools(tools)
+        body.update(self.extra_body)
         headers = {"Content-Type": "application/json", **self.extra_headers}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
@@ -351,6 +370,9 @@ class OpenRouterClient(OpenAICompatClient):
             transport=transport or retrying(_http_post),
         )
         self.extra_headers = {"X-Title": "change-impact-agent"}
+        self.extra_body = {
+            "usage": {"include": True}
+        }  # OpenRouter then reports the cost
 
 
 LLM_CHOICES = (
@@ -451,9 +473,18 @@ def from_openai_response(response: dict[str, Any]) -> LLMTurn:
         )
         for c in msg.get("tool_calls") or ()
     )
+    used = response.get("usage") or {}
+    cost = used.get("cost")
     return LLMTurn(
         text=msg.get("content") or "",
         tool_calls=calls,
         stop_reason=choice.get("finish_reason") or "stop",
         reasoning=msg.get("reasoning") or msg.get("reasoning_content") or "",
+        usage=Usage(
+            used.get("prompt_tokens", 0),
+            used.get("completion_tokens", 0),
+            float(cost) if isinstance(cost, int | float) else None,
+        )
+        if used
+        else None,
     )

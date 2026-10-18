@@ -244,6 +244,7 @@ def test_page_draws_the_flow_with_pinned_react_flow_and_filters_by_model():
     assert "Investigator loop" not in page and "Temporal" not in page
     # the change desk: start, answer and end the quiet period from the page
     assert 'id="startchange"' in page and '"/api/changes/"' in page
+    assert '["Tokens",tokenText()]' in page  # PR 4.1: tokens and cost per run
     for command in ('send("approve"', 'send("decline"', 'send("resume"'):
         assert command in page
 

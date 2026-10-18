@@ -2,8 +2,9 @@ import json
 
 import pytest
 
+import cia.bench
 import cia.graph
-from cia.bench import RuleLLM, main, run, score, slug, unapproved
+from cia.bench import RuleLLM, main, run, score, slug, spend, unapproved
 from cia.generator import generate
 from cia.llm import FakeLLM, LLMTurn, ToolCall
 from cia.monitor import Monitor
@@ -169,3 +170,54 @@ def test_bench_runs_are_named_after_the_model(org, tmp_path):
     result = run(db, truth, RuleLLM(), "fake", str(tmp_path))
     assert result["label"].startswith("bench-rule-")
     assert all(p.name.startswith("bench-rule-") for p in tmp_path.glob("*.jsonl"))
+
+
+# -- tokens and cost (PR 4.1) ------------------------------------------------------------
+
+
+def turn(usage):
+    return {"type": "model_turn", "usage": usage}
+
+
+def test_spend_uses_the_reported_cost_then_prices_then_says_unknown():
+    a = {"input_tokens": 1000, "output_tokens": 100, "cost_usd": 0.001}
+    b = {"input_tokens": 3000, "output_tokens": 200, "cost_usd": 0.002}
+    assert spend([turn(a), turn(b)], None) == {
+        "input_tokens": 4000,
+        "output_tokens": 300,
+        "cost_usd": 0.003,
+    }
+    plain = [turn({**a, "cost_usd": None}), turn({**b, "cost_usd": None})]
+    assert spend(plain, None)["cost_usd"] is None  # no price given: never guessed
+    assert spend(plain, (3.0, 15.0))["cost_usd"] == round(
+        (4000 * 3 + 300 * 15) / 1e6, 6
+    )
+    # a turn that reported nothing makes the cost unknown, even with prices
+    assert spend([turn(a), turn(None)], (3.0, 15.0))["cost_usd"] is None
+
+
+def test_bench_totals_tokens_and_cost(org, tmp_path):
+    db, truth = org
+
+    class Priced(RuleLLM):
+        FREE = cia.bench.Usage(500, 40, None)  # tokens, and no provider cost
+
+    out = tmp_path / "result.json"
+    code = main(
+        ["--db", db, "--truth", truth, "--runs", "", "--out", str(out)]
+        + ["--price-in", "3", "--price-out", "15"],
+        client=Priced(),
+    )
+    result = json.loads(out.read_text())
+    s = result["scores"]
+    assert code == 0 and result["prices_per_million"] == [3.0, 15.0]
+    assert (s["input_tokens"], s["output_tokens"]) == (24 * 2 * 500, 24 * 2 * 40)
+    assert s["cost_usd"] == round(24 * round((1000 * 3 + 80 * 15) / 1e6, 6), 6)
+    rule = run(db, truth, RuleLLM(), "fake", None)["scores"]
+    assert rule["cost_usd"] == 0.0 and rule["input_tokens"] == 0
+
+
+def test_one_price_without_the_other_is_refused(org):
+    db, truth = org
+    with pytest.raises(SystemExit):
+        main(["--db", db, "--truth", truth, "--runs", "", "--price-in", "3"])

@@ -21,6 +21,10 @@ Scores, risky = the expected verdict is not ``safe_to_delete``:
     precision       kept cases that were risky / kept cases
     accuracy        exact verdict matches / cases
 A run that crashes counts as kept (nothing is deleted) and is listed under errors.
+
+Tokens and cost come from the model_turn events. The cost is what the provider reports
+(OpenRouter), else the tokens priced with --price-in / --price-out (USD per million),
+else unknown: the bench never guesses a price.
 Results on the synthetic org show the plumbing and guardrails work; they are not production evidence.
 """
 
@@ -49,6 +53,7 @@ from .llm import (
     ToolCall,
     ToolResults,
     ToolSpec,
+    Usage,
     make_client,
 )
 from .models import ChangeRequest
@@ -76,6 +81,7 @@ class RuleLLM:
     """
 
     model = "rule"
+    FREE = Usage(0, 0, 0.0)  # no model, no tokens, no cost
 
     def converse(
         self, system: str, messages: Sequence[Message], tools: Sequence[ToolSpec]
@@ -90,7 +96,8 @@ class RuleLLM:
                         {"identity_id": identity, **READ_ARGS.get(name, {})},
                     )
                     for i, name in enumerate(READS)
-                )
+                ),
+                usage=self.FREE,
             )
         results = [
             r.content
@@ -100,7 +107,8 @@ class RuleLLM:
             if not r.is_error
         ]
         return LLMTurn(
-            tool_calls=(ToolCall("submit", "submit_report", self.decide(results)),)
+            tool_calls=(ToolCall("submit", "submit_report", self.decide(results)),),
+            usage=self.FREE,
         )
 
     @staticmethod
@@ -176,6 +184,7 @@ def run_case(
     llm: str,
     events_path: Path | None,
     desk: Desk,
+    prices: Prices | None = None,
 ) -> dict[str, Any]:
     row = {
         k: case[k]
@@ -238,6 +247,7 @@ def run_case(
     row["steps"] = max(
         (e.get("steps", 0) for e in seen if e["type"] == "report"), default=0
     )
+    row.update(spend(seen, prices))
     row["actions"] = [
         e["action"]
         for e in desk.audit.entries()
@@ -246,6 +256,30 @@ def run_case(
     row["unapproved_actions"] = unapproved(desk.audit.entries(), rid)
     row["gone"] = desk.target.status(case["identity_id"]) == "missing"
     return row
+
+
+Prices = tuple[float, float]  # USD per million input tokens, per million output tokens
+
+
+def spend(events: list[dict[str, Any]], prices: Prices | None) -> dict[str, Any]:
+    """Tokens and cost of one run's model turns. Cost is None when it cannot be known."""
+    used = [e.get("usage") for e in events if e["type"] == "model_turn"]
+    known = [u for u in used if u]
+    out: dict[str, Any] = {
+        "input_tokens": sum(u["input_tokens"] for u in known),
+        "output_tokens": sum(u["output_tokens"] for u in known),
+        "cost_usd": None,
+    }
+    if len(known) < len(used):
+        return out  # a turn without usage: its tokens, so the cost, are unknown
+    if known and all(u.get("cost_usd") is not None for u in known):
+        out["cost_usd"] = round(sum(u["cost_usd"] for u in known), 6)
+    elif prices is not None:
+        out["cost_usd"] = round(
+            (out["input_tokens"] * prices[0] + out["output_tokens"] * prices[1]) / 1e6,
+            6,
+        )
+    return out
 
 
 def unapproved(entries: list[dict[str, Any]], request_id: str) -> list[str]:
@@ -299,6 +333,13 @@ def score(rows: list[dict[str, Any]]) -> dict[str, Any]:
         ),
         "deleted": sum(bool(r.get("gone")) for r in rows),
         "errors": sum("error" in r for r in rows),
+        "input_tokens": sum(r.get("input_tokens", 0) for r in rows),
+        "output_tokens": sum(r.get("output_tokens", 0) for r in rows),
+        "cost_usd": (
+            round(sum(r["cost_usd"] for r in rows), 6)
+            if rows and all(r.get("cost_usd") is not None for r in rows)
+            else None
+        ),
     }
 
 
@@ -310,6 +351,7 @@ def run(
     runs_dir: str | None = "runs",
     label: str | None = None,
     progress=None,
+    prices: Prices | None = None,
 ) -> dict[str, Any]:
     with open(truth_path) as f:
         cases = sorted(json.load(f)["cases"], key=lambda c: c["request_id"])
@@ -332,6 +374,7 @@ def run(
                     llm,
                     folder / f"{label}-{case['request_id']}.jsonl" if folder else None,
                     desk,
+                    prices,
                 )
             )
             if progress:
@@ -342,6 +385,7 @@ def run(
         "model": model_name(client, llm),
         "max_tokens": getattr(client, "max_tokens", None)
         or getattr(client, "inference_config", {}).get("maxTokens"),
+        "prices_per_million": list(prices) if prices else None,
         "scores": score(rows),
         "cases": rows,
     }
@@ -365,6 +409,10 @@ def main(argv: list[str] | None = None, client: LLMClient | None = None) -> int:
         "--runs", default="runs", help="folder for per-case events; '' writes none"
     )
     p.add_argument("--out", help="also write the full result as JSON to this file")
+    p.add_argument(
+        "--price-in", type=float, help="USD per million input tokens, to price a run"
+    )
+    p.add_argument("--price-out", type=float, help="USD per million output tokens")
     a = p.parse_args(argv)
     load_env()
     client = client or make_llm(a.llm, a.model, a.max_tokens)
@@ -379,12 +427,22 @@ def main(argv: list[str] | None = None, client: LLMClient | None = None) -> int:
         )
         print(
             f"{mark:6} {r['request_id']} {r['case_type']:26} expected {r['expected_verdict']:15} "
-            f"got {r['verdict']} ({r['steps']} steps) -> {r.get('outcome')}"
+            f"got {r['verdict']} ({r['steps']} steps, {r.get('input_tokens', 0)}+"
+            f"{r.get('output_tokens', 0)} tokens) -> {r.get('outcome')}"
             f"{'  ' + r['error'] if 'error' in r else ''}",
             flush=True,
         )
 
-    result = run(a.db, a.truth, client, a.llm, a.runs or None, progress=progress)
+    if (a.price_in is None) != (a.price_out is None):
+        p.error("give both --price-in and --price-out, or neither")
+    prices = (
+        (a.price_in, a.price_out)
+        if a.price_in is not None and a.price_out is not None
+        else getattr(client, "prices", None)
+    )
+    result = run(
+        a.db, a.truth, client, a.llm, a.runs or None, progress=progress, prices=prices
+    )
     if a.out:
         Path(a.out).parent.mkdir(parents=True, exist_ok=True)
         Path(a.out).write_text(json.dumps(result, indent=2) + "\n")
