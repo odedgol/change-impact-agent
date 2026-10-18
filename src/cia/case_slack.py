@@ -26,6 +26,7 @@ plain answers). App: infra/slack/manifest.yaml.
 from __future__ import annotations
 
 import json
+import logging
 import re
 import threading
 from collections.abc import Callable
@@ -39,6 +40,7 @@ from .case import QUIET_DAYS, Desk, gate
 from .llm import ToolSpec
 from .slack import escape
 
+log = logging.getLogger("cia.case_slack")
 STATE_FILE = "slack.json"
 APPROVE, DECLINE, NEXT_DAY = "case_approve", "case_decline", "case_next_day"
 MAX_DAYS = 7  # the most the chat may move the demo clock at once
@@ -732,9 +734,18 @@ def connect(
             room.lock.release()
 
     def say_in_thread(event, say):
-        text, blocks = mention_reply(event, room, chat, approvers)
+        """Show at once that the bot heard, then replace that line with the answer."""
         thread = event.get("thread_ts") or event.get("ts")
-        say(text=text, blocks=blocks, thread_ts=thread)
+        log.info("message from %s in %s", event.get("user"), thread)
+        first = say(text="🔎 Looking into it…", thread_ts=thread)
+        try:
+            text, blocks = mention_reply(event, room, chat, approvers)
+        except Exception:  # noqa: BLE001 - say so in Slack instead of going quiet
+            log.exception("answer failed")
+            text, blocks = "Sorry, that failed on my side. Try again?", None
+        app.client.chat_update(
+            channel=first["channel"], ts=first["ts"], text=text, blocks=blocks or []
+        )
         talks.add(thread)
 
     @app.event("app_mention")
@@ -768,6 +779,9 @@ def main(argv: list[str] | None = None) -> None:
     )
     a = p.parse_args(argv)
     load_env()
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
+    logging.getLogger("slack_bolt").setLevel(logging.WARNING)
+    logging.getLogger("slack_sdk").setLevel(logging.WARNING)
     out = Path(a.out)
     if a.fresh or not (out / "world.db").exists():
         from .demo_org import VERSION
