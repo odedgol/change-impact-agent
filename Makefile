@@ -1,4 +1,4 @@
-.PHONY: seed test lint format typecheck smoke tui-test tui-fixture baseline run-local monitor graph bench-fake bench-local bench-openrouter bench-bedrock change approve decline resume changes change-reset agent hr-event agent-approve agent-decline agent-changes
+.PHONY: seed test lint format typecheck smoke tui-test tui-fixture baseline run-local monitor graph bench-fake bench-local bench-openrouter bench-bedrock change approve decline resume changes change-reset agent hr-event agent-approve agent-decline agent-changes mcp
 
 seed:
 	PYTHONPATH=src python -m cia.generator --identities 500 --out data/org.db --truth bench/ground_truth.json
@@ -71,6 +71,10 @@ agent-decline:
 	PYTHONPATH=src python -m cia.service decline $(ID) --by $(BY)
 agent-changes:
 	PYTHONPATH=src python -m cia.service list
+
+# MCP server (src/cia/mcp_server.py), read-only: prints the command that adds it to Claude Code.
+mcp:
+	@echo 'claude mcp add cia -- $(CURDIR)/.venv/bin/python -m cia.mcp_server --db $(CURDIR)/data/org.db --data $(CURDIR)/data --runs $(CURDIR)/runs'
 
 # Rust terminal UI (tui/): offline smoke runs piped in live. Interactive on a terminal; SMOKE_FLAGS=--plain
 # prints text and fails if any run recommended an unsafe delete (CI). Replay a saved run:

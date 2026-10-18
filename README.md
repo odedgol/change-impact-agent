@@ -60,6 +60,9 @@ make agent-approve ID=OFF-<event> ACTIONS=disable,delete BY=dana
 # 2 minutes later (14 days in production): deleted, kept disabled, or restored if it was used
 ```
 
+To ask about a person from Claude Code, run `make mcp` and paste the command it prints;
+then ask "what is going on with user-00034?". The MCP tools only read.
+
 For Slack, create the app from `infra/slack/manifest.yaml` and set `SLACK_BOT_TOKEN`,
 `SLACK_APP_TOKEN`, `CIA_SLACK_CHANNEL` and `CIA_SLACK_APPROVERS` in `.env`.
 
