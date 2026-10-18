@@ -1,7 +1,7 @@
 # The project's .venv when it exists (no need to activate it), else the active Python (CI).
 PY := $(if $(wildcard .venv/bin/python),$(CURDIR)/.venv/bin/python,python)
 
-.PHONY: seed test lint format typecheck smoke tui-test tui-fixture baseline run-local monitor graph bench-fake bench-local bench-openrouter bench-bedrock change approve decline resume changes change-reset agent hr-event agent-approve agent-decline agent-changes mcp demo-org demo
+.PHONY: seed test lint format typecheck smoke tui-test tui-fixture baseline run-local monitor graph bench-fake bench-local bench-openrouter bench-bedrock change approve decline resume changes change-reset agent hr-event agent-approve agent-decline agent-changes mcp demo-org demo world next-day
 
 seed:
 	PYTHONPATH=src $(PY) -m cia.generator --identities 500 --out data/org.db --truth bench/ground_truth.json
@@ -80,6 +80,12 @@ hr-event:  # ID=u00034, CASE=nightly_job (first identity of that case type) or W
 demo:
 	@grep -qx 2 data/demo/VERSION 2>/dev/null || $(MAKE) demo-org  # missing or older: rebuild
 	$(MAKE) agent ORG=demo
+# The simulated company (week 5): HR, identity, vault, apps, Jira, logs; built from the demo org.
+world:
+	@grep -qx 2 data/demo/VERSION 2>/dev/null || $(MAKE) demo-org
+	PYTHONPATH=src $(PY) -m cia.world build
+next-day:  # DAYS=3 to move three days
+	PYTHONPATH=src $(PY) -m cia.world next-day --days $(or $(DAYS),1)
 # The realistic demo org: 120 people with names, the same traps. Starts over (drops data/demo, runs/demo).
 demo-org:
 	rm -rf data/demo runs/demo

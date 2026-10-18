@@ -11,6 +11,7 @@ dependencies = [
     "uvicorn>=0.30,<1",
     "slack_bolt>=1.21,<2",  # Slack messages and buttons over Socket Mode (cia.slack)
     "mcp>=2.3,<3",  # ask the agent from Claude, read-only (cia.mcp_server)
+    "cryptography>=42",  # the simulated vault encrypts its values (world.py)
 ]
 
 [project.optional-dependencies]
