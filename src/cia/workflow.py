@@ -382,7 +382,7 @@ def build_workflow(flow: ChangeWorkflow, checkpointer: Any = None):
     return g.compile(checkpointer=checkpointer)
 
 
-# ---- the graph as data, for the drawing in docs/index.html#workflow (same rules as graph.py)
+# ---- the graph as data, for the drawing in docs/index.html#change-graph (same rules as graph.py)
 
 NODE_KIND = {
     "snapshot": "tool",

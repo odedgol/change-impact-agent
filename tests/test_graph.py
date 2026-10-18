@@ -181,7 +181,7 @@ def test_the_workflow_drawing_has_the_agreed_nodes():
 
 
 def test_the_docs_drawing_matches_the_code():
-    """docs/index.html#engine and #workflow draw the embedded data; run `make graph` after
+    """docs/index.html#engine and #change-graph draw the embedded data; run `make graph` after
     changing graph.py or workflow.py."""
     page = (Path(__file__).resolve().parents[1] / "docs" / "index.html").read_text()
     embedded = page[page.index(DOCS_BEGIN) : page.index(DOCS_END) + len(DOCS_END)]
@@ -201,3 +201,13 @@ def test_write_docs_replaces_only_the_marked_block(tmp_path):
         and '"model"' in text
         and 'id="workflow-graph"' in text
     )
+
+
+def test_docs_pages_have_unique_ids():
+    """A repeated id sends links to the wrong section (it happened once with #workflow)."""
+    import re
+    from collections import Counter
+
+    for page in (Path(__file__).resolve().parents[1] / "docs").glob("*.html"):
+        ids = Counter(re.findall(r'\sid="([^"]+)"', page.read_text()))
+        assert not [i for i, n in ids.items() if n > 1], page.name
