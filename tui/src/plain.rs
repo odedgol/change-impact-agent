@@ -54,6 +54,12 @@ pub fn verdict_line(run: &Run) -> String {
             let _ = write!(line, " · {} citations dropped", r.rejected_citations);
         }
     }
+    if let Some(outcome) = &run.outcome {
+        let _ = write!(line, " · change: {outcome}");
+        if let Some(reason) = &run.outcome_reason {
+            let _ = write!(line, " ({reason})");
+        }
+    }
     line
 }
 

@@ -63,6 +63,41 @@ pub enum Event {
         error: String,
     },
     Report(Report),
+    // the change workflow (src/cia/workflow.py)
+    Guardrail {
+        #[serde(default)]
+        allowed: Vec<String>,
+        #[serde(default)]
+        reasons: Vec<String>,
+    },
+    ApprovalRequested {
+        #[serde(default)]
+        verdict: String,
+        #[serde(default)]
+        allowed: Vec<String>,
+    },
+    Approval {
+        #[serde(default)]
+        by: String,
+        #[serde(default)]
+        approved: Vec<String>,
+        #[serde(default)]
+        refused: Option<String>,
+    },
+    EvidenceChanged {
+        #[serde(default)]
+        tools: Vec<String>,
+    },
+    Action {
+        action: String,
+        #[serde(default)]
+        outcome: Option<String>,
+    },
+    Outcome {
+        outcome: String,
+        #[serde(default)]
+        reason: Option<String>,
+    },
     #[serde(other)]
     Unknown,
 }

@@ -70,6 +70,21 @@ h2{font:600 13px/1.3 var(--f);color:var(--ink-3);margin:0 0 10px}
 select{appearance:none;width:100%;height:36px;padding:0 32px 0 10px;border:1px solid var(--line-2);border-radius:8px;background:var(--bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5l3 3 3-3' fill='none' stroke='%235f6672' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 10px center;font-size:14px;cursor:pointer}
 select:hover{border-color:var(--ink-3)}
 .expect{font-size:12.5px;color:var(--ink-3);min-height:18px}
+.btns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.desk{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:0 0 18px;display:grid;gap:10px;background:var(--bg)}
+.desk h2{margin:0}
+.desk p{margin:0;font-size:13.5px;color:var(--ink-2)}
+.desk .acts{display:flex;flex-wrap:wrap;gap:12px;font-size:13.5px}
+.desk .acts label{display:inline-flex;align-items:center;gap:6px}
+.desk input[type=text]{height:32px;border:1px solid var(--line);border-radius:7px;background:var(--bg);padding:0 8px;font-size:13.5px;color:var(--ink);width:100%}
+.desk .row{display:flex;flex-wrap:wrap;gap:8px}
+.desk .btn{height:32px}
+.v-waiting{color:var(--disable);background:var(--disable-bg)}
+.v-deleted{color:var(--safe);background:var(--safe-bg)}
+.v-restored,.v-kept_disabled{color:var(--disable);background:var(--disable-bg)}
+.v-blocked,.v-declined,.v-failed{color:var(--ink-2);background:var(--bg-3)}
+.k-desk .node{border-color:var(--ink-3);background:var(--bg-3)}
+.k-act .node{border-color:var(--safe);background:var(--safe-bg)}
 .formerr{font-size:13px;color:var(--guard);margin:0}
 
 /* filter */
@@ -294,10 +309,13 @@ svg.thread circle{fill:var(--accent)}
       <label>Model
         <select id="model"></select>
       </label>
-      <button class="btn primary" type="submit" id="start">
-        <svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.5v9l7-4.5z"/></svg>
-        Start run
-      </button>
+      <div class="btns">
+        <button class="btn primary" type="submit" id="start" title="Investigate only; nothing changes">
+          <svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.5v9l7-4.5z"/></svg>
+          Start run
+        </button>
+        <button class="btn" type="button" id="startchange" title="Investigate, then wait for your approval before acting on data/target.db, a copy of the org">Start change</button>
+      </div>
       <p class="formerr" id="formerr" role="alert" hidden></p>
     </form>
     <div class="filter" role="group" aria-label="Filter runs">
@@ -340,7 +358,7 @@ svg.thread circle{fill:var(--accent)}
   var I={ok:"M3.5 8.5l3 3 6-7",x:"M4.5 4.5l7 7|M11.5 4.5l-7 7",warn:"M8 2.5l6 11H2z|M8 6.5v3|M8 11.6v.1"};
 
   var MAX_STEPS=8;
-  var state={cases:[],models:[],runs:[],filter:"all",model:"",sel:null,events:[],es:null,tab:"flow",showAll:{},pick:null,at:null,timer:null,flowHost:null,flowRange:null,flowLabel:null,flowFailed:false};
+  var state={cases:[],models:[],runs:[],changes:{},filter:"all",model:"",sel:null,events:[],es:null,tab:"flow",showAll:{},pick:null,at:null,timer:null,flowHost:null,flowRange:null,flowLabel:null,flowFailed:false};
   var $=function(id){return document.getElementById(id)};
 
   function api(path,opts){return fetch(path,opts).then(function(r){return r.json().then(function(b){if(!r.ok)throw new Error(b.error||r.statusText);return b})})}
@@ -361,7 +379,7 @@ svg.thread circle{fill:var(--accent)}
         sel.appendChild(og);
       });
       var ms=$("model");ms.textContent="";
-      state.models.forEach(function(m){ms.appendChild(h("option",{value:m.llm+"|"+m.model},m.model+(m.llm==="bedrock"?" (Bedrock)":m.llm==="openrouter"?" (OpenRouter)":"")+(m.offline?" (Ollama offline)":"")))});
+      state.models.forEach(function(m){ms.appendChild(h("option",{value:m.llm+"|"+m.model},(m.llm==="fake"?"rule model (offline, no LLM)":m.model)+(m.llm==="bedrock"?" (Bedrock)":m.llm==="openrouter"?" (OpenRouter)":"")+(m.offline?" (Ollama offline)":"")))});
       var pref=state.models.find(function(m){return m.model==="gemma4:26b-mlx"});if(pref)ms.value=pref.llm+"|"+pref.model;
       var offline=state.models.some(function(m){return m.offline});
       setConn(!offline,offline?"Ollama not reachable":"Ollama · "+state.models.filter(function(m){return m.llm==="openai"}).length+" models");
@@ -382,10 +400,28 @@ svg.thread circle{fill:var(--accent)}
       .finally(function(){b.disabled=false;b.lastChild.textContent=" Start run"});
   });
 
+  // ---- start a change: the same investigation, then the approval workflow (src/cia/workflow.py)
+  function post(path,body){return api(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body||{})})}
+  $("startchange").addEventListener("click",function(){
+    var b=this,err=$("formerr"),mv=$("model").value.split("|");err.hidden=true;b.disabled=true;
+    post("/api/changes/"+encodeURIComponent($("case").value)+"/start",{llm:mv[0],model:mv.slice(1).join("|")})
+      .then(function(r){return loadRuns().then(function(){select(r.run_id)})})
+      .catch(function(x){err.textContent="Could not start the change: "+x.message;err.hidden=false})
+      .finally(function(){b.disabled=false});
+  });
+
   // ---- run list
   document.querySelectorAll(".filter button").forEach(function(b){b.addEventListener("click",function(){
     state.filter=b.dataset.f;document.querySelectorAll(".filter button").forEach(function(x){x.setAttribute("aria-pressed",String(x===b))});renderList()})});
-  function loadRuns(){return api("/api/runs").then(function(r){state.runs=r;renderList()}).catch(function(){})}
+  function loadRuns(){return Promise.all([api("/api/runs"),api("/api/changes")]).then(function(r){
+    state.runs=r[0];state.changes={};r[1].forEach(function(c){state.changes[c.run_id]=c});renderList();
+    if(state.sel&&state.changes[state.sel])renderReportOnly()}).catch(function(){})}
+  function deskPill(c){
+    if(c.running)return h("span",{class:"v v-live"},"live");
+    if(c.waiting_for==="approval")return h("span",{class:"v v-waiting"},"needs approval");
+    if(c.waiting_for==="quiet_period")return h("span",{class:"v v-waiting"},"quiet period");
+    return c.outcome?h("span",{class:"v v-"+c.outcome},c.outcome.replace(/_/g," ")):null;
+  }
   function renderModels(){
     var counts={};state.runs.forEach(function(r){var m=r.model||"unknown";counts[m]=(counts[m]||0)+1});
     var ms=$("mfilter"),names=Object.keys(counts).sort();
@@ -403,7 +439,8 @@ svg.thread circle{fill:var(--accent)}
       ul.appendChild(h("li",{class:"empty"},state.runs.length?"No runs match this filter.":["No runs yet. Pick a change request above and start one, or run ",h("code",null,"make run-local ID=u00002")," in a terminal; it shows up here."]));return;
     }
     rows.forEach(function(r){
-      var status=r.running?h("span",{class:"v v-live"},"live"):r.error?h("span",{class:"v v-error"},"error"):r.verdict?vpill(r.verdict):h("span",{class:"v v-error"},"no report");
+      var desk=state.changes[r.run_id];
+      var status=desk&&deskPill(desk)?deskPill(desk):r.running?h("span",{class:"v v-live"},"live"):r.error?h("span",{class:"v v-error"},"error"):r.verdict?vpill(r.verdict):h("span",{class:"v v-error"},"no report");
       var mk=verdictCase(r)?h("span",{class:"match "+(r.verdict==="safe_to_delete"?"unsafe":"differs"),title:"expected "+r.expected_verdict},icon(r.verdict==="safe_to_delete"?I.warn:I.x)):null;
       ul.appendChild(h("li",null,h("button",{type:"button","aria-current":state.sel===r.run_id?"true":null,onclick:function(){select(r.run_id)}},
         h("span",{class:"row"},h("span",{class:"rid"},r.request_id||r.run_id,mk),h("span",{class:"when"},ago(r.started))),
@@ -424,6 +461,8 @@ svg.thread circle{fill:var(--accent)}
   }
   function current(){return state.runs.find(function(r){return r.run_id===state.sel})||{}}
   function first(t){return state.events.find(function(e){return e.type===t})}
+  function last(t){for(var i=state.events.length-1;i>=0;i--)if(state.events[i].type===t)return state.events[i]}
+  function num(x){return typeof x==="number"?x:0}
 
   // ---- result summaries per tool, in the product's own words
   function summarize(tool,res){
@@ -476,6 +515,24 @@ svg.thread circle{fill:var(--accent)}
       li=h("li",{class:"k-guard"},h("span",{class:"node"}),h("div",{class:"card"},h("div",{class:"who"},h("b",null,"Step cap")),h("p",{class:"result"},"Stopped after "+e.steps+" steps without a report. Verdict: insufficient_evidence, confidence low; never a delete.")));
     }else if(e.type==="run_error"){
       li=h("li",{class:"k-guard"},h("span",{class:"node"}),h("div",{class:"card"},h("div",{class:"who"},h("b",null,"Run failed")),h("p",{class:"result"},e.error),errHint(e.error)));
+    }else if(e.type==="guardrail"){
+      li=h("li",{class:e.allowed.length?"k-desk":"k-guard"},h("span",{class:"node"}),h("div",{class:"card"},h("div",{class:"who"},h("b",null,"Guardrail"),"what this verdict may do"),
+        h("p",{class:"result"},e.allowed.length?"Allows "+e.allowed.join(", ")+". A person may only narrow this.":"Blocks every action: "+e.reasons.join("; "))));
+    }else if(e.type==="approval_requested"){
+      li=h("li",{class:"k-desk"},h("span",{class:"node"}),h("div",{class:"card"},h("div",{class:"who"},h("b",null,"Waits for a person")),
+        h("p",{class:"result"},"The verdict is ",vpill(e.verdict),". Nothing happens until someone approves "+e.allowed.join(" and/or ")+", or declines.")));
+    }else if(e.type==="approval"){
+      li=h("li",{class:e.refused?"k-guard":"k-desk"},h("span",{class:"node"}),h("div",{class:"card"},h("div",{class:"who"},h("b",null,"Answer"),"by "+e.by),
+        h("p",{class:"result"},e.refused?"Refused: "+e.refused:e.approved.length?"Approved "+e.approved.join(", ")+".":"Declined. Nothing changes.")));
+    }else if(e.type==="evidence_changed"){
+      li=h("li",{class:"k-retry"},h("span",{class:"node"}),h("div",{class:"card"},h("div",{class:"who"},h("b",null,"Fresh evidence check")),
+        h("p",{class:"result"},"Changed since the report: "+e.tools.join(", ")+". The agent investigates again, and a person answers again.")));
+    }else if(e.type==="action"){
+      li=h("li",{class:e.action==="plan"?"k-desk":"k-act"},h("span",{class:"node"}),h("div",{class:"card"},h("div",{class:"who"},h("b",null,e.action==="plan"?"Dry run":"Action"),e.action==="plan"?"nothing changes":"on data/target.db"),
+        e.action==="plan"?h("p",{class:"result"},(e.steps||[]).map(function(x){return x.action+": "+x.from+" → "+x.to+(x.ok?"":" (cannot)")}).join(" · ")):h("p",{class:"result"},e.action+": "+(e.outcome||""))));
+    }else if(e.type==="outcome"){
+      li=h("li",{class:"k-report"},h("span",{class:"node"}),h("div",{class:"card"},h("div",{class:"who"},h("b",null,"Change finished")),
+        h("p",{class:"result"},h("span",{class:"v v-"+e.outcome},e.outcome.replace(/_/g," ")),e.reason?" "+e.reason:"")));
     }else if(e.type==="report"){
       li=h("li",{class:"k-report"},h("span",{class:"node"}),h("div",{class:"card"},h("div",{class:"who"},h("b",null,"Report accepted")),
         h("p",{class:"result"},vpill(e.verdict)," confidence ",e.confidence,", "+e.findings.length+" finding"+(e.findings.length===1?"":"s")+(e.rejected_citations?". "+e.rejected_citations+" citation"+(e.rejected_citations===1?"":"s")+" rejected and dropped.":". Every citation resolves to a step."))));
@@ -503,19 +560,27 @@ svg.thread circle{fill:var(--accent)}
     if(e.type==="step_cap")return "step cap after "+e.steps+" steps";
     if(e.type==="report")return "report accepted: "+e.verdict;
     if(e.type==="run_error")return "run failed: "+e.error;
+    if(e.type==="guardrail")return e.allowed.length?"guardrail allows "+e.allowed.join(", "):"guardrail blocks";
+    if(e.type==="approval_requested")return "waits for a person";
+    if(e.type==="approval")return e.approved.length?e.by+" approved "+e.approved.join(", "):e.by+" declined";
+    if(e.type==="evidence_changed")return "evidence changed: "+e.tools.join(", ");
+    if(e.type==="action")return e.action==="plan"?"dry run":e.action+": "+e.outcome;
+    if(e.type==="outcome")return "change "+e.outcome;
     return e.type;
   }
   function flowGraph(evts,upto){
     var ev=evts.slice(0,upto+1),cur=ev[ev.length-1]||{},last={},s={turns:0,cut:0,nocall:[],badReports:0,calls:{},ids:{},errors:[],blocked:[],submits:0,retries:0,rejected:[]};
     var req=evts.find(function(e){return e.type==="request"})||{},run=evts.find(function(e){return e.type==="run"})||{};
-    var rep=null,cap=null,err=null,steps=0;
+    var rep=null,cap=null,err=null,steps=0,w={answer:null,acts:[],outcome:null};  // w: the change workflow
     ev.forEach(function(e,i){
-      last[e.type]=i;steps=Math.max(steps,e.step||0,e.steps||0);
+      last[e.type]=i;steps=Math.max(steps,num(e.step),num(e.steps));
       if(e.type==="model_turn"){s.turns++;if(e.stop_reason==="length")s.cut++;if(!(e.tool_calls||[]).length)s.nocall.push(i);(e.tool_calls||[]).forEach(function(c){if(c.name==="submit_report")s.submits++})}
       else if(e.type==="tool_call"){(s.calls[e.tool]=s.calls[e.tool]||[]).push(e.evidence_id);s.ids[e.evidence_id]=1;last["t:"+e.tool]=i}
       else if(e.type==="tool_error"){if(TOOLS5.indexOf(e.tool)>=0){s.errors.push(e.tool);last["t:"+e.tool]=i}else if(e.tool==="submit_report"){s.badReports++;last.citation_retry=i}else{s.blocked.push(e.tool);last.blocked=i}}
       else if(e.type==="citation_retry"){s.retries++;s.rejected=s.rejected.concat(e.rejected_ids)}
       else if(e.type==="report")rep=e;else if(e.type==="step_cap")cap=e;else if(e.type==="run_error")err=e;
+      else if(e.type==="approval")w.answer=e;else if(e.type==="action"&&e.action!=="plan")w.acts.push(e.action);
+      else if(e.type==="outcome")w.outcome=e.outcome;
     });
     var nIds=Object.keys(s.ids).length,cited={};
     (rep&&rep.findings||[]).forEach(function(f){(f.evidence_ids||[]).forEach(function(i){cited[i]=1})});
@@ -530,7 +595,7 @@ svg.thread circle{fill:var(--accent)}
     // 1 · orchestration
     zone("z1","<b>1</b> · Orchestration · LangGraph StateGraph",0,0,940,124);
     box("req","z1",16,38,220,70,"","ChangeRequest",(req.request_id||"")+" · "+(req.action||"delete")+" "+(req.identity_id||""),"from the CLI, the monitor or the bench",last.request);
-    box("wf","z1",371,38,200,70,"","StateGraph.invoke","graph.py · 6 nodes","interrupt() approval: week 3",last.request);
+    box("wf","z1",371,38,200,70,"","StateGraph.invoke","graph.py · 6 nodes",last.approval_requested!=null?"in workflow.py: approval, quiet period":"investigation only",last.request);
     var vcls=rep?"v-"+rep.verdict:err?"k-guard":"idle";
     box("rep","z1",716,38,208,70,vcls,rep?rep.verdict:err?"Run failed":"RiskReport",rep?"confidence "+rep.confidence:err?"":"waiting",
       rep?plural(rep.findings.length,"finding"):(err?String(err.error).slice(0,60):""),rep?last.report:(err?last.run_error:null));
@@ -564,9 +629,12 @@ svg.thread circle{fill:var(--accent)}
       box("t-"+t,"ro",10+i*117,34,110,78,"k-tool"+(ids.length||errs?"":" idle")+(errs?" k-guard":""),t.replace("get_dependencies","get_deps"),
         ids.length?"×"+ids.length:errs?"failed":"not called",ids.slice(-1)[0]||(errs?"source unavailable":""),last["t:"+t])});
     if(s.blocked.length)box("blocked","ro",10,124,580,40,"k-blocked","Refused: "+s.blocked.join(", ")+" (not a read-only tool)","","",last.blocked);
-    zone("wp","Write path · week 3",628,34,300,204,"zone-planned","","z4");
-    box("exec","wp",10,34,135,78,"planned","Executor","disable, undo","audit log",null);
-    box("hitl","wp",155,34,135,78,"planned","HITL approval","interrupt() · human","week 3",null);
+    var asked=last.approval_requested!=null;
+    zone("wp","Write path · change workflow",628,34,300,204,asked?"":"zone-planned",asked?"Only after a person approves; acts on data/target.db, a copy.":"Not used: this run only investigates.","z4");
+    box("exec","wp",10,34,135,78,w.acts.length?"k-tool":"planned","Executor",w.acts.length?w.acts.join(" → "):"disable, undo",w.outcome?w.outcome.replace(/_/g," "):"audit log",last.action!=null?last.action:null);
+    box("hitl","wp",155,34,135,78,asked?(w.answer&&!w.answer.approved.length?"k-guard":"k-pass"):"planned","HITL approval",
+      w.answer?(w.answer.approved.length?"approved "+w.answer.approved.join(", "):"declined"):asked?"waiting for a person":"interrupt() · human",
+      w.answer?"by "+w.answer.by:"",asked?(last.approval!=null?last.approval:last.approval_requested):null);
 
     // edges: the graph's routes, plus what moves between the levels
     var used=function(b){return b?"used":""};
@@ -587,8 +655,8 @@ svg.thread circle{fill:var(--accent)}
     edge("e-cap","tools","bottom","cap","left","step "+(MAX_STEPS+1),cap?"back used":"");
     edge("e-accept","finish","right","rep","right","",used(rep&&!cap));
     edge("e-capped","cap","right","rep","right","",cap&&rep?"back used":"");
-    edge("e-hitl","rep","right","hitl","right","","planned");
-    edge("e-exec","hitl","left","exec","right","","planned");
+    edge("e-hitl","rep","right","hitl","right","",asked?"used":"planned");
+    edge("e-exec","hitl","left","exec","right","",w.acts.length?"used":"planned");
 
     // light the box and the edge of the event at the replay position
     var e=cur,i0=ev.length-1;
@@ -602,6 +670,9 @@ svg.thread circle{fill:var(--accent)}
     else if(e.type==="step_cap"){nowNode="cap";nowEdge="e-cap"}
     else if(e.type==="report"){nowNode=cap?"cap":"finish";nowEdge=cap?"e-capped":"e-ok"}
     else if(e.type==="run_error"){nowNode="rep"}
+    else if(e.type==="guardrail"||e.type==="approval_requested"||e.type==="approval"){nowNode="hitl";nowEdge="e-hitl"}
+    else if(e.type==="action"||e.type==="outcome"){nowNode="exec";nowEdge="e-exec"}
+    else if(e.type==="evidence_changed"){nowNode="wf"}
     return {nodes:nodes,edges:edges,now:nowNode,nowEdge:nowEdge};
   }
   function isDark(){var t=root.getAttribute("data-theme");return t?t==="dark":matchMedia("(prefers-color-scheme: dark)").matches}
@@ -657,9 +728,9 @@ svg.thread circle{fill:var(--accent)}
   function render(appended){
     var main=$("main"),rep=$("report");clearThread();
     if(!state.sel){renderIntro(main,rep);return}
-    var r=current(),run=first("run")||{},req=first("request")||{},report=first("report"),err=first("run_error"),cap=first("step_cap");
+    var r=current(),run=first("run")||{},req=first("request")||{},report=last("report"),err=last("run_error"),cap=first("step_cap");
     var live=!!r.running&&!report&&!err;
-    var steps=state.events.reduce(function(m,e){return Math.max(m,e.step||0,e.steps||0)},0);
+    var steps=state.events.reduce(function(m,e){return Math.max(m,num(e.step),num(e.steps))},0);
     var times=state.events.filter(function(e){return e.t}).map(function(e){return e.t});
     var secs=times.length>1?(times[times.length-1]-times[0]).toFixed(1):null;
 
@@ -698,8 +769,43 @@ svg.thread circle{fill:var(--accent)}
     renderReport(rep,r,run,report,err,live,steps,secs);
   }
 
+  // redrawn only when the change moves on, so a poll never wipes a half-typed answer
+  function renderReportOnly(force){var slot=$("desk-slot"),c=state.changes[state.sel]||{};if(!slot)return;
+    var key=[state.sel,c.running,c.waiting_for,c.outcome].join("|");if(!force&&slot.dataset.key===key)return;
+    slot.dataset.key=key;slot.textContent="";var d=deskPanel();if(d)slot.appendChild(d)}
+  function deskPanel(){
+    var c=state.changes[state.sel];if(!c||!c.verdict&&!c.running)return null;
+    var box=h("section",{class:"desk","aria-label":"Change desk"},h("h2",null,"Change"));
+    var who=function(){var v="";try{v=localStorage.getItem("cia-by")||""}catch(e){}return v};
+    var send=function(cmd,body,btns){btns.forEach(function(b){b.disabled=true});var err=box.querySelector(".formerr");if(err)err.remove();
+      post("/api/changes/"+encodeURIComponent(c.request_id)+"/"+cmd,body).then(function(){var id=state.sel;return loadRuns().then(function(){select(id)})})
+        .catch(function(x){box.appendChild(h("p",{class:"formerr",role:"alert"},x.message));btns.forEach(function(b){b.disabled=false})})};
+    if(c.running){box.appendChild(h("p",null,h("span",{class:"dot live"})," Working…"));return box}
+    if(c.waiting_for==="approval"){
+      box.appendChild(h("p",null,"The guardrails allow ",h("b",null,c.allowed.join(", ")),". Approve what you accept; you can only narrow it. The evidence is read again before anything runs."));
+      var checks=c.allowed.map(function(a){return h("input",{type:"checkbox",value:a,checked:"checked"})});
+      box.appendChild(h("div",{class:"acts"},checks.map(function(x){return h("label",null,x,x.value)})));
+      var name=h("input",{type:"text",placeholder:"Your name","aria-label":"Your name",value:who(),maxlength:"60"});
+      box.appendChild(name);
+      var ok=h("button",{type:"button",class:"btn primary"},"Approve"),no=h("button",{type:"button",class:"btn"},"Decline");
+      var by=function(){var v=name.value.trim();try{localStorage.setItem("cia-by",v)}catch(e){}return v};
+      ok.onclick=function(){send("approve",{by:by(),actions:checks.filter(function(x){return x.checked}).map(function(x){return x.value})},[ok,no])};
+      no.onclick=function(){send("decline",{by:by()},[ok,no])};
+      box.appendChild(h("div",{class:"row"},ok,no));
+    }else if(c.waiting_for==="quiet_period"){
+      box.appendChild(h("p",null,"Disabled on the target copy. Quiet period until "+String(c.until||"").slice(0,10)+": any use restores the account; otherwise "+(c.approved.indexOf("delete")>=0?"it is deleted.":"it stays disabled.")));
+      var go=h("button",{type:"button",class:"btn"},"End quiet period now");
+      go.title="The demo clock does not move by itself: continue as if 14 days had passed";
+      go.onclick=function(){send("resume",{days:14},[go])};
+      box.appendChild(h("div",{class:"row"},go));
+    }else if(c.outcome){
+      box.appendChild(h("p",null,deskPill(c),c.reason?" "+c.reason:""));
+    }
+    return box;
+  }
   function renderReport(rep,r,run,report,err,live,steps,secs){
     rep.textContent="";
+    var slot=h("div",{id:"desk-slot"});rep.appendChild(slot);renderReportOnly(true);
     rep.appendChild(h("h2",null,"Report"));
     if(!report){
       rep.appendChild(h("p",{class:"blank"},live?"Investigating. The report appears when the model submits it and the citation check passes.":err?"No report: the run failed.":"No report in this run."));

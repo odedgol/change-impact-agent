@@ -60,7 +60,13 @@ def server(tmp_path):
     truth_path.write_text(json.dumps(truth))
 
     factory = ScriptedFactory()
-    mon = Monitor(str(db), str(truth_path), str(tmp_path / "runs"), llm_factory=factory)
+    mon = Monitor(
+        str(db),
+        str(truth_path),
+        str(tmp_path / "runs"),
+        llm_factory=factory,
+        data_dir=tmp_path / "data",
+    )
     srv = serve(mon, port=0)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     yield f"http://127.0.0.1:{srv.server_address[1]}", mon, truth, factory
@@ -72,11 +78,11 @@ def get(url):
         return r.status, r.headers.get("Content-Type"), r.read()
 
 
-def post(url, body):
+def post(url, body, headers=None):
     req = urllib.request.Request(
         url,
         data=json.dumps(body).encode(),
-        headers={"Content-Type": "application/json"},
+        headers=headers or {"Content-Type": "application/json"},
     )
     try:
         with urllib.request.urlopen(req, timeout=5) as r:
@@ -236,3 +242,110 @@ def test_page_draws_the_flow_with_pinned_react_flow_and_filters_by_model():
     for node in ("model", "tools", "nudge", "check", "finish", "cap"):
         assert f'box("{node}"' in page
     assert "Investigator loop" not in page and "Temporal" not in page
+    # the change desk: start, answer and end the quiet period from the page
+    assert 'id="startchange"' in page and '"/api/changes/"' in page
+    for command in ('send("approve"', 'send("decline"', 'send("resume"'):
+        assert command in page
+
+
+# -- the change desk ---------------------------------------------------------------------
+
+
+def change(base, mon, rid, command, body=None):
+    status, out = post(f"{base}/api/changes/{rid}/{command}", body or {})
+    if status == 202:
+        wait_done(mon, out["run_id"])
+    return status, out
+
+
+def test_change_desk_start_approve_quiet_period_delete(server):
+    base, mon, truth, _ = server
+    rid = next(c for c in truth["cases"] if c["case_type"] == "decoy_safe")[
+        "request_id"
+    ]
+    assert json.loads(get(base + "/api/changes")[2]) == []
+
+    assert change(base, mon, rid, "start") == (202, {"run_id": f"change-{rid}"})
+    (row,) = json.loads(get(base + "/api/changes")[2])
+    assert row["verdict"] == "safe_to_delete" and row["waiting_for"] == "approval"
+    assert row["run_id"] == f"change-{rid}" and row["running"] is False
+
+    status, _ = change(
+        base, mon, rid, "approve", {"actions": ["disable", "delete"], "by": "ana"}
+    )
+    assert status == 202
+    (row,) = json.loads(get(base + "/api/changes")[2])
+    assert row["waiting_for"] == "quiet_period" and row["approved"] == [
+        "disable",
+        "delete",
+    ]
+
+    assert change(base, mon, rid, "resume", {"days": 14})[0] == 202
+    (row,) = json.loads(get(base + "/api/changes")[2])
+    assert row["outcome"] == "deleted" and row["waiting_for"] is None
+
+    run = next(
+        r
+        for r in json.loads(get(base + "/api/runs")[2])
+        if r["run_id"] == row["run_id"]
+    )
+    assert run["outcome"] == "deleted" and run["verdict"] == "safe_to_delete"
+    events = mon.events(row["run_id"])
+    assert [e["type"] for e in events if e["type"] in ("approval", "outcome")] == [
+        "approval",
+        "outcome",
+    ]
+
+
+def test_change_desk_refuses_out_of_order_and_bad_answers(server):
+    base, mon, truth, _ = server
+    rid = next(c for c in truth["cases"] if c["case_type"] == "decoy_safe")[
+        "request_id"
+    ]
+    assert (
+        change(base, mon, rid, "approve", {"actions": ["delete"], "by": "ana"})[0]
+        == 409
+    )
+    assert change(base, mon, "REQ-9999", "start")[0] == 400
+    assert change(base, mon, rid, "launch")[0] == 400
+    assert change(base, mon, rid, "start")[0] == 202
+    assert change(base, mon, rid, "start")[0] == 409  # already started
+    assert change(base, mon, rid, "resume")[0] == 409  # still waits for a person
+    for bad in (
+        {"actions": ["delete"], "by": ""},  # who answers?
+        {"actions": ["drop_table"], "by": "ana"},
+        {"actions": [], "by": "ana"},  # an approval names what it allows
+        {"actions": ["delete"], "by": "<script>"},
+    ):
+        assert change(base, mon, rid, "approve", bad)[0] == 400, bad
+    assert json.loads(get(base + "/api/changes")[2])[0]["waiting_for"] == "approval"
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {"Content-Type": "text/plain"},  # a cross-site form can send this
+        {"Content-Type": "application/json", "Origin": "http://evil.example"},
+    ],
+)
+def test_posts_only_as_json_from_this_page(server, headers):
+    base, mon, truth, _ = server
+    rid = truth["cases"][0]["request_id"]
+    for path in (f"/api/changes/{rid}/start", "/api/runs"):
+        status, out = post(base + path, {"request_id": rid}, headers)
+        assert status == 403 and "error" in out
+    assert not mon.active and json.loads(get(base + "/api/changes")[2]) == []
+
+
+def test_post_from_the_page_itself_is_allowed(server):
+    base, mon, truth, _ = server
+    rid = next(c for c in truth["cases"] if c["case_type"] == "decoy_safe")[
+        "request_id"
+    ]
+    status, out = post(
+        f"{base}/api/changes/{rid}/start",
+        {},
+        {"Content-Type": "application/json", "Origin": base},
+    )
+    assert status == 202
+    wait_done(mon, out["run_id"])

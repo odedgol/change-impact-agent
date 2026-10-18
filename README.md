@@ -53,10 +53,17 @@ make format    # ruff format at 88 columns; make lint checks it (also in CI)
 
 # investigate one change request with a local model (Ollama, default gemma4:26b-mlx)
 make run-local ID=REQ-0003   # events in runs/REQ-0003.jsonl
-make smoke                   # Rust terminal UI (tui/, needs cargo) with 9 offline runs piped in; q quits
+make smoke                   # Rust terminal UI (tui/, needs cargo) with 11 offline runs piped in; q quits
 make graph                   # redraw docs/index.html#engine from graph.py; print Mermaid
 make monitor                 # http://127.0.0.1:8765: start runs, watch them live;
                              # Flow tab: the run on the agent's five levels, with replay; Model filter
+                             # Start change: approve, decline or end the quiet period from the page
+
+# a change, end to end, on a writable copy of the org (data/target.db); rule model by default
+make change ID=REQ-0013      # investigate, then wait for a person
+make approve ID=REQ-0013 BY=you    # ACTIONS=disable,delete by default; you can only narrow
+make resume ID=REQ-0013      # end the 14-day quiet period: no use -> delete
+make changes                 # every change and what it waits for; make change-reset forgets them
 
 # score every change request (fails if any risky account would be deleted)
 make bench-fake             # offline plumbing check, also in CI
