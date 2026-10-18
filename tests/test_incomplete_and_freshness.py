@@ -198,13 +198,13 @@ def test_reading_every_page_clears_the_gap(org):
 
     class PagedSource(SyntheticSource):
         def get_tickets(self, identity_id):
-            return [{"id": i} for i in range(60)]
+            return [{"id": i, "author": "hr-bot"} for i in range(60)]
 
     t = case["identity_id"]
     script = [
         *full_read(t),
         call("get_tickets", 9, identity_id=t, offset=50),
-        submit("safe_to_delete"),
+        submit("safe_to_delete", "ev-usage-1", "ev-deps-2", "ev-tickets-3"),
     ]
     report, _ = investigate(PagedSource(db), script, case)
     assert report.verdict == "safe_to_delete"
@@ -249,7 +249,7 @@ def test_failure_then_success_counts_as_read(org):
     script = [
         *full_read(t),
         call("get_tickets", 9, identity_id=t),
-        submit("safe_to_delete"),
+        submit("safe_to_delete", "ev-usage-1", "ev-deps-2", "ev-tickets-3"),
     ]
     report, _ = investigate(FlakySource(db), script, case)
     assert report.verdict == "safe_to_delete"

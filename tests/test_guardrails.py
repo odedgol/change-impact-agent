@@ -57,14 +57,14 @@ def test_a_protected_identity_allows_nothing():
     assert d.allowed == () and "protected" in d.reasons[0]
 
 
-@pytest.mark.parametrize("hours", [25, 24.01])
-def test_a_report_older_than_24_hours_allows_nothing(hours):
-    d = decide("safe_to_delete", age=timedelta(hours=hours))
+@pytest.mark.parametrize("age", [timedelta(days=8), timedelta(days=7, minutes=1)])
+def test_a_report_older_than_the_7_day_backstop_allows_nothing(age):
+    d = decide("safe_to_delete", age=age)
     assert d.allowed == () and "old" in d.reasons[0]
 
 
-def test_a_report_exactly_24_hours_old_still_counts():
-    assert decide("safe_to_delete", age=timedelta(hours=24)).allowed
+def test_a_report_exactly_7_days_old_still_counts():
+    assert decide("safe_to_delete", age=timedelta(days=7)).allowed
 
 
 def test_the_age_limit_is_a_setting():

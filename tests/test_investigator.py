@@ -148,14 +148,55 @@ def test_safe_to_delete_with_valid_citations_is_kept(org):
         call("get_usage", 1, identity_id=target),
         call("get_dependencies", 2, identity_id=target),
         call("get_tickets", 3, identity_id=target),
-        submit("safe_to_delete", "ev-usage-1"),
+        submit("safe_to_delete", "ev-usage-1", "ev-deps-2", "ev-tickets-3"),
     ]
     report, _, _, _ = run(org, script, "decoy_safe")
     assert (
         report.verdict == "safe_to_delete"
         and report.permits_delete
         and report.incomplete_reason is None
+        and report.overridden is None
     )
+
+
+def test_safe_to_delete_must_cite_usage_dependencies_and_tickets(org):
+    db, truth = org
+    target = _case(truth, "decoy_safe")["identity_id"]
+    script = [
+        call("get_usage", 1, identity_id=target),
+        call("get_dependencies", 2, identity_id=target),
+        call("get_tickets", 3, identity_id=target),
+        submit("safe_to_delete", "ev-usage-1"),
+    ]
+    report, _, _, _ = run(org, script, "decoy_safe")
+    assert report.verdict == "ask_owner" and not report.permits_delete
+    assert "does not cite get_dependencies, get_tickets" in (report.overridden or "")
+
+
+@pytest.mark.parametrize(
+    "case_type,shows",
+    [
+        ("nightly_job", "usage events"),
+        ("orphaned_service_account", "dependencies"),
+        ("break_glass", "tickets from people"),
+        ("credential_chain", "dependencies"),
+    ],
+)
+def test_safe_to_delete_that_its_own_evidence_contradicts_becomes_ask_owner(
+    org, case_type, shows
+):
+    """Real ids are not enough: the evidence they point at must support the verdict."""
+    db, truth = org
+    target = _case(truth, case_type)["identity_id"]
+    script = [
+        call("get_usage", 1, identity_id=target),
+        call("get_dependencies", 2, identity_id=target),
+        call("get_tickets", 3, identity_id=target),
+        submit("safe_to_delete", "ev-usage-1", "ev-deps-2", "ev-tickets-3"),
+    ]
+    report, _, _, _ = run(org, script, case_type)
+    assert report.verdict == "ask_owner" and report.confidence == "low"
+    assert report.rejected_citations == 0 and shows in (report.overridden or "")
 
 
 def test_step_cap_returns_insufficient_evidence_never_a_delete(org):
