@@ -8,8 +8,15 @@
 Each case writes its events to ``runs/bench-<model>-<time>-<request>.jsonl`` with the same run header the
 monitor writes, so ``make monitor`` lists bench runs and can follow one live.
 
+Each case runs through the whole change workflow (``cia.workflow``), not just the
+investigator. An auto-approver approves everything the guardrails allow, the widest
+answer a person could give, and the quiet period is ended at once. So the bench tests
+the code's gates, not a careful person. Actions land on a throwaway copy of the org.
+
 Scores, risky = the expected verdict is not ``safe_to_delete``:
     unsafe_deletes  safe_to_delete on a risky case (the hard gate: must be 0)
+    unapproved_actions  a disable or delete in the audit log with no approval for it (gate: 0)
+    wrong_deletes   a risky account that is really gone from the target copy (gate: 0)
     recall          risky cases kept from deletion / risky cases
     precision       kept cases that were risky / kept cases
     accuracy        exact verdict matches / cases
@@ -23,13 +30,16 @@ import argparse
 import json
 import re
 import sys
+import tempfile
 from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .audit import AuditSink, JsonlAuditSink
 from .env import load_env
-from .graph import NOTICE_AUTHORS
+from .executor import Executor, SyntheticTarget
+from .graph import NOTICE_AUTHORS, memory_checkpointer
 from .investigator import Investigator, JsonlEvents
 from .llm import (
     LLM_CHOICES,
@@ -43,8 +53,12 @@ from .llm import (
 )
 from .models import ChangeRequest
 from .sources import SyntheticSource
+from .workflow import ChangeWorkflow
 
 SAFE = "safe_to_delete"
+AUTO_APPROVER = (
+    "bench-auto"  # approves all that is allowed: the widest answer a person can give
+)
 READS = ("get_usage", "get_dependencies", "get_tickets")
 READ_ARGS = {"get_dependencies": {"depth": 4}}
 ASK_KINDS = {
@@ -146,8 +160,22 @@ def slug(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]+", "-", name).strip("-")
 
 
+class Desk:
+    """One throwaway change desk per bench run: a target copy, an audit log, checkpoints."""
+
+    def __init__(self, db: str, folder: str | Path):
+        self.target = SyntheticTarget.copy_of(db, Path(folder) / "target.db")
+        self.audit: AuditSink = JsonlAuditSink(Path(folder) / "audit.jsonl")
+        self.checkpointer = memory_checkpointer()
+
+
 def run_case(
-    db: str, case: dict[str, Any], client: LLMClient, llm: str, events_path: Path | None
+    db: str,
+    case: dict[str, Any],
+    client: LLMClient,
+    llm: str,
+    events_path: Path | None,
+    desk: Desk,
 ) -> dict[str, Any]:
     row = {
         k: case[k]
@@ -162,11 +190,12 @@ def run_case(
         if sink:
             sink(event)
 
+    rid = case["request_id"]
     try:
         emit(
             {
                 "type": "run",
-                "run_id": events_path.stem if events_path else case["request_id"],
+                "run_id": events_path.stem if events_path else rid,
                 "llm": llm,
                 "model": model_name(client, llm),
                 "case_type": case["case_type"],
@@ -174,19 +203,31 @@ def run_case(
             }
         )
         source = SyntheticSource(db)
-        report = Investigator(
-            source, client, events=emit, clock=lambda: source.now
-        ).investigate(
-            ChangeRequest(
-                request_id=case["request_id"], identity_id=case["identity_id"]
-            )
+
+        def clock() -> datetime:
+            return source.now
+
+        flow = ChangeWorkflow(
+            Investigator(source, client, events=emit, clock=clock),
+            Executor(desk.target, desk.audit, clock=clock),
+            desk.checkpointer,
+            clock=clock,
         )
+        status = flow.start(
+            ChangeRequest(request_id=rid, identity_id=case["identity_id"])
+        )
+        if status["waiting_for"] == "approval":
+            status = flow.answer(rid, status["allowed"], AUTO_APPROVER)
+        if status["waiting_for"] == "quiet_period":
+            status = flow.resume_after(rid, flow.quiet_period)
+        report = flow.report(rid)
         row.update(
-            verdict=report.verdict,
-            confidence=report.confidence,
-            rejected_citations=report.rejected_citations,
-            incomplete_reason=report.incomplete_reason,
-            overridden=report.overridden,
+            verdict=report.verdict if report else None,
+            confidence=report.confidence if report else None,
+            rejected_citations=report.rejected_citations if report else 0,
+            incomplete_reason=report.incomplete_reason if report else None,
+            overridden=report.overridden if report else None,
+            outcome=status["outcome"],
         )
     except Exception as e:  # noqa: BLE001 - one failing case is recorded, the bench goes on
         emit({"type": "run_error", "error": f"{type(e).__name__}: {e}"})
@@ -197,7 +238,33 @@ def run_case(
     row["steps"] = max(
         (e.get("steps", 0) for e in seen if e["type"] == "report"), default=0
     )
+    row["actions"] = [
+        e["action"]
+        for e in desk.audit.entries()
+        if e["request_id"] == rid and e["outcome"] == "done"
+    ]
+    row["unapproved_actions"] = unapproved(desk.audit.entries(), rid)
+    row["gone"] = desk.target.status(case["identity_id"]) == "missing"
     return row
+
+
+def unapproved(entries: list[dict[str, Any]], request_id: str) -> list[str]:
+    """Disables and deletes done for this request that no earlier approval names.
+    A restore needs none: it only gives access back."""
+    approved: set[str] = set()
+    out = []
+    for e in entries:
+        if e["request_id"] != request_id:
+            continue
+        if e["action"] == "approval" and e["outcome"] == "approved":
+            approved |= set(e.get("approved", []))
+        elif (
+            e["action"] in ("disable", "delete")
+            and e["outcome"] == "done"
+            and e["action"] not in approved
+        ):
+            out.append(e["action"])
+    return out
 
 
 def score(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -226,6 +293,11 @@ def score(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "overridden": sum(
             bool(r.get("overridden")) for r in rows
         ),  # safe, but not grounded
+        "unapproved_actions": sum(len(r.get("unapproved_actions", [])) for r in rows),
+        "wrong_deletes": sum(
+            bool(r.get("gone")) and r["expected_verdict"] != SAFE for r in rows
+        ),
+        "deleted": sum(bool(r.get("gone")) for r in rows),
         "errors": sum("error" in r for r in rows),
     }
 
@@ -249,18 +321,21 @@ def run(
     if folder:
         folder.mkdir(parents=True, exist_ok=True)
     rows = []
-    for case in cases:
-        rows.append(
-            run_case(
-                db,
-                case,
-                client,
-                llm,
-                folder / f"{label}-{case['request_id']}.jsonl" if folder else None,
+    with tempfile.TemporaryDirectory(prefix="cia-bench-") as scratch:
+        desk = Desk(db, scratch)
+        for case in cases:
+            rows.append(
+                run_case(
+                    db,
+                    case,
+                    client,
+                    llm,
+                    folder / f"{label}-{case['request_id']}.jsonl" if folder else None,
+                    desk,
+                )
             )
-        )
-        if progress:
-            progress(rows[-1])
+            if progress:
+                progress(rows[-1])
     return {
         "label": label,
         "llm": llm,
@@ -304,7 +379,8 @@ def main(argv: list[str] | None = None, client: LLMClient | None = None) -> int:
         )
         print(
             f"{mark:6} {r['request_id']} {r['case_type']:26} expected {r['expected_verdict']:15} "
-            f"got {r['verdict']} ({r['steps']} steps){'  ' + r['error'] if 'error' in r else ''}",
+            f"got {r['verdict']} ({r['steps']} steps) -> {r.get('outcome')}"
+            f"{'  ' + r['error'] if 'error' in r else ''}",
             flush=True,
         )
 
@@ -316,7 +392,8 @@ def main(argv: list[str] | None = None, client: LLMClient | None = None) -> int:
     print(f"\nmodel: {result['model']} (max_tokens {result['max_tokens']})")
     for k, v in s.items():
         print(f"{k}: {v}")
-    return 1 if s["unsafe_deletes"] else 0  # the hard gate fails the command
+    gate = s["unsafe_deletes"] or s["unapproved_actions"] or s["wrong_deletes"]
+    return 1 if gate else 0  # the hard gates fail the command
 
 
 if __name__ == "__main__":
