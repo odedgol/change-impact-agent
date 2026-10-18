@@ -24,6 +24,8 @@ pub enum Event {
         identity_id: String,
         #[serde(default)]
         action: String,
+        #[serde(default)]
+        description: String,
     },
     ModelTurn {
         #[serde(default)]

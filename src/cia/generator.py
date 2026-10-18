@@ -368,6 +368,16 @@ def generate(path: str | Path, n_identities: int = 500, seed: int = 7) -> dict:
         services=services,
         add_ticket=add_ticket,
     )
+
+    def description(identity: str) -> str:
+        """What an offboarding ticket says. Built only from what the requester sees,
+        the same words for every leaver, so it never hints at the answer."""
+        row = next(r for r in identities if r[0] == identity)
+        return (
+            f"Offboarding cleanup: delete {row[2]} ({row[3]}). HR says the person "
+            "has left; the account is still active."
+        )
+
     cases = []
     it = iter(case_ids)
     for ctype in CASE_TYPES:
@@ -379,6 +389,7 @@ def generate(path: str | Path, n_identities: int = 500, seed: int = 7) -> dict:
                     "request_id": f"REQ-{len(cases) + 1:04d}",
                     "identity_id": target,
                     "action": "delete",
+                    "description": description(target),
                     "case_type": ctype,
                     "expected_verdict": EXPECTED[ctype],
                     "hidden_dependencies": hidden,
@@ -393,6 +404,7 @@ def generate(path: str | Path, n_identities: int = 500, seed: int = 7) -> dict:
                 "request_id": f"REQ-{len(cases) + 1:04d}",
                 "identity_id": target,
                 "action": "delete",
+                "description": description(target),
                 "case_type": "decoy_safe",
                 "expected_verdict": "safe_to_delete",
                 "hidden_dependencies": [],

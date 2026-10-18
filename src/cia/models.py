@@ -38,6 +38,18 @@ class ChangeRequest(_Contract):
     request_id: str
     identity_id: str
     action: Literal["delete", "disable"] = "delete"
+    # what the requester wrote: shown to people, never read by guardrails
+    description: str = ""
+
+    @classmethod
+    def from_case(cls, case: dict[str, Any]) -> ChangeRequest:
+        """A request from a ground-truth case; the case's answers stay out."""
+        return cls(
+            request_id=case["request_id"],
+            identity_id=case["identity_id"],
+            action=case.get("action", "delete"),
+            description=case.get("description", ""),
+        )
 
 
 class Evidence(_Contract):

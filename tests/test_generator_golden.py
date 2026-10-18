@@ -4,7 +4,7 @@ The ground truth, every test and every bench result depend on the generated
 org, so a refactor of the generator must not change a single row. The hashes
 were first recorded before the case types moved to commands (R1), then changed on
 purpose in PR 3.1, which added the credential_chain case type, and in PR 4.2, which
-added the five red-team case types. To change them on purpose, say why in the PR.
+added the five red-team case types, and when each request got a description. To change them on purpose, say why in the PR.
 """
 
 import hashlib
@@ -18,8 +18,8 @@ from cia.generator import generate
 TABLES = ["identities", "usage_events", "dependencies", "tickets"]
 
 GOLDEN = {
-    (500, 7): "d38eef230812fcbd95324d55fac7559f59f79bb774d499fd0749d975063a4ef8",
-    (2000, 1): "0d7e61dd9e47031bff59c7dacaec8c8c29fd81bd84a3ccd4190aab5989065419",
+    (500, 7): "33860f9d04f9dd9cebe0b7e67c763f065ad68926058bb7059900ba018d64a054",
+    (2000, 1): "9df0b4757f166953e27a1899a5b7ced7efd1e4ac6402d2d3c66a3eed13ef76bb",
 }
 
 

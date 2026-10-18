@@ -79,6 +79,7 @@ fn the_change_runs_show_approval_actions_and_a_second_look() {
         "· change: deleted",
         "[3] verify evidence changed (get_tickets) → investigate again",
         "· change: declined (declined by smoke)",
+        "\"Offboarding cleanup: delete user-",
     ] {
         assert!(text.contains(expected), "missing {expected:?} in:\n{text}");
     }

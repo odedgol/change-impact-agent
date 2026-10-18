@@ -70,6 +70,8 @@ h2{font:600 13px/1.3 var(--f);color:var(--ink-3);margin:0 0 10px}
 select{appearance:none;width:100%;height:36px;padding:0 32px 0 10px;border:1px solid var(--line-2);border-radius:8px;background:var(--bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5l3 3 3-3' fill='none' stroke='%235f6672' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 10px center;font-size:14px;cursor:pointer}
 select:hover{border-color:var(--ink-3)}
 .expect{font-size:12.5px;color:var(--ink-3);min-height:18px}
+.desc{margin:4px 0 2px;color:var(--ink-2);font-size:14px;line-height:1.45;max-width:72ch}
+.expect .desc{font-size:12.5px;margin:0 0 4px}
 .btns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .desk{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:0 0 18px;display:grid;gap:10px;background:var(--bg)}
 .desk h2{margin:0}
@@ -387,7 +389,8 @@ svg.thread circle{fill:var(--accent)}
     }).catch(function(e){setConn(false,"Monitor server not reachable");});
   }
   function showExpect(){var c=state.cases.find(function(x){return x.request_id===$("case").value});$("expect").textContent="";
-    if(c)add($("expect"),["Expected verdict: ",h("span",{class:"mono"},c.expected_verdict)])}
+    if(c){if(c.description)$("expect").appendChild(h("p",{class:"desc"},c.description));
+      add($("expect"),["Expected verdict: ",h("span",{class:"mono"},c.expected_verdict)])}}
   $("case").addEventListener("change",showExpect);
 
   // ---- start a run
@@ -739,6 +742,7 @@ svg.thread circle{fill:var(--accent)}
     var seg=h("span",{class:"seg"+(cap?" capped":""),"aria-hidden":"true"});for(var i=0;i<MAX_STEPS;i++)seg.appendChild(h("i",{class:i<steps?"on":null}));
     main.appendChild(h("div",{class:"head"},
       h("div",null,h("h1",null,(req.request_id||r.request_id||state.sel)+(req.identity_id?" · delete "+req.identity_id:"")),
+        req.description||r.description?h("p",{class:"desc"},req.description||r.description):null,
         h("div",{class:"sub"},run.model?h("span",null,"Model ",h("span",{class:"mono"},run.model)):null,
           run.case_type?h("span",null,"Planted case: "+run.case_type.replace(/_/g," ")):null,
           live?h("span",{class:"conn"},h("span",{class:"dot live"}),"live"):null)),

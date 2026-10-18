@@ -120,10 +120,17 @@ pub fn draw(frame: &mut Frame, app: &App) {
 fn draw_run(frame: &mut Frame, area: ratatui::layout::Rect, run: &Run) {
     let [steps_area, report_area] =
         Layout::vertical([Constraint::Min(5), Constraint::Length(8)]).areas(area);
-    let lines: Vec<Line> = run
-        .steps
-        .iter()
-        .map(|s| {
+    let request = (!run.description.is_empty()).then(|| {
+        Line::styled(
+            run.description.clone(),
+            Style::new()
+                .fg(Color::DarkGray)
+                .add_modifier(Modifier::ITALIC),
+        )
+    });
+    let lines: Vec<Line> = request
+        .into_iter()
+        .chain(run.steps.iter().map(|s| {
             Line::from(vec![
                 Span::styled(format!("{:>2} ", s.n), Style::new().fg(Color::DarkGray)),
                 Span::styled(
@@ -134,7 +141,7 @@ fn draw_run(frame: &mut Frame, area: ratatui::layout::Rect, run: &Run) {
                 ),
                 Span::raw(s.text.clone()),
             ])
-        })
+        }))
         .collect();
     // Show the newest steps when they no longer fit.
     let inner = steps_area.height.saturating_sub(2) as usize;

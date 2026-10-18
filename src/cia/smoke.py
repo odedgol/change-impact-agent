@@ -173,7 +173,7 @@ def change_runs(db: str, cases: Sequence[dict[str, Any]], sink: JsonlEvents) -> 
                 clock=clock,
             )
             rid = case["request_id"]
-            flow.start(ChangeRequest(request_id=rid, identity_id=case["identity_id"]))
+            flow.start(ChangeRequest.from_case(case))
             if late_ticket:  # written after the report: the approval below is void
                 source.new_tickets.append(
                     {
@@ -211,11 +211,7 @@ def run(db: str, cases: Sequence[dict[str, Any]], out: IO[str]) -> int:
         source = SyntheticSource(db)
         Investigator(
             source, llm, events=sink, clock=lambda s=source: s.now
-        ).investigate(
-            ChangeRequest(
-                request_id=case["request_id"], identity_id=case["identity_id"]
-            )
-        )
+        ).investigate(ChangeRequest.from_case(case))
     return len(runs) + change_runs(db, cases, sink)
 
 

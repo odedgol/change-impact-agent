@@ -218,6 +218,7 @@ class Investigator:
                 "request_id": request.request_id,
                 "identity_id": request.identity_id,
                 "action": request.action,
+                "description": request.description,
             }
         )
         config: RunnableConfig = {"recursion_limit": recursion_limit(self.max_steps)}

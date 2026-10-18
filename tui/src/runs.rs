@@ -36,6 +36,8 @@ pub struct Run {
     pub request_id: Option<String>,
     pub identity_id: String,
     pub action: String,
+    /// What the requester wrote, shown above the steps.
+    pub description: String,
     pub steps: Vec<Step>,
     pub report: Option<Report>,
     pub error: Option<String>,
@@ -110,6 +112,7 @@ impl Runs {
                 request_id,
                 identity_id,
                 action,
+                description,
             } => {
                 // The workflow may investigate the same request again; that stays one run.
                 let again = self
@@ -123,6 +126,9 @@ impl Runs {
                 run.request_id = Some(request_id);
                 run.identity_id = identity_id;
                 run.action = action;
+                if !description.is_empty() {
+                    run.description = description;
+                }
             }
             Event::ModelTurn {
                 step,
