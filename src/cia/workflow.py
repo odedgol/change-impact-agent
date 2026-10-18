@@ -24,6 +24,9 @@ between, so a wait survives a restart (Q13). Every decision is in the audit log.
 
 from __future__ import annotations
 
+import argparse
+import json
+import os
 import sqlite3
 from collections.abc import Callable
 from datetime import datetime, timedelta
@@ -34,7 +37,9 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 
-from .executor import Approval, Executor
+from .audit import JsonlAuditSink
+from .env import load_env
+from .executor import Approval, Executor, SyntheticTarget
 from .graph import STATE_TYPES
 from .guardrails import (
     Decision,
@@ -43,9 +48,11 @@ from .guardrails import (
     allowed_actions,
     check_approval,
 )
-from .investigator import Investigator
+from .investigator import Investigator, JsonlEvents
+from .llm import LLM_CHOICES
 from .models import ChangeRequest, RiskReport
 from .snapshot import changed, fingerprint
+from .sources import SyntheticSource
 
 QUIET_PERIOD = timedelta(days=14)  # Q14; any use while disabled ends it with a restore
 MAX_RUNS = 3  # investigations per request; evidence that keeps changing needs a person
@@ -124,6 +131,10 @@ def build_workflow(flow: ChangeWorkflow, checkpointer: Any = None):
         except Exception as e:  # noqa: BLE001 - could not check is never "unchanged"
             return [], f"could not re-read the evidence: {type(e).__name__}: {e}"
         return changed(state["fingerprints"], now), None
+
+    def finished(outcome: Outcome, reason: str | None) -> Update:
+        emit({"type": "outcome", "outcome": outcome, "reason": reason})
+        return {"outcome": outcome, "reason": reason}
 
     # -- nodes
 
@@ -291,21 +302,21 @@ def build_workflow(flow: ChangeWorkflow, checkpointer: Any = None):
         """Delete: only for safe_to_delete, only after the disable and a quiet period."""
         entry = ex.delete(state["request"], approval(state))
         emit({"type": "action", "action": "delete", "outcome": entry["outcome"]})
-        return {"outcome": "deleted"}
+        return finished("deleted", None)
 
     def restore(state: FlowState) -> Update:
         """Undo the disable: something used the account, or the evidence changed."""
         entry = ex.restore(state["request"])
         emit({"type": "action", "action": "restore", "outcome": entry["outcome"]})
-        return {"outcome": "restored", "reason": state["reason"]}
+        return finished("restored", state["reason"])
 
     def keep(state: FlowState) -> Update:
         """Stays disabled: disable_first never deletes; a new run is needed first."""
-        return {"outcome": "kept_disabled"}
+        return finished("kept_disabled", None)
 
     def stop(state: FlowState) -> Update:
         """No change: blocked by the guardrails, declined, unreadable, or the plan failed."""
-        return {}
+        return finished(state["outcome"] or "failed", state["reason"])
 
     # -- routes
 
@@ -407,6 +418,16 @@ class ChangeWorkflow:
         now = now or self.clock()
         return self._resume(request_id, "quiet_period", {"now": now.isoformat()})
 
+    def resume_after(self, request_id: str, wait: timedelta) -> dict[str, Any]:
+        """Continue the quiet period as if ``wait`` had passed since the disable (the demo's
+        simulated clock does not move by itself)."""
+        disabled = self.graph.get_state(self._config(request_id)).values.get(
+            "disabled_at"
+        )
+        if not disabled:
+            raise ValueError(f"{request_id} has not been disabled")
+        return self.resume(request_id, datetime.fromisoformat(disabled) + wait)
+
     def _resume(
         self, request_id: str, wait: str, value: dict[str, Any]
     ) -> dict[str, Any]:
@@ -448,3 +469,171 @@ def sqlite_checkpointer(path: str | Path):
     return SqliteSaver(
         conn, serde=JsonPlusSerializer(allowed_msgpack_modules=STATE_TYPES)
     )
+
+
+# ---- command line: the demo's change desk ----------------------------------------------------------
+
+DATA = Path("data")
+
+
+def open_workflow(
+    db: str | Path = "data/org.db",
+    data: str | Path = DATA,
+    llm: str = "fake",
+    model: str | None = None,
+    events: Callable[[dict[str, Any]], None] | None = None,
+) -> ChangeWorkflow:
+    """The workflow on the synthetic org: its own writable copy (``target.db``), the audit
+    log and the checkpoints all live in ``data/``. Time is the org's simulated clock."""
+    from .bench import (
+        make_llm,
+    )  # the rule model ("fake") or a real client; lazy: no cycle
+
+    data = Path(data)
+    data.mkdir(parents=True, exist_ok=True)
+    source = SyntheticSource(str(db))
+    target_db = data / "target.db"
+    target = (
+        SyntheticTarget(target_db)
+        if target_db.exists()
+        else SyntheticTarget.copy_of(db, target_db)
+    )
+
+    def clock() -> datetime:
+        return source.now
+
+    inv = Investigator(source, make_llm(llm, model), events=events, clock=clock)
+    ex = Executor(target, JsonlAuditSink(data / "audit.jsonl"), clock=clock)
+    return ChangeWorkflow(
+        inv, ex, sqlite_checkpointer(data / "checkpoints.db"), clock=clock
+    )
+
+
+def changes(data: str | Path = DATA) -> list[str]:
+    """Every request the change desk has seen, in the order it first appeared."""
+    seen: dict[str, None] = {}
+    for e in JsonlAuditSink(Path(data) / "audit.jsonl").entries():
+        seen.setdefault(e["request_id"], None)
+    return list(seen)
+
+
+def events_file(runs: str | Path, request_id: str) -> Path:
+    return Path(runs) / f"change-{request_id}.jsonl"
+
+
+def reset(data: str | Path = DATA) -> list[str]:
+    """Forget every change: the target copy, checkpoints and audit log. The org is untouched."""
+    gone = []
+    for name in ("target.db", "checkpoints.db", "audit.jsonl"):
+        p = Path(data) / name
+        if p.exists():
+            p.unlink()
+            gone.append(str(p))
+    return gone
+
+
+def main(argv: list[str] | None = None) -> None:
+    p = argparse.ArgumentParser(
+        description="Change desk: start a change, answer it, end its quiet period."
+    )
+    p.add_argument(
+        "command", choices=["start", "approve", "decline", "resume", "status", "reset"]
+    )
+    p.add_argument("request_id", nargs="?")
+    p.add_argument("--actions", default="disable,delete", help="approve: what to allow")
+    p.add_argument("--by", default=os.environ.get("USER", "someone"))
+    p.add_argument(
+        "--days", type=float, default=14, help="resume: days after the disable"
+    )
+    p.add_argument("--llm", default="fake", choices=["fake", *LLM_CHOICES])
+    p.add_argument("--model")
+    p.add_argument("--db", default="data/org.db")
+    p.add_argument("--truth", default="bench/ground_truth.json")
+    p.add_argument("--data", default=str(DATA))
+    p.add_argument("--runs", default="runs")
+    a = p.parse_args(argv)
+    load_env()
+    if a.command == "reset":
+        print(json.dumps({"removed": reset(a.data)}))
+        return
+    if a.command == "status" and not a.request_id:
+        flow = open_workflow(a.db, a.data)
+        for rid in changes(a.data):
+            print(json.dumps(flow.status(rid)))
+        return
+    if not a.request_id:
+        p.error(f"{a.command} needs a request id, such as REQ-0013")
+    try:
+        out = run_command(
+            a.command,
+            a.request_id,
+            db=a.db,
+            truth=a.truth,
+            data=a.data,
+            runs=a.runs,
+            llm=a.llm,
+            model=a.model,
+            actions=[x for x in a.actions.split(",") if x],
+            by=a.by,
+            days=a.days,
+        )
+    except (ValueError, KeyError) as e:
+        raise SystemExit(f"cia.workflow: {e}") from e
+    print(json.dumps(out))
+
+
+def run_command(
+    command: str,
+    request_id: str,
+    *,
+    db: str | Path = "data/org.db",
+    truth: str | Path = "bench/ground_truth.json",
+    data: str | Path = DATA,
+    runs: str | Path = "runs",
+    llm: str = "fake",
+    model: str | None = None,
+    actions: list[str] | None = None,
+    by: str = "someone",
+    days: float = 14,
+) -> dict[str, Any]:
+    """One change-desk command; its events go to ``runs/change-<request>.jsonl``.
+    Shared by ``make change`` and the monitor."""
+    from .bench import model_name
+
+    path = events_file(runs, request_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a") as f:
+        sink = JsonlEvents(f)
+        flow = open_workflow(db, data, llm, model, events=sink)
+        if command == "start":
+            with open(truth) as t:
+                cases = json.load(t)["cases"]
+            case = next((c for c in cases if c["request_id"] == request_id), None)
+            if case is None:
+                raise ValueError(f"unknown request {request_id}")
+            sink(
+                {
+                    "type": "run",
+                    "run_id": path.stem,
+                    "llm": llm,
+                    "model": model_name(flow.investigator.llm, llm),
+                    "case_type": case["case_type"],
+                    "expected_verdict": case["expected_verdict"],
+                }
+            )
+            return flow.start(
+                ChangeRequest(request_id=request_id, identity_id=case["identity_id"])
+            )
+        if command == "approve":
+            return flow.answer(request_id, actions or [], by)
+        if command == "decline":
+            return flow.answer(request_id, [], by)
+        if command == "resume":
+            return flow.resume_after(request_id, timedelta(days=days))
+        if command == "status":
+            return flow.status(request_id)
+        raise ValueError(f"unknown command {command!r}")
+
+
+if __name__ == "__main__":
+    main()

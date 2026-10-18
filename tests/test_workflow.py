@@ -5,6 +5,7 @@ nothing; use during the quiet period restores; only safe_to_delete ever deletes;
 a restart between the waits resumes from the checkpoint and never acts twice.
 """
 
+import json
 from datetime import datetime, timedelta
 
 import pytest
@@ -304,3 +305,38 @@ def test_evidence_that_keeps_changing_stops_after_three_investigations(org, make
         s = flow.answer(req.request_id, ["disable"], by="alice")
     assert s["outcome"] == "failed" and "kept changing" in s["reason"]
     assert make.target.status(req.identity_id) == "active"
+
+
+# -- the change-desk command line (make change / approve / resume) -------------------------
+
+
+def test_command_line_runs_a_change_end_to_end(tmp_path, capsys):
+    from cia.workflow import main
+
+    db, truth_path = tmp_path / "org.db", tmp_path / "truth.json"
+    truth = generate(db, n_identities=500, seed=7)
+    truth_path.write_text(json.dumps(truth))
+    rid = next(c for c in truth["cases"] if c["case_type"] == "decoy_safe")[
+        "request_id"
+    ]
+    common = ["--db", str(db), "--truth", str(truth_path)]
+    common += ["--data", str(tmp_path / "data"), "--runs", str(tmp_path / "runs")]
+
+    def run(*args):
+        main([*args, *common])
+        return json.loads(capsys.readouterr().out.splitlines()[-1])
+
+    assert run("start", rid)["waiting_for"] == "approval"
+    assert run("approve", rid, "--by", "ana")["waiting_for"] == "quiet_period"
+    assert run("resume", rid, "--days", "14")["outcome"] == "deleted"
+    assert run("status")["outcome"] == "deleted"
+
+    lines = (tmp_path / "runs" / f"change-{rid}.jsonl").read_text().splitlines()
+    types = [json.loads(line)["type"] for line in lines]
+    assert types[0] == "run" and types[-1] == "outcome"
+    assert types.count("run") == 1  # approve and resume append to the same trace
+
+    with pytest.raises(SystemExit, match="not waiting for approval"):
+        main(["approve", rid, *common])
+    main(["reset", "--data", str(tmp_path / "data")])
+    assert len(json.loads(capsys.readouterr().out)["removed"]) == 3

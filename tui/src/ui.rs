@@ -52,7 +52,9 @@ fn kind_color(kind: Kind) -> Color {
         Kind::Nudge => Color::Yellow,
         Kind::Evidence => Color::Green,
         Kind::Refused | Kind::Cap => Color::Red,
-        Kind::Retry => Color::Yellow,
+        Kind::Retry | Kind::Wait => Color::Yellow,
+        Kind::Gate => Color::Cyan,
+        Kind::Act => Color::Green,
     }
 }
 

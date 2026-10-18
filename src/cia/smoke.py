@@ -3,7 +3,9 @@
     PYTHONPATH=src python -m cia.smoke | cargo run --manifest-path tui/Cargo.toml     # make smoke
 
 One request per planted case type, played by the rule model from the bench, then two scripted runs
-that reach every guardrail: a refused tool, a citation sent back once, and the step cap. No network,
+that reach every guardrail: a refused tool, a citation sent back once, and the step cap. Then two
+change-desk runs (``cia.workflow``): an approved delete through its quiet period, and a ticket that
+appears after the report, so the evidence check investigates again before the person declines. No network,
 no model, no keys. The events are the investigator's own, so the UI sees exactly what a real run emits.
 """
 
@@ -13,14 +15,20 @@ import argparse
 import json
 import os
 import sys
+import tempfile
 from collections.abc import Sequence
+from datetime import datetime
+from pathlib import Path
 from typing import IO, Any
 
+from .audit import JsonlAuditSink
 from .bench import RuleLLM
+from .executor import Executor, SyntheticTarget
 from .investigator import Investigator, JsonlEvents
 from .llm import FakeLLM, LLMClient, LLMTurn, ToolCall
 from .models import ChangeRequest
 from .sources import SyntheticSource
+from .workflow import ChangeWorkflow, sqlite_checkpointer
 
 # Every event type the investigator emits, plus the run header; the Rust UI parses this same list.
 EVENT_TYPES = (
@@ -33,6 +41,13 @@ EVENT_TYPES = (
     "step_cap",
     "run_error",
     "report",
+    # the change workflow
+    "guardrail",
+    "approval_requested",
+    "approval",
+    "evidence_changed",
+    "action",
+    "outcome",
 )
 
 
@@ -109,6 +124,69 @@ def plan(
     return picked
 
 
+class LateTicket(SyntheticSource):
+    """The org, plus tickets written after the report."""
+
+    def __init__(self, db: str):
+        super().__init__(db)
+        self.new_tickets: list[dict[str, Any]] = []
+
+    def get_tickets(self, identity_id: str) -> list[dict]:
+        return [*super().get_tickets(identity_id), *self.new_tickets]
+
+
+def change_runs(db: str, cases: Sequence[dict[str, Any]], sink: JsonlEvents) -> int:
+    """Two change-desk runs on a throwaway copy of the org; returns how many."""
+    decoys = sorted(
+        (c for c in cases if c["case_type"] == "decoy_safe"),
+        key=lambda c: c["request_id"],
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        target = SyntheticTarget.copy_of(db, Path(tmp) / "target.db")
+        audit = JsonlAuditSink(Path(tmp) / "audit.jsonl")
+        for case, late_ticket in ((decoys[1], False), (decoys[2], True)):
+            sink(
+                {
+                    "type": "run",
+                    "run_id": f"change-{case['request_id']}",
+                    "llm": "fake",
+                    "model": "rule (change workflow)",
+                    "case_type": case["case_type"],
+                    "expected_verdict": case["expected_verdict"],
+                }
+            )
+            source = LateTicket(db)
+
+            def clock(s: SyntheticSource = source) -> datetime:
+                return s.now  # the org's simulated clock
+
+            flow = ChangeWorkflow(
+                Investigator(source, RuleLLM(), events=sink, clock=clock),
+                Executor(target, audit, clock=clock),
+                sqlite_checkpointer(Path(tmp) / "checkpoints.db"),
+                clock=clock,
+            )
+            rid = case["request_id"]
+            flow.start(ChangeRequest(request_id=rid, identity_id=case["identity_id"]))
+            if late_ticket:  # written after the report: the approval below is void
+                source.new_tickets.append(
+                    {
+                        "id": "T-LATE-1",
+                        "ts": "2026-10-02T09:00:00",
+                        "author": "hr-bot",
+                        "text": "Laptop returned.",
+                    }
+                )
+                flow.answer(
+                    rid, ["disable", "delete"], by="smoke"
+                )  # investigates again
+                flow.answer(rid, [], by="smoke")  # and the person declines
+            else:
+                flow.answer(rid, ["disable", "delete"], by="smoke")
+                flow.resume_after(rid, flow.quiet_period)
+    return 2
+
+
 def run(db: str, cases: Sequence[dict[str, Any]], out: IO[str]) -> int:
     """Write every smoke run to ``out``; returns how many runs there were."""
     sink = JsonlEvents(out)
@@ -132,7 +210,7 @@ def run(db: str, cases: Sequence[dict[str, Any]], out: IO[str]) -> int:
                 request_id=case["request_id"], identity_id=case["identity_id"]
             )
         )
-    return len(runs)
+    return len(runs) + change_runs(db, cases, sink)
 
 
 def main(argv: list[str] | None = None) -> None:

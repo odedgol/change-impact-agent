@@ -1,5 +1,6 @@
 //! Events grouped into runs. Each step names the graph node that produced it, the same names as
-//! `src/cia/graph.py` and the monitor's Flow tab: model, nudge, tools, check, cap.
+//! `src/cia/graph.py` and the monitor's Flow tab: model, nudge, tools, check, cap; and for the
+//! change workflow (`src/cia/workflow.py`): guard, approve, verify, dry_run, disable, delete, restore.
 
 use crate::events::{Event, Report};
 
@@ -13,6 +14,9 @@ pub enum Kind {
     Refused,
     Retry,
     Cap,
+    Gate,
+    Wait,
+    Act,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -35,6 +39,9 @@ pub struct Run {
     pub steps: Vec<Step>,
     pub report: Option<Report>,
     pub error: Option<String>,
+    /// What the change workflow finally did: deleted, restored, kept_disabled, blocked, declined, failed.
+    pub outcome: Option<String>,
+    pub outcome_reason: Option<String>,
 }
 
 impl Run {
@@ -104,7 +111,12 @@ impl Runs {
                 identity_id,
                 action,
             } => {
-                if self.runs.last().is_none_or(|r| r.request_id.is_some()) {
+                // The workflow may investigate the same request again; that stays one run.
+                let again = self
+                    .runs
+                    .last()
+                    .is_some_and(|r| r.request_id.as_deref() == Some(request_id.as_str()));
+                if !again && self.runs.last().is_none_or(|r| r.request_id.is_some()) {
                     self.runs.push(Run::default());
                 }
                 let run = self.current();
@@ -187,6 +199,58 @@ impl Runs {
             }
             Event::RunError { error } => self.current().error = Some(error),
             Event::Report(report) => self.current().report = Some(report),
+            Event::Guardrail { allowed, reasons } => {
+                let text = if allowed.is_empty() {
+                    format!("blocks: {}", reasons.join("; "))
+                } else {
+                    format!("allows {}", allowed.join(", "))
+                };
+                self.workflow_step("guard", Kind::Gate, text)
+            }
+            Event::ApprovalRequested { verdict, allowed } => self.workflow_step(
+                "approve",
+                Kind::Wait,
+                format!("waits for a person ({verdict}): {}", allowed.join(", ")),
+            ),
+            Event::Approval {
+                by,
+                approved,
+                refused,
+            } => {
+                let (kind, text) = match refused {
+                    Some(r) => (Kind::Refused, format!("{by} asked for more: {r}")),
+                    None if approved.is_empty() => (Kind::Gate, format!("{by} declined")),
+                    None => (Kind::Gate, format!("{by} approved {}", approved.join(", "))),
+                };
+                self.workflow_step("approve", kind, text)
+            }
+            Event::EvidenceChanged { tools } => self.workflow_step(
+                "verify",
+                Kind::Retry,
+                format!(
+                    "evidence changed ({}) → investigate again",
+                    tools.join(", ")
+                ),
+            ),
+            Event::Action { action, outcome } => {
+                let node = match action.as_str() {
+                    "plan" => "dry_run",
+                    "disable" => "disable",
+                    "delete" => "delete",
+                    "restore" => "restore",
+                    _ => "action",
+                };
+                let text = match outcome {
+                    Some(o) => format!("{action}: {o}"),
+                    None => "plan only, nothing changed".to_string(),
+                };
+                self.workflow_step(node, Kind::Act, text)
+            }
+            Event::Outcome { outcome, reason } => {
+                let run = self.current();
+                run.outcome = Some(outcome);
+                run.outcome_reason = reason;
+            }
             Event::Unknown => {}
         }
     }
@@ -196,6 +260,12 @@ impl Runs {
             self.runs.push(Run::default());
         }
         self.runs.last_mut().expect("just pushed")
+    }
+
+    /// Workflow steps carry no step number; they follow the last one.
+    fn workflow_step(&mut self, node: &'static str, kind: Kind, text: String) {
+        let n = self.current().steps.last().map_or(0, |s| s.n);
+        self.step(n, node, kind, text)
     }
 
     fn step(&mut self, n: u32, node: &'static str, kind: Kind, text: String) {

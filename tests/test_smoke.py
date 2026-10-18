@@ -31,14 +31,19 @@ def test_smoke_reaches_every_guardrail_and_deletes_nothing_unsafe(events):
     assert {e["type"] for e in events} == set(EVENT_TYPES) - {
         "run_error"
     }  # run_error needs a crashing model
-    runs = [e for e in events if e["type"] == "run"]
-    reports = [e for e in events if e["type"] == "report"]
-    assert len(runs) == len(reports) == 9
-    for header, report in zip(runs, reports, strict=True):
-        assert not (
-            report["verdict"] == "safe_to_delete"
-            and header["expected_verdict"] != "safe_to_delete"
-        )
+    assert sum(e["type"] == "run" for e in events) == 11
+    expected = None
+    for e in events:
+        if e["type"] == "run":
+            expected = e["expected_verdict"]
+        if e["type"] == "report":
+            assert not (
+                e["verdict"] == "safe_to_delete" and expected != "safe_to_delete"
+            )
+    assert [e["outcome"] for e in events if e["type"] == "outcome"] == [
+        "deleted",
+        "declined",
+    ]
 
 
 def test_the_uis_recorded_stream_is_current(events):

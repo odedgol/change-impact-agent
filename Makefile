@@ -1,4 +1,4 @@
-.PHONY: seed test lint format typecheck smoke tui-test tui-fixture baseline run-local monitor graph bench-fake bench-local bench-openrouter bench-bedrock
+.PHONY: seed test lint format typecheck smoke tui-test tui-fixture baseline run-local monitor graph bench-fake bench-local bench-openrouter bench-bedrock change approve decline resume changes change-reset
 
 seed:
 	PYTHONPATH=src python -m cia.generator --identities 500 --out data/org.db --truth bench/ground_truth.json
@@ -28,6 +28,31 @@ run-local: seed
 PORT ?= 8765
 monitor: seed
 	PYTHONPATH=src python -m cia.monitor --port $(PORT)
+
+# Change desk (week 3): start a change, approve or decline it, end its quiet period. LLM=fake is the
+# offline rule model; LLM=openai|openrouter|bedrock runs a real one. State in data/ (a writable copy
+# of the org, checkpoints, audit log); events in runs/change-$(ID).jsonl, so the monitor shows them.
+LLM ?= fake
+BY ?= $(USER)
+ACTIONS ?= disable,delete
+DAYS ?= 14
+change: seed
+	PYTHONPATH=src python -m cia.workflow start $(ID) --llm $(LLM)
+
+approve:
+	PYTHONPATH=src python -m cia.workflow approve $(ID) --actions $(ACTIONS) --by $(BY)
+
+decline:
+	PYTHONPATH=src python -m cia.workflow decline $(ID) --by $(BY)
+
+resume:
+	PYTHONPATH=src python -m cia.workflow resume $(ID) --days $(DAYS)
+
+changes:
+	PYTHONPATH=src python -m cia.workflow status
+
+change-reset:
+	PYTHONPATH=src python -m cia.workflow reset
 
 # Rust terminal UI (tui/): offline smoke runs piped in live. Interactive on a terminal; SMOKE_FLAGS=--plain
 # prints text and fails if any run recommended an unsafe delete (CI). Replay a saved run:
