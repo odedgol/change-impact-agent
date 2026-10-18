@@ -31,7 +31,7 @@ def test_smoke_reaches_every_guardrail_and_deletes_nothing_unsafe(events):
     assert {e["type"] for e in events} == set(EVENT_TYPES) - {
         "run_error"
     }  # run_error needs a crashing model
-    assert sum(e["type"] == "run" for e in events) == 11
+    assert sum(e["type"] == "run" for e in events) == 13
     expected = None
     for e in events:
         if e["type"] == "run":

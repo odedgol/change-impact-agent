@@ -102,12 +102,18 @@ def silent_script(turns: int) -> list[LLMTurn]:
     return [LLMTurn(reasoning="Scripted: thinking without calling a tool.")] * turns
 
 
+BENCH_ONLY = {"reveal_after_hours", "outage", "protected"}
+
+
 def plan(
     cases: Sequence[dict[str, Any]],
 ) -> list[tuple[dict[str, Any], LLMClient, str]]:
-    """One case per type with the rule model, then the two scripted runs."""
+    """One case per type with the rule model, then the two scripted runs. Red-team
+    cases that need the bench's clock, outage or policy (``BENCH_ONLY``) stay out."""
     picked, seen = [], set()
     for case in sorted(cases, key=lambda c: c["request_id"]):
+        if BENCH_ONLY & case.keys():
+            continue
         if case["case_type"] not in seen:
             seen.add(case["case_type"])
             picked.append((case, RuleLLM(), "rule"))

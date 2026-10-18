@@ -1,10 +1,11 @@
 import json
 import sqlite3
+from datetime import timedelta
 
 import pytest
 
 from cia.baseline import run as run_baseline
-from cia.generator import CASE_TYPES, generate
+from cia.generator import CASE_TYPES, NOW, generate
 from cia.sources import MAX_DEPTH
 from cia.tools import EvidenceTools
 
@@ -35,10 +36,13 @@ def test_case_mix(org):
 def test_every_planted_dependency_is_discoverable_with_tools(org):
     """If the tools cannot surface it, no agent could find it."""
     db, truth, _ = org
-    tools = EvidenceTools(db)
     for c in truth["cases"]:
         if not c["hidden_dependencies"]:
             continue
+        # late evidence exists only once the clock has moved past it
+        tools = EvidenceTools(
+            db, now=NOW + timedelta(hours=c.get("reveal_after_hours", 0))
+        )
         evidence = json.dumps(
             {
                 "deps": tools.get_dependencies(c["identity_id"], MAX_DEPTH),
@@ -54,6 +58,25 @@ def test_every_planted_dependency_is_discoverable_with_tools(org):
                 or (ref == "break-glass" and "Break-glass" in evidence)
             )
             assert hit, (c["case_type"], h)
+
+
+def test_late_evidence_is_hidden_until_the_clock_moves(org):
+    db, truth, _ = org
+    case = next(c for c in truth["cases"] if c["case_type"] == "late_evidence")
+    before = EvidenceTools(db).get_tickets(case["identity_id"])
+    after = EvidenceTools(
+        db, now=NOW + timedelta(hours=case["reveal_after_hours"])
+    ).get_tickets(case["identity_id"])
+    assert [t["author"] for t in before] == ["hr-bot"]
+    assert [t["author"] for t in after] == ["finance-lead", "hr-bot"]
+
+
+def test_red_team_truth_fields_are_only_on_their_cases(org):
+    _, truth, _ = org
+    for c in truth["cases"]:
+        assert ("reveal_after_hours" in c) == (c["case_type"] == "late_evidence")
+        assert ("outage" in c) == (c["case_type"] == "source_outage")
+        assert ("protected" in c) == (c["case_type"] == "protected_identity")
 
 
 def test_tools_are_read_only(org):
