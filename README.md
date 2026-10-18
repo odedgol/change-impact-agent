@@ -65,13 +65,16 @@ services such as `svc-billing-export`, and the same traps (the lookalike "N0ah S
 sits next to the decoy "Noah Smith"). The bench org is unchanged.
 
 ```bash
-make demo-org                                  # data/demo/: prints who is who
-make agent ORG=demo
-make hr-event ORG=demo WHO="Noah Novak"        # by name
+make demo                                      # builds data/demo/ once, runs the agent (Ctrl-C stops)
+make hr-event ORG=demo WHO="Noah Novak"        # in a second terminal: HR says Noah left
 ```
 
-Ask in Slack: "@Change Impact Agent what's going on with Noah Novak?" or "who left?".
-The bot answers in the thread; it finds the person in code, never through the model,
+Ask in Slack: "@Change Impact Agent who left?" lists everyone HR marks as gone;
+"@Change Impact Agent what's going on with Noah Novak?" answers with a card: title,
+manager, last day, warnings ("used after the last day"), access, keys, activity per
+app, what depends on the account, tickets, and the agent's verdict. The HR and access
+record is mocked for the demo; the agent's evidence is the bench's, unchanged. The bot answers in
+the thread; it finds the person in code, never through the model,
 and only reads. Approving stays on the message's buttons. From Claude Code, run
 `make mcp ORG=demo` and paste the command it prints. The MCP tools only read.
 

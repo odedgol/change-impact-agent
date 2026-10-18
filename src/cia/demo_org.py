@@ -19,9 +19,10 @@ import argparse
 import json
 import random
 import sqlite3
+from datetime import timedelta
 from pathlib import Path
 
-from .generator import generate, offboarding_text
+from .generator import NOW, generate, offboarding_text
 
 FIRST = [
     "Dana",
@@ -157,6 +158,42 @@ PURPOSE = [
 ]
 N_IDENTITIES = 120
 OUT = Path("data/demo")
+VERSION = "2"  # make demo rebuilds an org written by an older version (2: profiles)
+DOMAIN = "acme.io"
+LOCATIONS = ("Tel Aviv", "New York", "London", "Berlin", "Remote (EU)", "Remote (US)")
+TITLES = {
+    "engineering": ("Software Engineer", "Senior Backend Engineer", "Staff Engineer"),
+    "data": ("Data Engineer", "Analytics Engineer", "Senior Data Scientist"),
+    "finance": ("Financial Analyst", "Senior Accountant", "FP&A Manager"),
+    "legal": ("Legal Counsel", "Senior Legal Counsel", "Paralegal"),
+    "sales": ("Account Executive", "Sales Engineer", "Regional Sales Manager"),
+    "support": ("Support Engineer", "Customer Success Manager", "Support Lead"),
+    "security": ("Security Engineer", "Senior SecOps Engineer", "IAM Lead"),
+    "hr": ("HR Business Partner", "Recruiter", "People Ops Manager"),
+}
+APPS = {
+    "engineering": ("GitHub", "AWS Console", "Datadog", "PagerDuty", "Jira"),
+    "data": ("Snowflake", "Looker", "AWS Console", "GitHub"),
+    "finance": ("NetSuite", "Expensify", "Snowflake"),
+    "legal": ("DocuSign", "Ironclad"),
+    "sales": ("Salesforce", "Gong", "HubSpot"),
+    "support": ("Zendesk", "Salesforce", "Jira"),
+    "security": ("Okta Admin", "AWS Console", "CrowdStrike", "GitHub"),
+    "hr": ("Workday", "Greenhouse"),
+}
+BASE_APPS = ("Google Workspace", "Slack", "Zoom", "Confluence")
+AWS_ROLES = {
+    "engineering": ("eng-developer", "eng-deploy"),
+    "data": ("data-analyst", "data-pipeline-admin"),
+    "finance": ("finance-readonly",),
+    "security": ("security-audit", "break-glass-admin"),
+}
+REPOS = {
+    "engineering": ("acme/api", "acme/web", "acme/infra"),
+    "data": ("acme/pipelines", "acme/dbt-models"),
+    "security": ("acme/infra", "acme/detections"),
+}
+AWS_ACCOUNT = "acme-prod (4411-2093-7781)"
 
 
 def names(n: int, rng: random.Random) -> list[str]:
@@ -227,11 +264,99 @@ def build(out: str | Path = OUT, seed: int = 7) -> dict:
         c["description"] = offboarding_text(c["name"], dept)
         for h in c["hidden_dependencies"]:
             h["ref"] = renamed(h["ref"])
+    write_profiles(conn, random.Random(seed + 1))
     conn.commit()
     conn.close()
     truth["style"] = "demo"
     (out / "truth.json").write_text(json.dumps(truth, indent=2))
+    (out / "VERSION").write_text(VERSION + "\n")
     return truth
+
+
+def _key(rng: random.Random) -> str:
+    return "AKIA" + "".join(
+        rng.choice("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567") for _ in range(16)
+    )
+
+
+def _day(days_ago: int) -> str:
+    return (NOW - timedelta(days=days_ago)).date().isoformat()
+
+
+def write_profiles(conn: sqlite3.Connection, rng: random.Random) -> None:
+    """A mocked HR record, access and credentials per identity, in their own table.
+
+    The agent's tools never read ``profiles``: its evidence (usage, dependencies,
+    tickets, owner) is the bench's, unchanged. The profile is what a person sees in
+    Slack, so it is made to agree with that evidence: a leaver's last day is the HR
+    notice's date, an account that a job or a pipeline uses has an access key.
+    """
+    conn.execute(
+        "CREATE TABLE profiles (identity_id TEXT PRIMARY KEY, data TEXT NOT NULL)"
+    )
+    rows = conn.execute(
+        "SELECT id, kind, name, department, hr_status FROM identities ORDER BY id"
+    ).fetchall()
+    staff = [r for r in rows if r[1] == "human" and r[4] != "left"]
+    for ident, kind, name, dept, hr_status in rows:
+        dept = dept or "engineering"
+        notice = conn.execute(
+            "SELECT MIN(ts) FROM tickets WHERE identity_id = ? AND author = 'hr-bot'",
+            (ident,),
+        ).fetchone()[0]
+        machine = (
+            conn.execute(
+                "SELECT COUNT(*) FROM usage_events WHERE identity_id = ? AND caller != 'interactive'",
+                (ident,),
+            ).fetchone()[0]
+            or conn.execute(
+                "SELECT COUNT(*) FROM dependencies WHERE target_id = ? AND kind IN "
+                "('config_ref', 'owns_credential', 'runs_as')",
+                (ident,),
+            ).fetchone()[0]
+        )
+        keys = [
+            {"id": _key(rng), "created": _day(rng.randint(200, 1200))}
+            for _ in range(1 if machine or kind == "service" else 0)
+        ]
+        if kind == "service":
+            data = {
+                "type": "AWS IAM user"
+                if rng.random() < 0.6
+                else "Okta API service app",
+                "purpose": name.removeprefix("svc-").replace("-", " "),
+                "created": _day(rng.randint(300, 1500)),
+                "aws_policies": [f"{name}-policy", "CloudWatchAgentServerPolicy"],
+                "keys": keys,
+                "mfa": None,
+            }
+        else:
+            peers = [r for r in staff if r[3] == dept and r[0] != ident] or staff
+            manager = rng.choice(peers)
+            apps = list(BASE_APPS) + list(APPS.get(dept, ()))
+            data = {
+                "title": rng.choice(TITLES.get(dept, ("Specialist",))),
+                "location": rng.choice(LOCATIONS),
+                "email": f"{handle(name)}@{DOMAIN}",
+                "manager": manager[2],
+                "manager_id": manager[0],
+                "joined": _day(rng.randint(250, 2800)),
+                "employment": "contractor" if rng.random() < 0.12 else "full-time",
+                "last_day": notice[:10]
+                if notice
+                else (_day(rng.randint(10, 45)) if hr_status == "left" else None),
+                "apps": apps,
+                "aws_roles": list(AWS_ROLES.get(dept, ())),
+                "repos": list(REPOS.get(dept, ())),
+                "groups": [f"{dept}-all"]
+                + ([f"{dept}-admins"] if rng.random() < 0.25 else []),
+                "keys": keys,
+                "mfa": "off"
+                if rng.random() < 0.1
+                else rng.choice(("TOTP", "Okta Verify", "WebAuthn")),
+                "password_age_days": rng.randint(5, 400),
+            }
+        conn.execute("INSERT INTO profiles VALUES (?, ?)", (ident, json.dumps(data)))
 
 
 def main(argv: list[str] | None = None) -> None:

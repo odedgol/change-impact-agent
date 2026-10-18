@@ -118,6 +118,40 @@ class RuleLLM:
         )
 
     @staticmethod
+    def said(results: list[dict[str, Any]]) -> str:
+        """What the reads showed, in words: usage, dependencies, tickets by people."""
+        parts = []
+        for r in results:
+            data, eid = r["data"], r["evidence_id"]
+            if eid.startswith("ev-usage"):
+                n = data.get("event_count") or 0
+                parts.append(
+                    f"used {n} times in {data.get('window_days')} days, "
+                    f"last {str(data.get('last_seen'))[:10]}"
+                    if n
+                    else f"not used in {data.get('window_days')} days"
+                )
+            elif eid.startswith("ev-deps"):
+                rows = data.get("rows", [])
+                parts.append(
+                    f"{len(rows)} thing(s) depend on it ({rows[0]['source']})"
+                    if rows
+                    else "nothing depends on it"
+                )
+            elif eid.startswith("ev-tickets"):
+                people = [
+                    t
+                    for t in data.get("rows", [])
+                    if t.get("author") not in NOTICE_AUTHORS
+                ]
+                parts.append(
+                    f"{len(people)} ticket(s) by people"
+                    if people
+                    else "no tickets by people"
+                )
+        return "rule: " + ("; ".join(parts) or "nothing read")
+
+    @staticmethod
     def decide(results: list[dict[str, Any]]) -> dict[str, Any]:
         found = {}
         for r in results:
@@ -148,7 +182,7 @@ class RuleLLM:
                 [
                     {
                         "kind": "evidence",
-                        "summary": "rule: found" if found else "rule: nothing found",
+                        "summary": RuleLLM.said(results),
                         "evidence_ids": cited,
                         "confidence": "medium",
                     }

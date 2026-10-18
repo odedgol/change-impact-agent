@@ -160,44 +160,138 @@ def answer_from_click(
 MENTION = re.compile(r"<@[A-Z0-9]+>")
 WHO_LEFT = re.compile(r"\bwho\b.*\b(left|gone)\b|\blist\b|\bchanges\b", re.I)
 HELP = (
-    "Ask me about someone who left: `@Change Impact Agent what's going on with "
-    "Dana Levi?`, by identity id (`u00034`) or request (`OFF-...`). "
-    "`@Change Impact Agent who left?` lists every change."
+    "Ask me: `@Change Impact Agent who left?` lists everyone HR marks as gone; "
+    "`@Change Impact Agent what's going on with Noah Novak?` (a full name, an id "
+    "like `u00034`, or a request `OFF-...`) shows the facts and the agent's verdict."
 )
 
 
-def reply(text: str, desk: Desk) -> str:
-    """Answer an @mention from the read-only desk. The person is found in code (request
-    id, identity id or full name), so Slack text never reaches the model; what comes
-    back is escaped. Approving stays on the message's buttons."""
+def reply(text: str, desk: Desk) -> tuple[str, list[dict[str, Any]]]:
+    """Answer an @mention from the read-only desk: (fallback text, Block Kit blocks).
+
+    The person is found in code (request id, identity id or full name), so Slack text
+    never reaches the model; everything shown is escaped. Approving stays on the
+    change message's buttons."""
     question = MENTION.sub("", text).strip()
-    rids = desk.mentioned(question) if question else []
-    if not rids and WHO_LEFT.search(question):
-        rows = desk.who_left()
-        if not rows:
-            return "Nobody so far: no offboarding event has arrived."
-        return "\n".join(
-            f"• *{escape(r['name'] or r['identity_id'])}* ({escape(r['request_id'])}): "
-            f"{escape(r.get('state') or '')}"
-            for r in rows
-        )
+    if not question:
+        return HELP, [_section(HELP)]
+    ids = desk.people(question)
+    by_identity = desk.changes_by_identity()
+    for rid in desk.mentioned(question):
+        ident = next(i for i, r in by_identity.items() if rid in r)
+        if ident not in ids:
+            ids.append(ident)
+    if not ids and WHO_LEFT.search(question):
+        return who_left_card(desk.leavers())
+    if not ids:
+        note = f"I found no person in that question.\n{HELP}"
+        return note, [_section(note)]
+    blocks: list[dict[str, Any]] = []
+    for i in ids[:3]:  # a card is about 15 blocks; Slack allows 50
+        if blocks:
+            blocks.append({"type": "divider"})
+        blocks += card(desk, i, by_identity.get(i, []))
+    names = ", ".join(desk.name(i) for i in ids[:3])
+    return f"What I know about {names}", blocks
+
+
+def _section(md: str) -> dict[str, Any]:
+    return {"type": "section", "text": {"type": "mrkdwn", "text": md[:3000]}}
+
+
+def _context(md: str) -> dict[str, Any]:
+    return {"type": "context", "elements": [{"type": "mrkdwn", "text": md[:3000]}]}
+
+
+def _bullets(title: str, lines: list[str], limit: int = 6) -> dict[str, Any]:
+    shown = [f"• {escape(x)}" for x in lines[:limit]]
+    if len(lines) > limit:
+        shown.append(f"_+{len(lines) - limit} more_")
+    return _section(f"*{escape(title)}*\n" + "\n".join(shown))
+
+
+STATUS_ICON = {"active": "🔴", "disabled": "🟠", "deleted": "⚫"}
+
+
+def who_left_card(rows: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
+    if not rows:
+        return "HR marks nobody as gone.", [_section("HR marks nobody as gone.")]
+    still = sum(r["account_status"] == "active" for r in rows)
+    blocks: list[dict[str, Any]] = [
+        {
+            "type": "header",
+            "text": {"type": "plain_text", "text": f"{len(rows)} people have left"},
+        },
+        _context(
+            f"🔴 {still} accounts still active · 🟠 disabled · ⚫ deleted · "
+            "ask `@Change Impact Agent <name>` for the full profile"
+        ),
+    ]
+    lines = [
+        f"{STATUS_ICON.get(r['account_status'], '•')} *{escape(r['name'])}* · "
+        f"{escape(r.get('title') or (r['department'] or '-'))} · "
+        f"last day {escape(r.get('last_day') or '?')} · _{escape(r['state'])}_"
+        for r in rows
+    ]
+    for i in range(0, len(lines), 10):  # keep each section well under 3000 characters
+        blocks.append(_section("\n".join(lines[i : i + 10])))
+    return f"{len(rows)} people have left, {still} accounts still active", blocks
+
+
+def card(desk: Desk, identity_id: str, rids: list[str]) -> list[dict[str, Any]]:
+    """One person or service as a card: who, warnings, access, credentials, activity,
+    what depends on it, tickets; then each change the agent made for them."""
+    p = desk.profile(identity_id)
+    if p is None:
+        return [_section(f"No identity {escape(identity_id)}.")]
+    icon = STATUS_ICON.get(p["account"], "⚪")
+    gone = (
+        f"left {p['last_day']} · " if p["hr_status"] == "left" and p["last_day"] else ""
+    )
+    account = "STILL ACTIVE" if p["account"] == "active" else p["account"]
+    blocks: list[dict[str, Any]] = [
+        {
+            "type": "header",
+            "text": {"type": "plain_text", "text": f"{icon} {p['name']}"[:150]},
+        },
+        _context(
+            f"{escape(p['id'])} · {p['kind']} · {escape(gone)}account *{account}*"
+        ),
+        {
+            "type": "section",
+            "fields": [
+                {"type": "mrkdwn", "text": f"*{k}*\n{escape(str(v))}"}
+                for k, v in p["fields"]
+            ],
+        },
+    ]
+    if p["warnings"]:
+        blocks.append(_section("\n".join(f"⚠️ {escape(w)}" for w in p["warnings"])))
+    for title, lines in p["sections"]:
+        blocks.append(_bullets(title, lines))
     if not rids:
-        return f"I found no offboarding change in that question.\n{HELP}"
-    out = []
+        blocks.append(
+            _context(
+                "_No offboarding change for this person yet: no HR event has started one._"
+            )
+        )
     for rid in rids:
         for change in desk.status(rid)["changes"]:
-            lines = [f"*{escape(change.get('who') or rid)}* · {escape(rid)}"]
+            verdict = (change.get("who") or "").rsplit(" · ", 1)[-1]
+            lines = [
+                f"*Agent* · {escape(verdict or 'waiting to start')} · `{escape(rid)}`"
+            ]
             lines += [f"• {escape(f)}" for f in change.get("findings", [])]
-            lines.append(escape(change["state"]))
+            lines.append(f"*State:* {escape(change['state'])}")
             by = [
                 e["by"]
                 for e in desk.audit(rid)["entries"]
                 if e["action"] == "approval" and e.get("by")
             ]
             if by:
-                lines.append(f"Answered by {escape(by[-1])}")
-            out.append("\n".join(lines))
-    return "\n\n".join(out)
+                lines.append(f"*Answered by:* {escape(by[-1])}")
+            blocks += [{"type": "divider"}, _section("\n".join(lines))]
+    return blocks
 
 
 def socket_mode(
@@ -225,8 +319,10 @@ def socket_mode(
 
         @app.event("app_mention")
         def mentioned(event, say):
+            text, blocks = reply(event.get("text", ""), desk)
             say(
-                text=reply(event.get("text", ""), desk),
+                text=text,
+                blocks=blocks,
                 thread_ts=event.get("thread_ts") or event.get("ts"),
             )
 

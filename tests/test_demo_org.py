@@ -64,3 +64,18 @@ def test_the_rule_bench_gives_the_same_answers_on_the_demo_org(demo):
     s = result["scores"]
     assert s["accuracy"] == 1.0 and s["unsafe_deletes"] == 0
     assert (s["wrong_deletes"], s["unapproved_actions"]) == (0, 0)
+
+
+def test_profiles_agree_with_the_evidence(demo):
+    from cia.mcp_server import Desk
+
+    out, truth = demo
+    d = Desk(out / "org.db", out / "state", out / "runs")
+    by_type = {c["case_type"]: c["identity_id"] for c in truth["cases"]}
+    job = d.profile(by_type["nightly_job"])
+    assert job and any("after the last day" in w for w in job["warnings"])
+    assert any("AKIA" in x for x in dict(job["sections"])["Credentials"])
+    decoy = d.profile(by_type["decoy_safe"])
+    assert decoy and dict(decoy["fields"])["Email"].endswith("@acme.io")
+    assert not any("after the last day" in w for w in decoy["warnings"])
+    assert (out / "VERSION").read_text().strip() == "2"
