@@ -11,6 +11,9 @@ runs started from the terminal show up here too.
     GET  /api/runs/<id>/events   the run's events as server-sent events; follows a live run to the end
     POST /api/runs               {"request_id", "model", "llm"} starts a run, returns {"run_id"}
     GET  /api/changes            the change desk: every change request and what it waits for
+    GET  /api/baseline           what the naive "no use in 90 days" rule would break
+    GET  /api/bench              the newest bench result (bench/results/*.json), per case
+    GET  /api/audit              the change desk's audit log and whether its hash chain holds
     POST /api/changes/<REQ>/<command>
                                  start {"llm", "model"} | approve {"actions", "by"} |
                                  decline {"by"} | resume {"days"}; returns {"run_id"}
@@ -37,6 +40,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+from .audit import JsonlAuditSink, verify
+from .baseline import run as run_baseline
 from .bench import make_llm
 from .env import load_env
 from .investigator import Investigator, JsonlEvents
@@ -55,6 +60,7 @@ from .sources import SyntheticSource
 from .workflow import DATA, changes, events_file, open_workflow, run_command
 
 PAGE = Path(__file__).with_name("monitor.html")
+DEMO_MODEL_ENV = "CIA_DEMO_MODEL"
 RUN_ID = re.compile(r"^[A-Za-z0-9_.-]{1,80}$")
 MODEL_NAME = re.compile(r"^[A-Za-z0-9_.:/@-]{1,120}$")
 PERSON = re.compile(r"^[A-Za-z0-9_.@ -]{1,60}$")
@@ -87,10 +93,12 @@ class Monitor:
         runs_dir: str = "runs",
         llm_factory: LLMFactory = default_llm_factory,
         data_dir: str | Path = DATA,
+        results_dir: str | Path = "bench/results",
     ):
         self.db = db
         self.truth = truth
         self.data_dir = Path(data_dir)
+        self.results_dir = Path(results_dir)
         self.runs_dir = Path(runs_dir)
         self.runs_dir.mkdir(parents=True, exist_ok=True)
         self.llm_factory = llm_factory
@@ -113,6 +121,39 @@ class Monitor:
             ),
             key=lambda c: c["request_id"],
         )
+
+    def baseline(self) -> dict[str, Any]:
+        return run_baseline(self.db, self.truth)
+
+    def bench(self) -> dict[str, Any] | None:
+        """The newest bench result, cut to what the demo shows; None when there is none."""
+        files = sorted(self.results_dir.glob("*.json"), key=lambda p: p.stat().st_mtime)
+        if not files:
+            return None
+        result = json.loads(files[-1].read_text())
+        keep = (
+            "request_id",
+            "case_type",
+            "expected_verdict",
+            "verdict",
+            "outcome",
+            "input_tokens",
+            "output_tokens",
+            "cost_usd",
+        )
+        return {
+            "file": files[-1].name,
+            "label": result.get("label"),
+            "model": result.get("model"),
+            "scores": result.get("scores", {}),
+            "cases": [{k: c.get(k) for k in keep} for c in result.get("cases", [])],
+        }
+
+    def audit(self) -> dict[str, Any]:
+        """Every audit entry of the change desk, and the problems in its hash chain."""
+        entries = JsonlAuditSink(self.data_dir / "audit.jsonl").entries()
+        problems = verify(entries)
+        return {"entries": entries, "verified": not problems, "problems": problems}
 
     def models(self) -> list[dict[str, str]]:
         out = []
@@ -142,6 +183,15 @@ class Monitor:
         out.append(
             {"llm": "fake", "model": "rules"}
         )  # offline, no LLM: for demos and tests
+        # `make demo` names the model to start with: an llm ("openrouter") or llm|model;
+        # when that one is not available, the offline rule model
+        want = os.environ.get(DEMO_MODEL_ENV, "")
+        if want:
+            pick = next(
+                (m for m in out if want in (m["llm"], f"{m['llm']}|{m['model']}")),
+                out[-1],
+            )
+            pick["default"] = "true"
         return out
 
     def path(self, run_id: str) -> Path:
@@ -382,6 +432,16 @@ def make_handler(monitor: Monitor) -> type[BaseHTTPRequestHandler]:
                     self.send_json(monitor.runs())
                 elif route == "/api/changes":
                     self.send_json(monitor.changes())
+                elif route == "/api/baseline":
+                    self.send_json(monitor.baseline())
+                elif route == "/api/bench":
+                    bench = monitor.bench()
+                    self.send_json(
+                        bench or {"error": "no bench results yet"},
+                        404 if bench is None else 200,
+                    )
+                elif route == "/api/audit":
+                    self.send_json(monitor.audit())
                 elif m := re.fullmatch(r"/api/runs/([^/]+)/events", route):
                     self.stream(m.group(1))
                 else:

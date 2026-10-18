@@ -5,6 +5,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 import pytest
 
@@ -66,6 +67,7 @@ def server(tmp_path):
         str(tmp_path / "runs"),
         llm_factory=factory,
         data_dir=tmp_path / "data",
+        results_dir=tmp_path / "results",
     )
     srv = serve(mon, port=0)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
@@ -356,3 +358,56 @@ def test_post_from_the_page_itself_is_allowed(server):
     )
     assert status == 202
     wait_done(mon, out["run_id"])
+
+
+# -- the demo guide (PR 4.2c) --------------------------------------------------------------
+
+
+def test_demo_reads_the_baseline_the_newest_bench_and_the_audit(server, tmp_path):
+    base, mon, truth, _ = server
+    bl = json.loads(get(base + "/api/baseline")[2])
+    assert (bl["requests"], bl["risky"], bl["broken_by_naive_delete"]) == (44, 20, 16)
+
+    with pytest.raises(urllib.error.HTTPError) as no_bench:
+        get(base + "/api/bench")
+    assert no_bench.value.code == 404
+    results = tmp_path / "results"
+    results.mkdir()
+    case = {"request_id": "REQ-0001", "case_type": "nightly_job", "verdict": "x"}
+    (results / "old.json").write_text(json.dumps({"label": "old", "cases": []}))
+    time.sleep(0.01)
+    (results / "new.json").write_text(
+        json.dumps(
+            {"label": "bench-m", "model": "m", "scores": {"cases": 1}, "cases": [case]}
+        )
+    )
+    bench = json.loads(get(base + "/api/bench")[2])
+    assert bench["file"] == "new.json" and bench["label"] == "bench-m"
+    assert bench["cases"][0]["case_type"] == "nightly_job"
+
+    assert json.loads(get(base + "/api/audit")[2]) == {
+        "entries": [],
+        "verified": True,
+        "problems": [],
+    }
+    rid = next(c for c in truth["cases"] if c["case_type"] == "nightly_job")
+    change(base, mon, rid["request_id"], "start")
+    audit = json.loads(get(base + "/api/audit")[2])
+    assert audit["verified"] and audit["entries"]
+
+
+def test_demo_model_is_picked_when_available(monkeypatch, tmp_path):
+    mon = Monitor("db", "truth", str(tmp_path / "runs"))
+    monkeypatch.setenv("CIA_OPENAI_BASE_URL", "http://127.0.0.1:9/v1")  # no Ollama
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.setenv("CIA_DEMO_MODEL", "openrouter")
+    # no key: OpenRouter is not offered, so the offline rule model is the default
+    assert [m["llm"] for m in mon.models() if m.get("default")] == ["fake"]
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    assert [m["llm"] for m in mon.models() if m.get("default")] == ["openrouter"]
+
+
+def test_page_has_the_demo_guide():
+    page = (Path(__file__).resolve().parents[1] / "src/cia/monitor.html").read_text()
+    for needle in ('id="demo"', "function renderDemo", "/api/baseline", "/api/bench"):
+        assert needle in page, needle

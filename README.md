@@ -47,12 +47,25 @@ On the default 500-identity org (44 requests, 20 risky), the naive rule would de
 the 20 risky accounts. The rule model behind `make bench-fake` gets 44 of 44 through the
 whole workflow, deletes only the 22 decoys and nothing protected.
 
+## Run the demo
+
+```bash
+make demo PORT=8787   # fresh org and change desk; open http://127.0.0.1:8787/?demo
+```
+
+Six scenes in the run monitor, about five minutes: what the naive rule breaks, a real
+cleanup (approve, quiet period, delete), a hidden job, an injected ticket, the bench
+scoreboard, and the hash-chained audit log. It uses OpenRouter when `OPENROUTER_API_KEY`
+is set in `.env` (synthetic data only, about $0.001 a scene), else the offline rule
+model (`make demo DEMO_MODEL=fake`). On all 44 cases, Gemma 4 26B on OpenRouter made 0
+unsafe deletes, 0 unapproved actions and 0 wrong deletes, and got 40 right, for $0.018.
+
 ## Run it
 
 ```bash
 pip install -e ".[dev]"
 cp .env.example .env   # model settings and keys; git-ignored, the shell overrides it
-make seed       # 500 identities, 24 change requests, writes bench/ground_truth.json
+make seed       # 500 identities, 44 change requests, writes bench/ground_truth.json
 make baseline   # shows what the naive rule breaks
 make test
 make typecheck # pyright, 0 errors (also in CI)
@@ -60,7 +73,7 @@ make format    # ruff format at 88 columns; make lint checks it (also in CI)
 
 # investigate one change request with a local model (Ollama, default gemma4:26b-mlx)
 make run-local ID=REQ-0003   # events in runs/REQ-0003.jsonl
-make smoke                   # Rust terminal UI (tui/, needs cargo) with 11 offline runs piped in; q quits
+make smoke                   # Rust terminal UI (tui/, needs cargo) with 13 offline runs piped in; q quits
 make graph                   # redraw both graphs in docs/index.html (#engine, #change-graph); print Mermaid
 make monitor                 # http://127.0.0.1:8765: start runs, watch them live;
                              # Flow tab: the run on the agent's five levels, with replay; Model filter

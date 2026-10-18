@@ -1,4 +1,4 @@
-.PHONY: seed test lint format typecheck smoke tui-test tui-fixture baseline run-local monitor graph bench-fake bench-local bench-openrouter bench-bedrock change approve decline resume changes change-reset
+.PHONY: seed test lint format typecheck smoke tui-test tui-fixture baseline run-local monitor graph bench-fake bench-local bench-openrouter bench-bedrock change approve decline resume changes change-reset demo
 
 seed:
 	PYTHONPATH=src python -m cia.generator --identities 500 --out data/org.db --truth bench/ground_truth.json
@@ -28,6 +28,13 @@ run-local: seed
 PORT ?= 8765
 monitor: seed
 	PYTHONPATH=src python -m cia.monitor --port $(PORT)
+
+# The guided demo (docs/week-4.html#demo): a fresh org and change desk, the monitor on the
+# Demo guide, OpenRouter picked when OPENROUTER_API_KEY is set, else the offline rule model.
+DEMO_MODEL ?= openrouter
+demo: seed change-reset
+	@echo "demo: open http://127.0.0.1:$(PORT)/?demo"
+	CIA_DEMO_MODEL=$(DEMO_MODEL) PYTHONPATH=src python -m cia.monitor --port $(PORT)
 
 # Change desk (week 3): start a change, approve or decline it, end its quiet period. LLM=fake is the
 # offline rule model; LLM=openai|openrouter|bedrock runs a real one. State in data/ (a writable copy
