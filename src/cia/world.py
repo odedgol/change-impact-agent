@@ -608,7 +608,15 @@ def build(out: str | Path = OUT, demo: str | Path = DEMO, seed: int = 7) -> Worl
     out, demo = Path(out), Path(demo)
     out.mkdir(parents=True, exist_ok=True)
     # a new company starts with no cases: their checkpoints and audit go too
-    for f in ("world.db", "vault.key", "cases.db", "cases.db-wal", "cases.db-shm"):
+    for f in (
+        "world.db",
+        "vault.key",
+        "cases.db",
+        "cases.db-wal",
+        "cases.db-shm",
+        "slack.json",
+        "chat.jsonl",
+    ):
         (out / f).unlink(missing_ok=True)
     (out / "audit.jsonl").unlink(missing_ok=True)
     key = Fernet.generate_key()
