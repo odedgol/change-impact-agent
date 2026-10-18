@@ -187,7 +187,7 @@ def case_tools(case: Case) -> dict[str, list[BaseTool]]:
             if case.world.actions_today(state["person_id"]) >= MAX_ACTIONS:
                 return {"error": f"at most {MAX_ACTIONS} actions a day; try tomorrow"}
             result = fn()
-        case.emit(state, "action", tool=name, input=args, result=result)
+            case.emit(state, "action", tool=name, input=args, result=result)
         return result
 
     @tool
@@ -587,16 +587,19 @@ class Case:
         )
 
     def emit(self, state: Mapping[str, Any], kind: str, **data: Any) -> None:
-        self.events(
-            {
-                "type": kind,
-                "day": self.world.day,
-                "date": self.world.today,
-                "person_id": state.get("person_id"),
-                "name": state.get("name"),
-                **data,
-            }
-        )
+        """One case event. Under the lock: tool calls run in threads, and listeners
+        (the Slack room) read the world too."""
+        with self.lock:
+            self.events(
+                {
+                    "type": kind,
+                    "day": self.world.day,
+                    "date": self.world.today,
+                    "person_id": state.get("person_id"),
+                    "name": state.get("name"),
+                    **data,
+                }
+            )
 
     def request(self, state: CaseState) -> ChangeRequest:
         return ChangeRequest(
