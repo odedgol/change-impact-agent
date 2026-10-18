@@ -425,12 +425,12 @@ def chat_from_env(desk: Any, data: Path) -> tuple[Any, str]:
     if llm == "off":
         return None, "off"
     from .chat import Chat
-    from .llm import make_client
+    from .chat_models import make_chat_model
 
     model = os.environ.get("CIA_CHAT_MODEL") or (
         CHAT_MODEL if llm == "openrouter" else None
     )
-    client = make_client(llm, model, max_tokens=2048)
+    client = make_chat_model(llm, model, max_tokens=2048)
     chat = Chat(
         desk, client, sqlite_checkpointer(data / "chat.db"), log=data / "chat.jsonl"
     )

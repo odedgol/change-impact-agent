@@ -13,11 +13,12 @@ dependencies = [
     "mcp>=2.3,<3",  # ask the agent from Claude, read-only (cia.mcp_server)
     "cryptography>=42",  # the simulated vault encrypts its values (world.py)
     "psycopg[binary]>=3.2,<4",  # Postgres + pgvector document index (docindex.py)
+    "langchain-openai>=1.0,<2",  # LangChain chat models: OpenRouter and Ollama (chat_models.py)
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6", "pyright>=1.1.409", "httpx>=0.27"]  # httpx: FastAPI's TestClient
-bedrock = ["boto3>=1.35"]
+bedrock = ["boto3>=1.35", "langchain-aws>=1.0,<2"]
 
 [build-system]
 requires = ["setuptools>=68"]

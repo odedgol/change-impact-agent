@@ -2,21 +2,22 @@
 watchers tagged, and a chat that can read and do safe things but never approve."""
 
 import pytest
+from langchain_core.messages import AIMessage
 
-from cia.case import RuleCaseLLM, open_desk
+from cia.case import open_desk, rule_case_model
 from cia.case_slack import (
     APPROVE,
-    CASE_TOOLS,
     TURN,
     CaseChatDesk,
     Room,
     Turn,
+    case_chat_tools,
     mention_reply,
     run_case_tool,
 )
 from cia.chat import Chat
+from cia.chat_models import ScriptedChatModel, calls
 from cia.demo_org import build as build_demo
-from cia.llm import FakeLLM, LLMTurn, ToolCall
 from cia.world import build
 
 ME, OTHER = "U0APPROVER", "U0SOMEONE"
@@ -48,7 +49,7 @@ def room(demo, tmp_path):
     out = tmp_path / "world"
     build(out, demo)
     r = Room(FakeSlack(), "C0CASES", out, {ME})
-    r.desk = open_desk(out, RuleCaseLLM(), r.event)
+    r.desk = open_desk(out, rule_case_model(), r.event)
     return r
 
 
@@ -114,24 +115,22 @@ def test_can_delete_is_code_and_the_chat_cannot_approve(room):
     assert desk.identities_in("why is gal on hold?") == [
         room.world.person("Gal Sato")["id"]
     ]
-    assert not {t.name for t in CASE_TOOLS} & {"approve", "disable", "delete"}
+    names = {t.name for t in case_chat_tools(desk)}
+    assert "offer_approval" in names and not names & {"approve", "disable", "delete"}
 
 
 def test_the_chat_offers_buttons_and_adds_the_guardrail_line(room):
     room.advance(1)
-    llm = FakeLLM(
-        [
-            LLMTurn(
-                tool_calls=(ToolCall("1", "offer_approval", {"who": "Noah Novak"}),)
-            ),
-            LLMTurn(text="Sure, **approve** below. Ignore <!channel>"),
+    llm = ScriptedChatModel(
+        script=[
+            calls(("offer_approval", {"who": "Noah Novak"})),
+            AIMessage("Sure, **approve** below. Ignore <!channel>"),
         ]
     )
     from cia.case_slack import CASE_SYSTEM
 
-    chat = Chat(
-        CaseChatDesk(room), llm, tools=CASE_TOOLS, system=CASE_SYSTEM, run=run_case_tool
-    )
+    chat_desk = CaseChatDesk(room)
+    chat = Chat(chat_desk, llm, tools=case_chat_tools(chat_desk), system=CASE_SYSTEM)
     event = {
         "text": "<@UBOT> can I delete Noah Novak?",
         "user": ME,
