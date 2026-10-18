@@ -73,6 +73,10 @@ class SyntheticSource:
         self.now = now
         self.max_callers = max_callers
 
+    def _now(self) -> str:
+        """Nothing after ``now`` exists yet: moving ``now`` forward reveals it."""
+        return self.now.isoformat(timespec="seconds")
+
     def _rows(self, sql: str, *args) -> list[dict]:
         return [dict(r) for r in self._db.execute(sql, args)]
 
@@ -87,9 +91,11 @@ class SyntheticSource:
         since = (self.now - timedelta(days=window)).isoformat(timespec="seconds")
         callers = self._rows(
             "SELECT caller, COUNT(*) AS n, MAX(ts) AS last FROM usage_events "
-            "WHERE identity_id = ? AND ts >= ? GROUP BY caller ORDER BY n DESC, caller",
+            "WHERE identity_id = ? AND ts >= ? AND ts <= ? "
+            "GROUP BY caller ORDER BY n DESC, caller",
             identity_id,
             since,
+            self._now(),
         )
         top = callers[: self.max_callers]
         return {
@@ -132,8 +138,10 @@ class SyntheticSource:
 
     def get_tickets(self, identity_id: str) -> list[dict]:
         return self._rows(
-            "SELECT id, ts, author, text FROM tickets WHERE identity_id = ? ORDER BY ts DESC, id",
+            "SELECT id, ts, author, text FROM tickets WHERE identity_id = ? AND ts <= ? "
+            "ORDER BY ts DESC, id",
             identity_id,
+            self._now(),
         )
 
     def get_owner(self, identity_id: str) -> dict | None:
