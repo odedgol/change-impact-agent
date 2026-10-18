@@ -54,7 +54,7 @@ make format    # ruff format at 88 columns; make lint checks it (also in CI)
 # investigate one change request with a local model (Ollama, default gemma4:26b-mlx)
 make run-local ID=REQ-0003   # events in runs/REQ-0003.jsonl
 make smoke                   # Rust terminal UI (tui/, needs cargo) with 11 offline runs piped in; q quits
-make graph                   # redraw both graphs in docs/index.html (#engine, #workflow); print Mermaid
+make graph                   # redraw both graphs in docs/index.html (#engine, #change-graph); print Mermaid
 make monitor                 # http://127.0.0.1:8765: start runs, watch them live;
                              # Flow tab: the run on the agent's five levels, with replay; Model filter
                              # Start change: approve, decline or end the quiet period from the page
