@@ -11,3 +11,4 @@ runs/
 .playwright-mcp/
 .env
 tui/target/
+data/demo/

@@ -34,6 +34,7 @@ import hmac
 import json
 import os
 import re
+import sqlite3
 import threading
 import time
 import urllib.error
@@ -406,6 +407,19 @@ def _post(url: str, body: dict[str, Any], secret: str | None) -> tuple[int, Any]
         return e.code, json.loads(e.read() or b"null")
 
 
+def identity_named(db: str, name: str) -> str | None:
+    """The identity id for a full name (case ignored), read-only."""
+    conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    try:
+        row = conn.execute(
+            "SELECT id FROM identities WHERE lower(name) = lower(?) ORDER BY id",
+            (name.strip(),),
+        ).fetchone()
+    finally:
+        conn.close()
+    return row[0] if row else None
+
+
 def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(
         description="The agent as a service: HR events in, messages out."
@@ -421,6 +435,8 @@ def main(argv: list[str] | None = None) -> None:
     e.add_argument(
         "--case", help="the first identity of a planted case type, e.g. decoy_safe"
     )
+    e.add_argument("--who", help="a person's full name, e.g. 'Noah Novak'")
+    e.add_argument("--db", default="data/org.db", help="where --who is looked up")
     e.add_argument("--truth", default="bench/ground_truth.json")
     e.add_argument("--event-id", default=None)
     for name in ("approve", "decline"):
@@ -440,6 +456,7 @@ def main(argv: list[str] | None = None) -> None:
         agent = agent_from_env(a.db, a.data, a.runs)
         where = type(agent.notifier).__name__
         if where == "SlackNotifier" and os.environ.get("SLACK_APP_TOKEN"):
+            from .mcp_server import Desk
             from .slack import socket_mode
 
             approvers = approvers_from_env()
@@ -448,8 +465,9 @@ def main(argv: list[str] | None = None) -> None:
                 os.environ["SLACK_APP_TOKEN"],
                 approvers,
                 agent.answer,
+                Desk(a.db, a.data, a.runs),
             )
-            where += f" with buttons ({len(approvers)} approvers)"
+            where += f" with buttons ({len(approvers)} approvers) and @mentions"
         print(f"messages: {where}", flush=True)
         print(
             f"agent on http://127.0.0.1:{a.port} · model {agent.llm}{':' + agent.model if agent.model else ''}"
@@ -470,8 +488,10 @@ def main(argv: list[str] | None = None) -> None:
             a.identity_id = next(
                 (c["identity_id"] for c in cases if c["case_type"] == a.case), None
             )
+        if a.who:
+            a.identity_id = identity_named(a.db, a.who)
         if not a.identity_id:
-            p.error("event needs an identity id or a known --case")
+            p.error("event needs an identity id, a known --case or a known --who")
         body = {
             "event_id": a.event_id or uuid.uuid4().hex[:12],
             "identity_id": a.identity_id,

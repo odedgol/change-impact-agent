@@ -109,3 +109,27 @@ def test_the_server_offers_only_read_only_tools(desk):
     assert all(flags.values()) and len(flags) == 4
     assert "disable_first" in str(result)
     assert "request id looks like" in str(bad)
+
+
+def test_mentioned_finds_people_in_free_text_whole_words_only(desk):
+    d, ident = desk
+    name = d.status("OFF-j1")["changes"][0]["who"].split(" (")[0]
+    assert d.mentioned(f"what's going on with {name.upper()}?") == ["OFF-j1"]
+    assert d.mentioned(f"and {ident('decoy_safe')}") == ["OFF-d1"]
+    assert d.mentioned("status of off-b1 please") == ["OFF-b1"]
+    assert d.mentioned(f"{name}0") == []  # user-000120 is not user-00012
+    assert d.mentioned("hello") == []
+
+
+def test_a_slack_mention_is_answered_from_the_desk(desk):
+    from cia.slack import reply
+
+    d, _ = desk
+    deleted = reply("<@U0BOT> what happened to OFF-d1?", d)
+    assert "Outcome: deleted" in deleted and "Answered by dana" in deleted
+    waiting = reply("<@U0BOT> OFF-j1", d)
+    assert "disable_first" in waiting and "ev-" in waiting
+    listed = reply("<@U0BOT> who left?", d)
+    assert listed.count("•") == 3 and "waiting to start" in listed
+    assert "found no offboarding change" in reply("<@U0BOT> <!channel> hi", d)
+    assert "Ask me about" in reply("<@U0BOT>", d)
