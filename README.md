@@ -10,7 +10,7 @@ permits a delete. Execution is a separate, reversible step that needs human appr
 
 ## Status
 
-Week 4 of 4 (plan: `docs/week-4.html`): proof and launch. Week 3 added approval and a reversible executor. Done: synthetic org, read-only evidence tools, naive baseline, the
+Week 5 planned (`docs/week-5.html`): the real demo, talking to the bot in Slack on Keycloak, a sandbox AWS account and GitHub Issues. Week 4 (plan: `docs/week-4.html`): proof and launch. Week 3 added approval and a reversible executor. Done: synthetic org, read-only evidence tools, naive baseline, the
 `EvidenceSource` and `LLMClient` interfaces, and the investigator as a LangGraph state
 graph (code-assigned evidence ids, an 8-step cap, citation check; `make graph` draws it). It runs on a local model through Ollama, a
 hosted open model through OpenRouter, or on Bedrock, and a local run monitor shows each run live, plus a benchmark. Week 3 added a credential

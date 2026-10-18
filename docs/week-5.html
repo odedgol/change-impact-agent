@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<script>try{var t=localStorage.getItem("cia-theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<title>Week 5 Plan</title>
+<meta name="description" content="Plan 004: the real demo. Talk to the bot in Slack in your own words, on real sandbox systems: Keycloak as the identity provider and HR, a sandbox AWS account with real keys and a real job, and GitHub Issues as tickets.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#ffffff;--bg-2:#f7f8fa;--bg-3:#eef0f4;--ink:#0b0d12;--ink-2:#434955;--ink-3:#5f6672;--line:#e5e7eb;--line-2:#cfd4dc;
+  --accent:#2f52e0;--accent-2:#2443c4;--accent-bg:#eef2ff;
+  --safe:#13773a;--safe-bg:#e9f8ef;--disable:#a24f06;--disable-bg:#fff4e5;--ask:#6a3bd2;--ask-bg:#f3eeff;--guard:#c01c1c;--guard-bg:#fff0f0;
+  --f:"Geist",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;--m:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --side:264px;--col:760px;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0a0c10;--bg-2:#11141a;--bg-3:#181c24;--ink:#eceef2;--ink-2:#b3b9c5;--ink-3:#9198a5;--line:#222731;--line-2:#323946;
+  --accent:#8199ff;--accent-2:#a3b4ff;--accent-bg:#171d36;
+  --safe:#4bd47e;--safe-bg:#0e2618;--disable:#f5b445;--disable-bg:#2a1e09;--ask:#b89dff;--ask-bg:#201838;--guard:#ff7a7a;--guard-bg:#2c1313;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0a0c10;--bg-2:#11141a;--bg-3:#181c24;--ink:#eceef2;--ink-2:#b3b9c5;--ink-3:#9198a5;--line:#222731;--line-2:#323946;
+  --accent:#8199ff;--accent-2:#a3b4ff;--accent-bg:#171d36;
+  --safe:#4bd47e;--safe-bg:#0e2618;--disable:#f5b445;--disable-bg:#2a1e09;--ask:#b89dff;--ask-bg:#201838;--guard:#ff7a7a;--guard-bg:#2c1313;color-scheme:dark}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;scroll-padding-top:76px}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 var(--f);font-feature-settings:"ss01"}
+::selection{background:var(--accent-bg);color:var(--ink)}
+a{color:var(--accent-2);text-underline-offset:3px;text-decoration-thickness:1px}
+a:hover{text-decoration-thickness:2px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+code{font-family:var(--m);font-size:.86em;font-weight:500;background:var(--bg-3);padding:2px 6px;border-radius:5px;overflow-wrap:anywhere}
+pre{margin:16px 0 0;padding:14px 16px;background:var(--bg-2);border:1px solid var(--line);border-radius:10px;overflow-x:auto;font:13.5px/1.65 var(--m)}
+pre code{background:none;padding:0;font:inherit}
+*{scrollbar-color:var(--line-2) transparent;scrollbar-width:thin}
+
+/* top bar */
+.top{position:sticky;top:0;z-index:20;height:60px;display:flex;align-items:center;gap:16px;padding:0 max(16px,env(safe-area-inset-left));background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:saturate(1.4) blur(10px);border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:10px;color:var(--ink);text-decoration:none;font-weight:600;letter-spacing:-.01em}
+.brand svg{flex:none}
+.brand span{color:var(--ink-3);font-weight:400}
+.top .sp{flex:1}
+.top a.gh,.top button{font:500 14px var(--f);color:var(--ink-2);text-decoration:none;background:none;border:1px solid var(--line);border-radius:8px;height:34px;padding:0 12px;display:inline-flex;align-items:center;gap:8px;cursor:pointer}
+.top a.gh:hover,.top button:hover{border-color:var(--line-2);color:var(--ink)}
+.top .menu{display:none}
+
+/* shell */
+.shell{display:grid;grid-template-columns:var(--side) minmax(0,1fr);max-width:1480px;margin:0 auto}
+.side{position:sticky;top:60px;height:calc(100vh - 60px);overflow-y:auto;padding:28px 20px 40px 24px;border-right:1px solid var(--line)}
+.side h4{font:600 12px/1 var(--f);letter-spacing:.02em;color:var(--ink-3);margin:22px 0 8px;padding-left:10px}
+.side h4:first-child{margin-top:0}
+.side a{display:block;padding:6px 10px;border-radius:7px;color:var(--ink-2);text-decoration:none;font-size:14.5px;line-height:1.35}
+.side a:hover{background:var(--bg-2);color:var(--ink)}
+.side a[aria-current="true"],.side a[aria-current="page"]{background:var(--accent-bg);color:var(--accent-2);font-weight:500}
+.side a.sub{padding-left:22px;font-size:14px}
+main{min-width:0;padding:44px clamp(16px,4vw,56px) 120px}
+.doc{max-width:var(--col)}
+.wide{max-width:1080px}
+
+/* type */
+h1{font:700 clamp(34px,5vw,48px)/1.06 var(--f);letter-spacing:-.035em;margin:0 0 16px;text-wrap:balance}
+h2{font:650 28px/1.2 var(--f);letter-spacing:-.025em;margin:0 0 12px;text-wrap:balance}
+h3{font:600 19px/1.35 var(--f);letter-spacing:-.01em;margin:36px 0 8px}
+p,li{color:var(--ink-2);max-width:70ch}
+p{margin:0 0 14px}
+strong,b{color:var(--ink);font-weight:600}
+.lead{font-size:19px;line-height:1.6;color:var(--ink-2);max-width:62ch}
+section{padding-top:64px;margin-top:64px;border-top:1px solid var(--line)}
+section:first-of-type{border-top:0;margin-top:0;padding-top:0}
+.anchor{color:inherit;text-decoration:none}
+.anchor:hover::after{content:" #";color:var(--ink-3)}
+
+/* verdict + status pills */
+.v{display:inline-flex;align-items:center;gap:6px;font:500 13px/1 var(--m);padding:5px 9px 5px 8px;border-radius:999px;white-space:nowrap;vertical-align:1px}
+.v::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.v-none{color:var(--ink-2);background:var(--bg-3);box-shadow:inset 0 0 0 1px var(--line-2)}.v-none::before{background:none;box-shadow:inset 0 0 0 1.5px currentColor}
+.v-safe{color:var(--safe);background:var(--safe-bg)}.v-disable{color:var(--disable);background:var(--disable-bg)}.v-ask{color:var(--ask);background:var(--ask-bg)}
+.st{display:inline-flex;align-items:center;gap:6px;font:500 12.5px/1 var(--f);padding:4px 9px;border-radius:999px;border:1px solid var(--line-2);color:var(--ink-2);white-space:nowrap}
+.st-done{border-color:transparent;background:var(--safe-bg);color:var(--safe)}
+.st-now{border-color:transparent;background:var(--accent-bg);color:var(--accent-2)}
+.target{font:500 12px/1 var(--m);color:var(--disable);border:1px dashed currentColor;border-radius:4px;padding:2px 5px;margin-left:6px;vertical-align:2px;white-space:nowrap}
+.ev{font:500 12.5px/1 var(--m);color:var(--accent-2);background:var(--accent-bg);padding:3px 6px;border-radius:5px;white-space:nowrap}
+
+/* at a glance: one contract row, not a stat grid */
+.contract{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin:28px 0 0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--bg-2)}
+.contract>div{padding:16px 18px;border-left:1px solid var(--line);min-width:0}
+.contract>div:first-child{border-left:0}
+.contract dt{font:500 12.5px/1.2 var(--f);color:var(--ink-3);margin:0 0 8px}
+.contract dd{margin:0;color:var(--ink);font-size:15px;line-height:1.5}
+.contract .vs{display:flex;flex-wrap:wrap;gap:6px}
+@media (max-width:720px){.contract{grid-template-columns:1fr}.contract>div{border-left:0;border-top:1px solid var(--line)}.contract>div:first-child{border-top:0}}
+
+.note{margin:20px 0 0;padding:14px 16px;border:1px solid var(--line);border-radius:10px;background:var(--bg-2)}
+.note p{margin:0}
+.note.warn{border-color:color-mix(in srgb,var(--disable) 40%,var(--line));background:var(--disable-bg)}
+.note.warn p,.note.warn b{color:var(--ink)}
+
+/* tables */
+.tbl{overflow-x:auto;margin:18px 0 0;border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:15px;line-height:1.5}
+th,td{padding:11px 14px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}
+tr:last-child td{border-bottom:0}
+th{font:600 13px/1.4 var(--f);color:var(--ink-3);background:var(--bg-2)}
+td{color:var(--ink-2)}
+td:first-child{color:var(--ink)}
+td.n{font:500 13.5px/1.6 var(--m);color:var(--ink-3);white-space:nowrap;font-variant-numeric:tabular-nums}
+td code{white-space:nowrap}
+
+/* figures */
+figure{margin:24px 0 0}
+.fig{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--bg-2);padding:16px}
+figcaption{margin-top:10px;font-size:14px;color:var(--ink-3);max-width:80ch}
+svg.d{display:block;width:100%;height:auto}
+.d text{fill:var(--ink);font-family:var(--f)}
+.d .h{font-size:14px;font-weight:600}
+.d .s{font-size:12px;fill:var(--ink-3)}
+.d .t{font:600 12px var(--m);letter-spacing:.06em;fill:var(--ink-3)}
+.d .l{font:500 12px var(--m);fill:var(--ink-3);paint-order:stroke;stroke:var(--bg-2);stroke-width:5px;stroke-linejoin:round}
+.d .node{fill:var(--bg);stroke:var(--line-2);stroke-width:1.2}
+.d .llm{fill:var(--accent-bg);stroke:var(--accent);stroke-width:1.8}
+.d .tool{fill:var(--safe-bg);stroke:var(--safe);stroke-width:1.5}
+.d .guard{fill:var(--guard-bg);stroke:var(--guard);stroke-width:1.8}
+.d .iface{fill:var(--bg);stroke:var(--ink-3);stroke-width:1.2;stroke-dasharray:2 3}
+.d .later{stroke-dasharray:6 4}
+.d .zone{fill:none;stroke:var(--line-2);stroke-width:1.2}
+.d .zone-ro{fill:none;stroke:var(--safe);stroke-width:1.2;stroke-dasharray:6 4}
+.d .zone-h{fill:none;stroke:var(--guard);stroke-width:1.2;stroke-dasharray:6 4}
+.d .e{fill:none;stroke:var(--ink-3);stroke-width:1.5}
+.d .e.dash{stroke-dasharray:5 4}
+.d .ah{fill:var(--ink-3)}
+.legend{display:flex;flex-wrap:wrap;gap:8px 18px;margin:12px 0 0;font-size:13.5px;color:var(--ink-3)}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.legend i{width:14px;height:14px;border-radius:4px;border:1.5px solid;display:inline-block}
+.legend .k-llm{background:var(--accent-bg);border-color:var(--accent)}
+.legend .k-tool{background:var(--safe-bg);border-color:var(--safe)}
+.legend .k-guard{background:var(--guard-bg);border-color:var(--guard)}
+.legend .k-code{background:var(--bg);border-color:var(--line-2)}
+.legend .k-later{background:transparent;border-color:var(--ink-3);border-style:dashed}
+
+/* flow stepper: the one interaction */
+.stepper{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 14px}
+.stepper button{font:500 13.5px var(--f);color:var(--ink-2);background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:6px 12px;cursor:pointer;display:inline-flex;gap:7px;align-items:center}
+.stepper button b{font:500 12px var(--m);color:var(--ink-3)}
+.stepper button:hover{border-color:var(--line-2);color:var(--ink)}
+.stepper button[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.stepper button[aria-pressed="true"] b{color:var(--bg);opacity:.7}
+.flowfig g[data-step]{transition:opacity .35s cubic-bezier(.16,1,.3,1)}
+.flowfig.focus g[data-step]:not(.on){opacity:.18}
+.say{min-height:3.2em;margin:12px 0 0;padding:12px 14px;border-radius:10px;background:var(--bg);border:1px solid var(--line);font-size:15px;color:var(--ink-2)}
+.say b{color:var(--ink)}
+
+/* guardrail list */
+.rails{list-style:none;padding:0;margin:18px 0 0;border:1px solid var(--line);border-radius:10px}
+.rails li{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:4px 20px;padding:13px 16px;border-top:1px solid var(--line);max-width:none}
+.rails li:first-child{border-top:0}
+.rails b{font-weight:600}
+.rails span{color:var(--ink-3);font-size:14.5px}
+@media (max-width:640px){.rails li{grid-template-columns:1fr}}
+
+/* roadmap timeline */
+.weeks{list-style:none;margin:18px 0 0;padding:0;position:relative}
+.weeks li{position:relative;display:grid;grid-template-columns:96px minmax(0,1fr);gap:4px 18px;padding:0 0 26px;max-width:none}
+.weeks li::before{content:"";position:absolute;left:5px;top:22px;bottom:0;width:1px;background:var(--line-2)}
+.weeks li:last-child::before{display:none}
+.weeks .wk{display:flex;gap:10px;align-items:baseline;font:600 15px var(--f);color:var(--ink)}
+.weeks .wk::before{content:"";flex:none;width:11px;height:11px;border-radius:50%;border:2px solid var(--line-2);background:var(--bg);transform:translateY(1px)}
+.weeks li.done .wk::before{background:var(--safe);border-color:var(--safe)}
+.weeks li.now .wk::before{background:var(--accent);border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-bg)}
+.weeks h3{margin:0 0 4px;font-size:17px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.weeks p{margin:0;font-size:15px}
+@media (max-width:560px){.weeks li{grid-template-columns:1fr}}
+
+/* pr flow track */
+.track{list-style:none;margin:18px 0 0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,96px),1fr));gap:8px}
+.track li{padding:12px 12px 13px;border:1px solid var(--line);border-radius:10px;background:var(--bg);display:grid;gap:3px;align-content:start;max-width:none}
+.track li.gate{border-color:color-mix(in srgb,var(--accent) 45%,var(--line));background:var(--accent-bg)}
+.track b{font-size:15px}
+.track span{font-size:13.5px;color:var(--ink-3);line-height:1.45}
+
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:14px;margin-top:18px}
+.box{border:1px solid var(--line);border-radius:10px;padding:16px 18px;min-width:0}
+.box h3{margin:0 0 6px;font-size:16px}
+.box p{margin:0;font-size:15px}
+.box .when{font:500 12.5px var(--m);color:var(--ink-3)}
+
+.foot{margin-top:96px;padding-top:24px;border-top:1px solid var(--line);font-size:14px;color:var(--ink-3)}
+
+@media (max-width:900px){
+  .shell{grid-template-columns:1fr}
+  .top .menu{display:inline-flex}
+  .shell{grid-template-columns:minmax(0,1fr)}
+  .side{position:fixed;inset:60px 0 auto 0;height:auto;max-height:calc(100vh - 60px);background:var(--bg);border-right:0;border-bottom:1px solid var(--line);z-index:15;display:none;box-shadow:0 12px 32px -12px rgb(0 0 0 / .25)}
+  .side.open{display:block}
+  .brand span{display:none}
+  main{padding-top:32px}
+  .top a.gh{display:none}
+}
+/* week plan extras */
+.qs{display:grid;gap:12px;margin-top:18px}
+.q{border:1px solid var(--line);border-radius:10px;padding:16px 18px;display:grid;gap:8px;min-width:0}
+.q-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.q-id{font:600 14px var(--m);color:var(--ink)}
+.q-title{margin:0;font-weight:600;color:var(--ink)}
+.q ul{margin:0;padding-left:18px;display:grid;gap:4px}
+.q ul li{font-size:15px}
+.rec{margin:0;font-size:15px}
+.rec b{color:var(--accent-2)}
+ol.steps{list-style:none;padding:0;margin:18px 0 0;counter-reset:s;border:1px solid var(--line);border-radius:10px}
+ol.steps>li{counter-increment:s;display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:2px 14px;padding:14px 16px;border-top:1px solid var(--line);max-width:none;align-items:start}
+ol.steps>li:first-child{border-top:0}
+ol.steps>li::before{content:counter(s);width:26px;height:26px;border-radius:50%;border:1px solid var(--line-2);display:grid;place-items:center;font:500 13px var(--m);color:var(--ink-3)}
+.step-file{display:block;font:500 13.5px var(--m);color:var(--ink);overflow-wrap:anywhere}
+.step-pr{font:500 12.5px var(--m);color:var(--accent-2);background:var(--accent-bg);padding:3px 8px;border-radius:999px;white-space:nowrap}
+ul.check{list-style:none;padding:0;margin:18px 0 0;border:1px solid var(--line);border-radius:10px}
+ul.check>li{display:grid;grid-template-columns:18px minmax(0,1fr);gap:14px;padding:12px 16px;border-top:1px solid var(--line);max-width:none}
+ul.check>li:first-child{border-top:0}
+ul.check>li::before{content:"";width:16px;height:16px;margin-top:4px;border:1.5px solid var(--line-2);border-radius:4px}
+ul.check>li.done::before{content:"\2713";display:grid;place-items:center;font:700 11px/1 var(--f);color:var(--bg);background:var(--safe);border-color:var(--safe)}
+.step-pr.done{color:var(--safe);background:var(--safe-bg)}
+ul.check ul{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}
+.opt{font:500 12px var(--f);color:var(--ink-3);border:1px solid var(--line-2);border-radius:999px;padding:2px 8px;margin-right:6px}
+.scope{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:14px;margin-top:18px}
+.scope .box ul{margin:8px 0 0;padding-left:18px;display:grid;gap:4px}
+.scope .box li{font-size:15px}
+.scope .out{border-style:dashed}
+.chain{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:4px 0;font:13px var(--m);color:var(--ink-3)}
+.chain b{font-weight:500;color:var(--ink);background:var(--bg-2);border:1px solid var(--line);border-radius:6px;padding:3px 8px}
+.d .wait{fill:var(--disable-bg);stroke:var(--disable);stroke-width:1.5}
+.d .act{fill:var(--ask-bg);stroke:var(--ask);stroke-width:1.5}
+.cost{font-variant-numeric:tabular-nums;white-space:nowrap}
+.chatlog{margin:18px 0 0;border:1px solid var(--line);border-radius:12px;background:var(--bg-2);padding:14px 16px;display:grid;gap:10px}
+.chatlog p{margin:0;max-width:none;font-size:15px}
+.chatlog .who{font:600 13px var(--m);color:var(--ink-3);display:inline-block;min-width:44px}
+.chatlog .bot{color:var(--ink)}
+.chatlog .code-line{font:500 13px var(--m);color:var(--guard);display:block;margin-top:4px}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <a class="brand" href="index.html" aria-label="Change Impact Agent docs home">
+    <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect x="1" y="1" width="20" height="20" rx="6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 11.5l3.2 3.2L16 7.8" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    Change Impact Agent <span>Docs</span>
+  </a>
+  <div class="sp"></div>
+  <button class="menu" type="button" aria-expanded="false" aria-controls="side">Menu</button>
+  <button type="button" id="theme" aria-label="Toggle dark mode">Theme</button>
+  <a class="gh" href="https://github.com/odedgol/change-impact-agent">GitHub</a>
+</header>
+
+<div class="shell">
+<nav class="side" id="side" aria-label="Docs">
+  <h4>Docs</h4>
+  <a href="index.html">Overview</a>
+  <a href="index.html#agent">Agentic workflow</a>
+  <a href="index.html#roadmap">Roadmap</a>
+  <a href="index.html#workflow">PR workflow</a>
+  <a href="week-3.html">Week 3 plan</a>
+  <a href="week-4.html">Week 4 plan</a>
+  <h4>Week 5 plan</h4>
+  <a href="#goal">Goal</a>
+  <a href="#story">The demo</a>
+  <a href="#systems">Real systems</a>
+  <a href="#decisions">Decisions</a>
+  <a href="#questions">Open questions</a>
+  <a href="#steps">Steps and PRs</a>
+  <a href="#you">What you provide</a>
+  <a href="#validation">Validation</a>
+  <a href="#risks">Risks</a>
+  <a href="#rollback">Rollout and rollback</a>
+</nav>
+
+<main>
+
+<section id="goal" class="doc">
+  <h1>Week 5: the real demo</h1>
+  <p class="lead">Talk to the bot in Slack in your own words, and let it answer from real systems: a real identity provider, a real AWS account with real keys and a real job, real tickets.</p>
+  <dl class="contract">
+    <div><dt>Status</dt><dd><span class="st st-now">draft</span> · plan approved (2026-10-18); Q25–Q28 open with recommended answers · updated 2026-10-18</dd></div>
+    <div><dt>Delivers</dt><dd>A chat bot with read-only tools; Keycloak, AWS and GitHub adapters; one end-to-end demo on them</dd></div>
+    <div><dt>Done when</dt><dd>The recorded demo runs on real systems, every gate is 0, and <code>make aws-check</code> prints 0 afterwards</dd></div>
+  </dl>
+  <p style="margin-top:22px">Week 4 ended with a Slack demo on a mocked org: the bot matched names in code and showed cards. That proves the flow, not real life. In real life an IT or security person asks "who left this week?", "can I delete Noah yet?", "anything blocking?", and the answers come from the systems the company runs. Week 5 builds exactly that. What does not change: the investigator, the change workflow, the guardrails, the executor, the audit log and the bench gates. Approval stays on the Slack buttons, for allow-listed approvers only.</p>
+  <div class="note"><p>The people are invented, even inside the real systems, so a hosted chat model (OpenRouter Gemma 4) is fine. With real employee data the chat would move to Bedrock in the company's own account; the code takes either through <code>LLMClient</code>.</p></div>
+</section>
+
+<section id="story" class="doc">
+  <h2>The demo</h2>
+  <p>HR marks Noah Novak as gone in Keycloak. Nobody presses Start.</p>
+  <div class="chatlog">
+    <p><span class="who">HR</span> Keycloak: Noah Novak · <code>hr_status=left</code> · <code>last_day=today</code></p>
+    <p><span class="who">agent</span> <span class="bot">reads Keycloak logins, CloudTrail use of his AWS key, the Lambda that holds it, the GitHub issues; posts a card in #it-offboarding: <b>disable_first</b> · [Approve disable] [Decline]</span></p>
+    <p><span class="who">you</span> @agent who left this week?</p>
+    <p><span class="who">bot</span> <span class="bot">Three people: Noah Novak (legal; his key was used 2 hours ago by a Lambda), Wei Lee (finance; owns an API key used by a log pipeline), Noah Smith (data; nothing found).</span></p>
+    <p><span class="who">you</span> can I delete Noah yet?</p>
+    <p><span class="who">bot</span> <span class="bot">No. The <code>nightly-report</code> Lambda used his access key AKIA…3GXC at 02:00 today (CloudTrail), and the secret <code>prod/nightly-report</code> holds it.</span><span class="code-line">Guardrails: allowed = disable only. Approve on the change message.</span></p>
+    <p><span class="who">you</span> [Approve disable] → the key goes Inactive in AWS, the Keycloak user is disabled</p>
+    <p><span class="who">bot</span> <span class="bot">Next night: the Lambda failed with InvalidClientTokenId. Use seen during the quiet period → restore offered.</span></p>
+  </div>
+  <p style="margin-top:14px">The guardrail line is added by code under the model's answer. The model cannot change it, and it cannot approve, disable or delete anything: it only has read-only tools.</p>
+</section>
+
+<section id="systems" class="doc">
+  <h2>Real systems</h2>
+  <figure>
+    <div class="fig">
+      <svg class="d" viewBox="0 0 820 470" role="img" aria-labelledby="sy-t sy-d">
+        <title id="sy-t">Week 5 systems</title>
+        <desc id="sy-d">Slack on the left: people ask in their own words and approve with buttons. In the middle, the agent service on your Mac: a chat graph with read-only tools, the investigator, the change workflow and the guardrails in code. On the right, the real systems behind the existing interfaces: Keycloak in Docker for identities, HR status and logins; a sandbox AWS account with IAM users, access keys, CloudTrail, Secrets Manager and a nightly Lambda; GitHub Issues for tickets. Below, OpenRouter answers the chat. The HR watcher turns a Keycloak change into an HR event.</desc>
+        <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker></defs>
+        <rect class="zone" x="12" y="12" width="200" height="300" rx="10"/><text class="t" x="28" y="36">SLACK</text>
+        <rect class="node" x="28" y="52" width="168" height="64" rx="8"/><text class="h" x="42" y="76">@agent, in words</text><text class="s" x="42" y="95">"can I delete Noah yet?"</text>
+        <rect class="guard" x="28" y="132" width="168" height="64" rx="8"/><text class="h" x="42" y="156">Approve / Decline</text><text class="s" x="42" y="175">buttons, approvers only</text>
+        <rect class="node" x="28" y="212" width="168" height="64" rx="8"/><text class="h" x="42" y="236">Card + verdict</text><text class="s" x="42" y="255">posted by the agent</text>
+
+        <rect class="zone" x="250" y="12" width="290" height="300" rx="10"/><text class="t" x="266" y="36">AGENT SERVICE · YOUR MAC</text>
+        <rect class="llm" x="266" y="52" width="258" height="64" rx="8"/><text class="h" x="280" y="76">Chat graph (LangGraph)</text><text class="s" x="280" y="95">read-only tools · memory per thread</text>
+        <rect class="node" x="266" y="132" width="258" height="64" rx="8"/><text class="h" x="280" y="156">Investigator + change workflow</text><text class="s" x="280" y="175">unchanged · interrupt() for approval</text>
+        <rect class="guard" x="266" y="212" width="258" height="64" rx="8"/><text class="h" x="280" y="236">Guardrails, executor, audit</text><text class="s" x="280" y="255">code decides what is allowed</text>
+
+        <rect class="zone-ro" x="578" y="12" width="230" height="300" rx="10"/><text class="t" x="594" y="36">REAL SYSTEMS</text>
+        <rect class="tool" x="594" y="52" width="198" height="64" rx="8"/><text class="h" x="608" y="76">Keycloak (Docker)</text><text class="s" x="608" y="95">people · HR status · logins</text>
+        <rect class="tool" x="594" y="132" width="198" height="64" rx="8"/><text class="h" x="608" y="156">AWS sandbox</text><text class="s" x="608" y="175">IAM · CloudTrail · Lambda</text>
+        <rect class="tool" x="594" y="212" width="198" height="64" rx="8"/><text class="h" x="608" y="236">GitHub Issues</text><text class="s" x="608" y="255">tickets</text>
+
+        <path class="e" d="M196 84 H266" marker-end="url(#ah)"/>
+        <path class="e" d="M196 164 H266" marker-end="url(#ah)"/>
+        <path class="e" d="M266 244 H196" marker-end="url(#ah)"/>
+        <path class="e" d="M524 84 H594" marker-end="url(#ah)"/><text class="l" x="532" y="76">read</text>
+        <path class="e" d="M524 164 H594" marker-end="url(#ah)"/><text class="l" x="532" y="156">read</text>
+        <path class="e dash" d="M524 244 H594" marker-end="url(#ah)"/><text class="l" x="530" y="236">act*</text>
+
+        <rect class="llm" x="266" y="350" width="258" height="56" rx="8"/><text class="h" x="280" y="373">OpenRouter · Gemma 4</text><text class="s" x="280" y="392">chat and investigation models</text>
+        <path class="e" d="M395 312 V350" marker-end="url(#ah)"/>
+        <rect class="node" x="594" y="350" width="198" height="56" rx="8"/><text class="h" x="608" y="373">HR watcher</text><text class="s" x="608" y="392">left in Keycloak → HR event</text>
+        <path class="e" d="M594 378 H560 V292 H524" marker-end="url(#ah)"/>
+        <text class="s" x="28" y="446">* act = disable, restore or delete, only after an approval the guardrails allow; every action is in the hash-chained audit log.</text>
+      </svg>
+    </div>
+    <figcaption>Each real system sits behind an interface that already exists (<code>EvidenceSource</code>, <code>TargetSystem</code>) or a new one (<code>Directory</code>). The synthetic org stays for the bench.</figcaption>
+  </figure>
+</section>
+
+<section id="decisions" class="doc">
+  <h2>Decisions</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Question</th><th>Decision</th></tr></thead>
+    <tbody>
+      <tr><td>What is "real data"?</td><td>Real sandbox systems with invented people: Keycloak in Docker (identity provider and HR record), a sandbox AWS account (IAM users, keys, a real Lambda that uses a leaver's key, CloudTrail), GitHub Issues (tickets)</td></tr>
+      <tr><td>Which model answers in Slack?</td><td>OpenRouter Gemma 4, the model the demos already use (about $0.001 an answer). Bedrock in the account for real employee data</td></tr>
+      <tr><td>Can the chat act?</td><td>No. Read-only tools only; "can I delete?" is answered by the guardrails in code; approval stays on the buttons</td></tr>
+      <tr><td>How do people match across systems?</td><td>By handle (<code>noah.novak</code>): Keycloak username, IAM user name, GitHub label</td></tr>
+      <tr><td>What happens to week 4?</td><td>4.8 (AWS) is pulled into 5.4. 4.6 (doc search) and 4.7 (OpenSearch, Postgres) follow week 5</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="questions" class="doc">
+  <h2>Open questions</h2>
+  <p>Each has a recommended answer; say "ok" to take them all.</p>
+  <div class="qs">
+    <article class="q">
+      <div class="q-head"><span class="q-id">Q25</span><span class="st">open</span></div>
+      <p class="q-title">How long does the bot remember a Slack thread?</p>
+      <p class="rec"><b>Recommended:</b> 7 days, per thread, in the local checkpointer; then it starts fresh. Nothing from a thread ever reaches the investigator.</p>
+    </article>
+    <article class="q">
+      <div class="q-head"><span class="q-id">Q26</span><span class="st">open</span></div>
+      <p class="q-title">Can someone ask the bot to investigate a person HR has not reported yet?</p>
+      <p class="rec"><b>Recommended:</b> yes, but not by the model. The answer shows a "Start investigation" button; only approvers can click it, and it sends the same signed HR event. The chat itself stays read-only.</p>
+    </article>
+    <article class="q">
+      <div class="q-head"><span class="q-id">Q27</span><span class="st">open</span></div>
+      <p class="q-title">What do disable and delete do in AWS and Keycloak?</p>
+      <p class="rec"><b>Recommended:</b> disable = access keys Inactive and a deny-all <code>cia-quarantine</code> policy attached in AWS, user <code>enabled=false</code> in Keycloak (all undone by restore). Delete, only after the quiet period: keys deleted, policies detached, IAM user deleted, Keycloak user deleted.</p>
+    </article>
+    <article class="q">
+      <div class="q-head"><span class="q-id">Q28</span><span class="st">open</span></div>
+      <p class="q-title">How many people go into the real systems?</p>
+      <p class="rec"><b>Recommended:</b> Keycloak gets the demo org's 103 people (free and local). AWS gets 8 IAM users: the traps that need the cloud (the nightly job, the credential chain, the break-glass account, a lookalike) and four plain leavers, so it stays small and cheap.</p>
+    </article>
+  </div>
+</section>
+
+<section id="steps" class="doc">
+  <h2>Steps and PRs</h2>
+  <ol class="steps">
+    <li><span><span class="step-file">docs/week-5.html</span>This plan; hub, CLAUDE.md and README point at it.</span><span class="step-pr">PR 5.0 · in review</span></li>
+    <li><span><span class="step-file">src/cia/chat.py · slack.py</span>Talk to the bot: a LangGraph chat graph (model → tools → model, 6-step cap) on <code>LLMClient</code>; read-only tools <code>who_left</code>, <code>profile</code>, <code>change_status</code>, <code>can_delete</code> (in code: guardrails, workflow state, quiet-period end, blockers), <code>report</code>, <code>audit</code>; memory per Slack thread; replies escaped, the guardrail line added by code. Works on the demo org first; without a chat key the bot falls back to cards.</span><span class="step-pr">PR 5.1</span></li>
+    <li><span><span class="step-file">src/cia/backends.py · sources.py</span>One seam for real systems: a <code>Directory</code> interface (leavers, profile, find) and <code>open_backend(synthetic | demo | real)</code> → source, target, directory. The service, the workflow and the desk use it; the bench keeps the synthetic org. No behaviour change.</span><span class="step-pr">PR 5.2</span></li>
+    <li><span><span class="step-file">compose.yaml · infra/keycloak/ · hr_watch.py</span>Keycloak in Docker, seeded from the demo org (users, groups, HR attributes, real logins); <code>KeycloakSource</code>, <code>KeycloakDirectory</code>, <code>KeycloakTarget</code>; an HR watcher that turns "left" into the signed HR event. Contract test against a Keycloak in CI.</span><span class="step-pr">PR 5.3</span></li>
+    <li><span><span class="step-file">infra/aws/ · AwsSource · AwsTarget</span>The AWS sandbox, asked first: 8 IAM users with keys, the nightly Lambda that uses a leaver's key from Secrets Manager, a deny-all quarantine policy, a $5 budget alert, all tagged. <code>AwsSource</code> reads CloudTrail and key last-used and walks user → key → secret → Lambda → team; <code>AwsTarget</code> disables, restores, deletes. <code>make aws-plan</code> (you approve), <code>aws-up</code>, <code>aws-destroy-plan</code>, <code>aws-down</code>, <code>aws-check</code>.</span><span class="step-pr">PR 5.4</span></li>
+    <li><span><span class="step-file">GitHubTickets</span>Tickets as GitHub Issues in a private demo repo, one label per person; the "keep this account" and the injected-instruction tickets are real issues.</span><span class="step-pr">PR 5.5</span></li>
+    <li><span><span class="step-file">make real-demo · docs</span>The demo end to end on the real systems, recorded; results here and in the hub; then the destroy plan and <code>aws-check</code> prints 0.</span><span class="step-pr">PR 5.6</span></li>
+  </ol>
+</section>
+
+<section id="you" class="doc">
+  <h2>What you provide</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>When</th><th>What</th><th>Cost</th></tr></thead>
+    <tbody>
+      <tr><td>5.1</td><td>Nothing new: the OpenRouter key is already in <code>.env</code></td><td class="cost">about $0.001 an answer</td></tr>
+      <tr><td>5.3</td><td>Docker Desktop running</td><td class="cost">$0</td></tr>
+      <tr><td>5.4</td><td>A sandbox AWS account with a CLI profile; your approval of the init plan</td><td class="cost">under $1</td></tr>
+      <tr><td>5.5</td><td>A GitHub fine-grained token for one new private repo</td><td class="cost">$0</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="validation" class="doc">
+  <h2>Validation</h2>
+  <ul class="check">
+    <li><span>Every PR: <code>make lint typecheck test</code>, <code>make tui-test</code>, <code>make bench-fake</code> with every gate 0, CI green.</span></li>
+    <li><span>5.1 (scripted model): "can I delete" calls <code>can_delete</code> and the guardrail line is there even when the model says yes; injected ticket text gets no mention or link through; the step cap holds; a follow-up in the thread keeps context; no write tool exists.</span></li>
+    <li><span>5.1 live on the demo org: "who left this week?", "can I delete Wei Lee yet?", "anything blocking for Noah?" get right answers, each with the guardrail line.</span></li>
+    <li><span>5.3: marking a user left in Keycloak brings the Slack card within 10 seconds; the Keycloak contract test passes in CI.</span></li>
+    <li><span>5.4: <code>make aws-plan</code> lists only tagged resources; the agent sees the Lambda's real use of the key; an approved disable makes the key Inactive (<code>aws iam list-access-keys</code>); after <code>aws-down</code>, <code>aws-check</code> prints 0.</span></li>
+    <li><span>5.6: one recorded run of the whole demo; the audit chain verifies.</span></li>
+  </ul>
+</section>
+
+<section id="risks" class="doc">
+  <h2>Risks</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Risk</th><th>Mitigation</th></tr></thead>
+    <tbody>
+      <tr><td>Someone talks the chat model into an action</td><td>It has no write tools; approval is a button checked against the allow-list and the guardrails</td></tr>
+      <tr><td>The model says "yes, delete" when the guardrails say no</td><td>The guardrail line is added by code under every delete answer and wins; a test proves it</td></tr>
+      <tr><td>A ticket or Slack text carries instructions</td><td>Tool results are data; replies are escaped; the investigator never reads Slack</td></tr>
+      <tr><td>Real employee data reaches a hosted model</td><td>Only invented people exist in the sandbox; real data would use Bedrock in the company account</td></tr>
+      <tr><td>AWS costs run on</td><td>Init plan approved first, $5 budget alert, destroy plan after the demo, <code>aws-check</code> prints 0</td></tr>
+      <tr><td>A real system is down during the demo</td><td>A failing source is a tool error: the verdict becomes <code>insufficient_evidence</code>, never safe</td></tr>
+      <tr><td>Keys end up in git</td><td><code>.env</code> and Terraform state are git-ignored; AWS through a named profile; the GitHub token is read-only on one repo</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="rollback" class="doc">
+  <h2>Rollout and rollback</h2>
+  <p>PRs merge in order 5.0 → 5.6, each small. The chat falls back to cards without a key, and <code>BACKEND=demo</code> keeps the mocked org, so the real systems can be switched off with one setting. Revert a squash commit to roll back code. For AWS, rollback is the destroy plan: <code>make aws-destroy-plan</code>, approve, <code>make aws-down</code>, then <code>make aws-check</code> prints 0. Keycloak: <code>docker compose down -v</code>.</p>
+</section>
+
+<p class="foot doc">Plan 004 · owner Oded Goldberg · updated 2026-10-18</p>
+</main>
+</div>
+<script>
+(function(){
+  var root=document.documentElement,key="cia-theme";
+  document.getElementById("theme").addEventListener("click",function(){
+    var dark=root.getAttribute("data-theme")==="dark"||(!root.getAttribute("data-theme")&&matchMedia("(prefers-color-scheme: dark)").matches);
+    var next=dark?"light":"dark";root.setAttribute("data-theme",next);try{localStorage.setItem(key,next)}catch(e){}
+  });
+  var side=document.getElementById("side"),menu=document.querySelector(".menu");
+  menu.addEventListener("click",function(){var o=side.classList.toggle("open");menu.setAttribute("aria-expanded",o)});
+  side.addEventListener("click",function(e){if(e.target.tagName==="A"){side.classList.remove("open");menu.setAttribute("aria-expanded","false")}});
+
+  /* scrollspy */
+  var links=[].slice.call(side.querySelectorAll('a[href^="#"]'));
+  var map={};links.forEach(function(a){map[a.getAttribute("href").slice(1)]=a});
+  var io=new IntersectionObserver(function(es){es.forEach(function(en){if(en.isIntersecting&&map[en.target.id]){links.forEach(function(a){a.removeAttribute("aria-current")});map[en.target.id].setAttribute("aria-current","true")}})},{rootMargin:"-70px 0px -65% 0px"});
+  Object.keys(map).forEach(function(id){var el=document.getElementById(id);if(el)io.observe(el)});
+})();
+</script>
+</body>
+</html>
