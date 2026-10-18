@@ -10,7 +10,7 @@ permits a delete. Execution is a separate, reversible step that needs human appr
 
 ## Status
 
-Week 5 in progress (`docs/week-5.html`): the real-life offboarding flow on a simulated company. The last day opens a case; the agent investigates, a person approves the disable, then each ▶ Next day (`make next-day`) the agent reads the systems, asks owners and proposes "ready", which code checks before anyone is asked to approve the delete. In Slack it is an assistant you talk to (`make case-bot`): ask "who is leaving?", "why is Gal on hold?", "watch Noah Novak", "next day"; approvals stay on buttons for approvers. Week 4 (plan: `docs/week-4.html`): proof and launch. Week 3 added approval and a reversible executor. Done: synthetic org, read-only evidence tools, naive baseline, the
+Week 5 in progress (`docs/week-5.html`): the real-life offboarding flow on a simulated company. The last day opens a case; the agent investigates, a person approves the disable, then each ▶ Next day (`make next-day`) the agent reads the systems, asks owners and proposes "ready", which code checks before anyone is asked to approve the delete. In Slack it is an assistant you talk to (`make case-bot`): ask "who is leaving?", "why is Gal on hold?", "watch Noah Novak", "next day"; approvals stay on buttons for approvers. An outreach agent (`src/cia/outreach.py`) really asks owners and each leaver's manager, in `#owners` where the simulated people answer under their own names (you play them, or their AI stand-in answers by the next day); it reminds after 2 days and tells the manager after 4. Only the right owner's "done" changes a system, and code still checks the facts. Week 4 (plan: `docs/week-4.html`): proof and launch. Week 3 added approval and a reversible executor. Done: synthetic org, read-only evidence tools, naive baseline, the
 `EvidenceSource` and `LLMClient` interfaces, and the investigator as a LangGraph state
 graph (code-assigned evidence ids, an 8-step cap, citation check; `make graph` draws it). It runs on a local model through Ollama, a
 hosted open model through OpenRouter, or on Bedrock, and a local run monitor shows each run live, plus a benchmark. Week 3 added a credential
@@ -85,7 +85,8 @@ and only reads. Approving stays on the message's buttons. From Claude Code, run
 
 For Slack, create the app from `infra/slack/manifest.yaml` and set `SLACK_BOT_TOKEN`,
 `SLACK_APP_TOKEN`, `CIA_SLACK_CHANNEL` (the channel id, C0...) and `CIA_SLACK_APPROVERS`
-in `.env`.
+in `.env`; optionally `CIA_SLACK_OWNERS_CHANNEL` (an `#owners` channel with the bot in it)
+for the outreach agent.
 
 On all 44 synthetic cases, Gemma 4 26B on OpenRouter made 0 unsafe deletes, 0
 unapproved actions and 0 wrong deletes, and got 40 right, for $0.018.

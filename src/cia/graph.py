@@ -614,14 +614,17 @@ def describe() -> dict[str, Any]:
 
 def drawings() -> dict[str, dict[str, Any]]:
     """Every graph the docs draw, by the id of its data block: the investigator, the
-    change workflow that runs it as one node, and the offboarding case (week 5)."""
+    change workflow that runs it as one node, the offboarding case and its outreach
+    agent (week 5)."""
     from .case import describe as describe_case  # lazy: both import graph
+    from .outreach import describe as describe_outreach
     from .workflow import describe as describe_workflow
 
     return {
         "engine-graph": describe(),
         "workflow-graph": describe_workflow(),
         "case-graph": describe_case(),
+        "outreach-graph": describe_outreach(),
     }
 
 

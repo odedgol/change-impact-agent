@@ -200,8 +200,8 @@ def case_tools(case: Case) -> dict[str, list[BaseTool]]:
             state,
             "ask_owner",
             args,
-            lambda: case.world.ask_owner(
-                owner, state["person_id"], thing, question[:500]
+            lambda: case.asked(
+                case.world.ask_owner(owner, state["person_id"], thing, question[:500])
             ),
         )
 
@@ -532,6 +532,11 @@ def gate(
     for t in world.tickets(person_id):
         if t["status"] == "open" and t["reporter"] not in NOT_PEOPLE:
             why.append(f"{t['key']} is open ({t['reporter']})")
+    manager = world.confirmed_by_manager(person_id)
+    if manager:
+        why.append(
+            f"{manager} has not confirmed that nothing of theirs is still needed"
+        )
     for a in world.pending_asks(person_id):
         why.append(f"waiting for {a['owner']} since {a['asked_on']}")
     return why
@@ -577,6 +582,8 @@ class Case:
         self.audit = JsonlAuditSink(audit or world.out / "audit.jsonl")
         self.executor = Executor(world, self.audit, clock=self._clock)
         self.events = events or (lambda e: None)
+        # the outreach agent takes each new question to a person (``outreach.py``)
+        self.on_ask: Callable[[int], None] | None = None
         from .graph import memory_checkpointer
 
         self.graph = build_case(self, checkpointer or memory_checkpointer())
@@ -601,6 +608,12 @@ class Case:
                 }
             )
 
+    def asked(self, result: dict[str, Any]) -> dict[str, Any]:
+        """After ``World.ask_owner``: hand a new question to the outreach agent."""
+        if result.get("asked") and self.on_ask:
+            self.on_ask(int(result["ask_id"]))
+        return result
+
     def request(self, state: CaseState) -> ChangeRequest:
         return ChangeRequest(
             request_id=f"CASE-{state['person_id']}",
@@ -621,6 +634,26 @@ def build_case(case: Case, checkpointer: Any):
             title=p.get("title"),
             department=p.get("department"),
         )
+        manager = case.world.manager_of(state["person_id"])
+        if manager:  # in code, every time: the manager knows what the team still needs
+            question = (
+                f"Today is {p.get('name')}'s last day. Does your team still need "
+                "anything of theirs (files, access, a job or a key)? A delete waits "
+                "for your answer."
+            )
+            with case.lock:
+                r = case.asked(
+                    case.world.ask_owner(
+                        manager["id"], state["person_id"], "manager_confirm", question
+                    )
+                )
+                case.emit(
+                    {**state, "name": p.get("name")},
+                    "manager_asked",
+                    owner=manager["name"],
+                    question=question,
+                    asked=bool(r.get("asked")),
+                )
         return {
             "name": p.get("name", state["person_id"]),
             "status": "investigating",
@@ -957,6 +990,8 @@ class Desk:
 
     def __init__(self, case: Case):
         self.case = case
+        # runs after the world moves and before the cases: the outreach agent's day
+        self.on_day: Callable[[], list[str]] | None = None
 
     def _config(self, pid: str) -> RunnableConfig:
         return {"configurable": {"thread_id": f"case-{pid}"}, "recursion_limit": 400}
@@ -979,6 +1014,8 @@ class Desk:
     def next_day(self) -> list[str]:
         w = self.case.world
         happened = w.next_day()
+        if self.on_day:
+            happened += self.on_day()
         for pid in self.ids():
             if self.state(pid)["waiting_for"] == "next_day":
                 self.case.graph.invoke(Command(resume=w.day), self._config(pid))
