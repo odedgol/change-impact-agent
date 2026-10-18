@@ -52,6 +52,18 @@ class ChangeRequest(_Contract):
         )
 
 
+class OffboardingEvent(_Contract):
+    """An HR system says a person left. The agent investigates their account on its own."""
+
+    event_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,40}$")
+    identity_id: str = Field(pattern=r"^[A-Za-z0-9_.-]{1,40}$")
+    source: str = Field(default="hr", max_length=40)
+    at: datetime | None = None
+
+    def request_id(self) -> str:
+        return f"OFF-{self.event_id}"
+
+
 class Evidence(_Contract):
     """One tool result, logged by the investigator under an id it assigned."""
 

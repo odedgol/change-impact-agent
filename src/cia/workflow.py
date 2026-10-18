@@ -581,9 +581,10 @@ def events_file(runs: str | Path, request_id: str) -> Path:
 
 
 def reset(data: str | Path = DATA) -> list[str]:
-    """Forget every change: the target copy, checkpoints and audit log. The org is untouched."""
+    """Forget every change: the target copy, checkpoints, audit log and the agent
+    service's event log. The org is untouched."""
     gone = []
-    for name in ("target.db", "checkpoints.db", "audit.jsonl"):
+    for name in ("target.db", "checkpoints.db", "audit.jsonl", "events.jsonl"):
         p = Path(data) / name
         if p.exists():
             p.unlink()

@@ -47,12 +47,28 @@ On the default 500-identity org (44 requests, 20 risky), the naive rule would de
 the 20 risky accounts. The rule model behind `make bench-fake` gets 44 of 44 through the
 whole workflow, deletes only the 22 decoys and nothing protected.
 
+## How it runs in real life
+
+Nobody presses Start. HR says a person left; the agent investigates on its own and
+tells people what it found, with buttons only for what the guardrails allow.
+
+```bash
+make agent                        # the service on 127.0.0.1:8790 (rule model; AGENT_LLM=openrouter for Gemma 4)
+make hr-event CASE=nightly_job    # a synthetic HR "person left" event; also CASE=decoy_safe or ID=u00034
+# 5 s later: the message (console now, Slack next) with the verdict, evidence ids and the allowed actions
+make agent-approve ID=OFF-<event> ACTIONS=disable,delete BY=dana
+# 2 minutes later (14 days in production): deleted, kept disabled, or restored if it was used
+```
+
+On all 44 synthetic cases, Gemma 4 26B on OpenRouter made 0 unsafe deletes, 0
+unapproved actions and 0 wrong deletes, and got 40 right, for $0.018.
+
 ## Run it
 
 ```bash
 pip install -e ".[dev]"
 cp .env.example .env   # model settings and keys; git-ignored, the shell overrides it
-make seed       # 500 identities, 24 change requests, writes bench/ground_truth.json
+make seed       # 500 identities, 44 change requests, writes bench/ground_truth.json
 make baseline   # shows what the naive rule breaks
 make test
 make typecheck # pyright, 0 errors (also in CI)
@@ -60,7 +76,7 @@ make format    # ruff format at 88 columns; make lint checks it (also in CI)
 
 # investigate one change request with a local model (Ollama, default gemma4:26b-mlx)
 make run-local ID=REQ-0003   # events in runs/REQ-0003.jsonl
-make smoke                   # Rust terminal UI (tui/, needs cargo) with 11 offline runs piped in; q quits
+make smoke                   # Rust terminal UI (tui/, needs cargo) with 13 offline runs piped in; q quits
 make graph                   # redraw both graphs in docs/index.html (#engine, #change-graph); print Mermaid
 make monitor                 # http://127.0.0.1:8765: start runs, watch them live;
                              # Flow tab: the run on the agent's five levels, with replay; Model filter
