@@ -356,11 +356,35 @@ def create_app(
 # ---- command line ------------------------------------------------------------------------------------
 
 
+def notifier_from_env() -> Notifier:
+    """Slack when its bot token and channel are set, else the console."""
+    token, channel = (
+        os.environ.get("SLACK_BOT_TOKEN"),
+        os.environ.get("CIA_SLACK_CHANNEL"),
+    )
+    if token and channel:
+        from slack_sdk import WebClient
+
+        from .slack import SlackNotifier
+
+        return SlackNotifier(WebClient(token=token), channel)
+    return ConsoleNotifier()
+
+
+def approvers_from_env() -> set[str]:
+    return {
+        u.strip()
+        for u in os.environ.get("CIA_SLACK_APPROVERS", "").split(",")
+        if u.strip()
+    }
+
+
 def agent_from_env(db: str, data: str, runs: str) -> Agent:
     return Agent(
         db,
         data,
         runs,
+        notifier=notifier_from_env(),
         llm=os.environ.get("CIA_AGENT_LLM", "fake"),
         model=os.environ.get("CIA_AGENT_MODEL") or None,
         start_delay=duration(os.environ.get("CIA_START_DELAY", "60s")),
@@ -414,6 +438,19 @@ def main(argv: list[str] | None = None) -> None:
         import uvicorn
 
         agent = agent_from_env(a.db, a.data, a.runs)
+        where = type(agent.notifier).__name__
+        if where == "SlackNotifier" and os.environ.get("SLACK_APP_TOKEN"):
+            from .slack import socket_mode
+
+            approvers = approvers_from_env()
+            socket_mode(
+                os.environ["SLACK_BOT_TOKEN"],
+                os.environ["SLACK_APP_TOKEN"],
+                approvers,
+                agent.answer,
+            )
+            where += f" with buttons ({len(approvers)} approvers)"
+        print(f"messages: {where}", flush=True)
         print(
             f"agent on http://127.0.0.1:{a.port} · model {agent.llm}{':' + agent.model if agent.model else ''}"
             f" · starts {agent.start_delay.total_seconds():g}s after an event · quiet period {agent.quiet_period}",

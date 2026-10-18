@@ -55,10 +55,13 @@ tells people what it found, with buttons only for what the guardrails allow.
 ```bash
 make agent                        # the service on 127.0.0.1:8790 (rule model; AGENT_LLM=openrouter for Gemma 4)
 make hr-event CASE=nightly_job    # a synthetic HR "person left" event; also CASE=decoy_safe or ID=u00034
-# 5 s later: the message (console now, Slack next) with the verdict, evidence ids and the allowed actions
+# 5 s later: the message (Slack when configured, else the console) with the verdict, evidence ids and buttons
 make agent-approve ID=OFF-<event> ACTIONS=disable,delete BY=dana
 # 2 minutes later (14 days in production): deleted, kept disabled, or restored if it was used
 ```
+
+For Slack, create the app from `infra/slack/manifest.yaml` and set `SLACK_BOT_TOKEN`,
+`SLACK_APP_TOKEN`, `CIA_SLACK_CHANNEL` and `CIA_SLACK_APPROVERS` in `.env`.
 
 On all 44 synthetic cases, Gemma 4 26B on OpenRouter made 0 unsafe deletes, 0
 unapproved actions and 0 wrong deletes, and got 40 right, for $0.018.

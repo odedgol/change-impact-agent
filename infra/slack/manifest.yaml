@@ -1,0 +1,26 @@
+# Slack app for the Change Impact Agent (PR 4.4). Create it at https://api.slack.com/apps
+# -> Create New App -> From a manifest -> paste this file -> Install to workspace.
+# Then put in .env (never commit it):
+#   SLACK_BOT_TOKEN=xoxb-...   OAuth & Permissions -> Bot User OAuth Token
+#   SLACK_APP_TOKEN=xapp-...   Basic Information -> App-Level Tokens, scope connections:write
+#   CIA_SLACK_CHANNEL=C0...    the channel's ID; then /invite @Change Impact Agent there
+#   CIA_SLACK_APPROVERS=U0...,U0...   member IDs of the people allowed to approve
+# Socket Mode: the agent opens one outbound websocket, so it needs no public URL.
+display_information:
+  name: Change Impact Agent
+  description: Investigates a leaver's account before anything is deleted; asks before acting.
+  background_color: "#2f52e0"
+features:
+  bot_user:
+    display_name: Change Impact Agent
+    always_online: false
+oauth_config:
+  scopes:
+    bot:
+      - chat:write   # post and update its own messages; nothing else
+settings:
+  interactivity:
+    is_enabled: true # the Approve and Decline buttons
+  org_deploy_enabled: false
+  socket_mode_enabled: true
+  token_rotation_enabled: false
