@@ -1,4 +1,4 @@
-.PHONY: seed test lint format typecheck smoke tui-test tui-fixture baseline run-local monitor graph bench-fake bench-local bench-openrouter bench-bedrock change approve decline resume changes change-reset
+.PHONY: seed test lint format typecheck smoke tui-test tui-fixture baseline run-local monitor graph bench-fake bench-local bench-openrouter bench-bedrock change approve decline resume changes change-reset agent hr-event agent-approve agent-decline agent-changes
 
 seed:
 	PYTHONPATH=src python -m cia.generator --identities 500 --out data/org.db --truth bench/ground_truth.json
@@ -53,6 +53,24 @@ changes:
 
 change-reset:
 	PYTHONPATH=src python -m cia.workflow reset
+
+# The agent as a service (src/cia/service.py): an HR event starts the workflow on its own, a message
+# says what it found, a person answers. Demo timings by default; production: START_DELAY=60s QUIET=14d.
+AGENT_LLM ?= fake
+AGENT_MODEL ?=
+START_DELAY ?= 5s
+QUIET ?= 2m
+agent:
+	CIA_AGENT_LLM=$(AGENT_LLM) CIA_AGENT_MODEL=$(AGENT_MODEL) CIA_START_DELAY=$(START_DELAY) \
+	  CIA_QUIET_PERIOD=$(QUIET) PYTHONPATH=src python -m cia.service serve
+hr-event:  # ID=u00034, or CASE=nightly_job (the first identity of that planted case type)
+	PYTHONPATH=src python -m cia.service event $(ID) $(if $(CASE),--case $(CASE))
+agent-approve:
+	PYTHONPATH=src python -m cia.service approve $(ID) --actions $(ACTIONS) --by $(BY)
+agent-decline:
+	PYTHONPATH=src python -m cia.service decline $(ID) --by $(BY)
+agent-changes:
+	PYTHONPATH=src python -m cia.service list
 
 # Rust terminal UI (tui/): offline smoke runs piped in live. Interactive on a terminal; SMOKE_FLAGS=--plain
 # prints text and fails if any run recommended an unsafe delete (CI). Replay a saved run:

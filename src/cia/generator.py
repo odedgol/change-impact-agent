@@ -275,6 +275,16 @@ CASE_TYPES = list(COMMANDS)
 EXPECTED = {name: command.expected for name, command in COMMANDS.items()}
 
 
+def offboarding_text(name: str, department: str | None) -> str:
+    """What an offboarding ticket says. Built only from what the requester sees, the
+    same words for every leaver, so it never hints at the answer. The HR event intake
+    (``cia.service``) writes the same words."""
+    return (
+        f"Offboarding cleanup: delete {name} ({department or 'no department'}). "
+        "HR says the person has left; the account is still active."
+    )
+
+
 def _ts(days_ago: float, hour: int | None = None) -> str:
     t = NOW - timedelta(days=days_ago)
     if hour is not None:
@@ -370,13 +380,8 @@ def generate(path: str | Path, n_identities: int = 500, seed: int = 7) -> dict:
     )
 
     def description(identity: str) -> str:
-        """What an offboarding ticket says. Built only from what the requester sees,
-        the same words for every leaver, so it never hints at the answer."""
         row = next(r for r in identities if r[0] == identity)
-        return (
-            f"Offboarding cleanup: delete {row[2]} ({row[3]}). HR says the person "
-            "has left; the account is still active."
-        )
+        return offboarding_text(row[2], row[3])
 
     cases = []
     it = iter(case_ids)
