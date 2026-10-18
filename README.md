@@ -69,7 +69,12 @@ make demo                                      # builds data/demo/ once, runs th
 make hr-event ORG=demo WHO="Noah Novak"        # in a second terminal: HR says Noah left
 ```
 
-Ask in Slack: "@Change Impact Agent who left?" lists everyone HR marks as gone;
+Talk to it in Slack in your own words: "@Change Impact Agent can I delete Noah Novak
+yet? anything blocking?". With `OPENROUTER_API_KEY` set, a chat model (Gemma 4) answers
+using read-only tools only; whether a delete is allowed is decided in code, and that
+line ("🛡️ Guardrails: …") is added under the answer by code. It remembers the thread,
+so "and Noah Smith?" works. Without a key, the bot answers with cards:
+"@Change Impact Agent who left?" lists everyone HR marks as gone;
 "@Change Impact Agent what's going on with Noah Novak?" answers with a card: title,
 manager, last day, warnings ("used after the last day"), access, keys, activity per
 app, what depends on the account, tickets, and the agent's verdict. The HR and access

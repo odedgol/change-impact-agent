@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 from .notify import Message
 
 if TYPE_CHECKING:
+    from .chat import Chat
     from .mcp_server import Desk
 
 APPROVE, DECLINE = "cia_approve", "cia_decline"
@@ -175,12 +176,8 @@ def reply(text: str, desk: Desk) -> tuple[str, list[dict[str, Any]]]:
     question = MENTION.sub("", text).strip()
     if not question:
         return HELP, [_section(HELP)]
-    ids = desk.people(question)
+    ids = desk.identities_in(question)
     by_identity = desk.changes_by_identity()
-    for rid in desk.mentioned(question):
-        ident = next(i for i, r in by_identity.items() if rid in r)
-        if ident not in ids:
-            ids.append(ident)
     if not ids and WHO_LEFT.search(question):
         return who_left_card(desk.leavers())
     if not ids:
@@ -294,12 +291,37 @@ def card(desk: Desk, identity_id: str, rids: list[str]) -> list[dict[str, Any]]:
     return blocks
 
 
+def chat_reply(
+    event: dict[str, Any], desk: Desk, chat: Chat | None
+) -> tuple[str, list[dict[str, Any]]]:
+    """An @mention answered by the chat model when there is one (its answer, then the
+    person's card when it is about one person), else by the cards alone."""
+    question = MENTION.sub("", event.get("text", "")).strip()
+    if chat is None or not question:
+        return reply(event.get("text", ""), desk)
+    thread = f"{event.get('channel', '')}:{event.get('thread_ts') or event.get('ts')}"
+    try:
+        out = chat.answer(thread, question)
+    except Exception as e:  # noqa: BLE001 - the model is down: still answer, from code
+        text, blocks = reply(event.get("text", ""), desk)
+        note = f"_The chat model is not answering ({type(e).__name__}); here is what I know._"
+        return text, [_context(note), *blocks]
+    blocks = [_section(out["text"])]
+    if len(out["profiled"]) == 1:
+        ident = out["profiled"][0]
+        card_blocks = card(desk, ident, desk.changes_by_identity().get(ident, []))
+        if len(blocks) + len(card_blocks) < 49:
+            blocks += [{"type": "divider"}, *card_blocks]
+    return out["text"], blocks
+
+
 def socket_mode(
     bot_token: str,
     app_token: str,
     approvers: set[str],
     answer: Callable[[str, list[str], str], dict[str, Any]],
     desk: Desk | None = None,
+    chat: Chat | None = None,
 ):
     """Listen for button clicks, and for @mentions when a desk is given, over Socket
     Mode (a background websocket)."""
@@ -319,7 +341,7 @@ def socket_mode(
 
         @app.event("app_mention")
         def mentioned(event, say):
-            text, blocks = reply(event.get("text", ""), desk)
+            text, blocks = chat_reply(event, desk, chat)
             say(
                 text=text,
                 blocks=blocks,

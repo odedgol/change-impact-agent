@@ -282,7 +282,7 @@ ul.check ul{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}
   <h1>Week 5: the real demo</h1>
   <p class="lead">Talk to the bot in Slack in your own words, and let it answer from real systems: a real identity provider, a real AWS account with real keys and a real job, real tickets.</p>
   <dl class="contract">
-    <div><dt>Status</dt><dd><span class="st st-now">draft</span> · plan approved (2026-10-18); Q25–Q28 open with recommended answers · updated 2026-10-18</dd></div>
+    <div><dt>Status</dt><dd><span class="st st-now">active</span> · plan approved (2026-10-18), Q25–Q28 with the recommended answers; PR 5.0 merged, PR 5.1 in review · updated 2026-10-18</dd></div>
     <div><dt>Delivers</dt><dd>A chat bot with read-only tools; Keycloak, AWS and GitHub adapters; one end-to-end demo on them</dd></div>
     <div><dt>Done when</dt><dd>The recorded demo runs on real systems, every gate is 0, and <code>make aws-check</code> prints 0 afterwards</dd></div>
   </dl>
@@ -363,27 +363,27 @@ ul.check ul{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}
 
 <section id="questions" class="doc">
   <h2>Open questions</h2>
-  <p>Each has a recommended answer; say "ok" to take them all.</p>
+  <p>All answered on 2026-10-18: the recommended answer was taken for each.</p>
   <div class="qs">
     <article class="q">
-      <div class="q-head"><span class="q-id">Q25</span><span class="st">open</span></div>
+      <div class="q-head"><span class="q-id">Q25</span><span class="st st-done">decided</span></div>
       <p class="q-title">How long does the bot remember a Slack thread?</p>
-      <p class="rec"><b>Recommended:</b> 7 days, per thread, in the local checkpointer; then it starts fresh. Nothing from a thread ever reaches the investigator.</p>
+      <p class="rec"><b>Decided (recommended):</b> 7 days, per thread, in the local checkpointer; then it starts fresh. Nothing from a thread ever reaches the investigator.</p>
     </article>
     <article class="q">
-      <div class="q-head"><span class="q-id">Q26</span><span class="st">open</span></div>
+      <div class="q-head"><span class="q-id">Q26</span><span class="st st-done">decided</span></div>
       <p class="q-title">Can someone ask the bot to investigate a person HR has not reported yet?</p>
-      <p class="rec"><b>Recommended:</b> yes, but not by the model. The answer shows a "Start investigation" button; only approvers can click it, and it sends the same signed HR event. The chat itself stays read-only.</p>
+      <p class="rec"><b>Decided (recommended):</b> yes, but not by the model. The answer shows a "Start investigation" button; only approvers can click it, and it sends the same signed HR event. The chat itself stays read-only.</p>
     </article>
     <article class="q">
-      <div class="q-head"><span class="q-id">Q27</span><span class="st">open</span></div>
+      <div class="q-head"><span class="q-id">Q27</span><span class="st st-done">decided</span></div>
       <p class="q-title">What do disable and delete do in AWS and Keycloak?</p>
-      <p class="rec"><b>Recommended:</b> disable = access keys Inactive and a deny-all <code>cia-quarantine</code> policy attached in AWS, user <code>enabled=false</code> in Keycloak (all undone by restore). Delete, only after the quiet period: keys deleted, policies detached, IAM user deleted, Keycloak user deleted.</p>
+      <p class="rec"><b>Decided (recommended):</b> disable = access keys Inactive and a deny-all <code>cia-quarantine</code> policy attached in AWS, user <code>enabled=false</code> in Keycloak (all undone by restore). Delete, only after the quiet period: keys deleted, policies detached, IAM user deleted, Keycloak user deleted.</p>
     </article>
     <article class="q">
-      <div class="q-head"><span class="q-id">Q28</span><span class="st">open</span></div>
+      <div class="q-head"><span class="q-id">Q28</span><span class="st st-done">decided</span></div>
       <p class="q-title">How many people go into the real systems?</p>
-      <p class="rec"><b>Recommended:</b> Keycloak gets the demo org's 103 people (free and local). AWS gets 8 IAM users: the traps that need the cloud (the nightly job, the credential chain, the break-glass account, a lookalike) and four plain leavers, so it stays small and cheap.</p>
+      <p class="rec"><b>Decided (recommended):</b> Keycloak gets the demo org's 103 people (free and local). AWS gets 8 IAM users: the traps that need the cloud (the nightly job, the credential chain, the break-glass account, a lookalike) and four plain leavers, so it stays small and cheap.</p>
     </article>
   </div>
 </section>
@@ -391,8 +391,8 @@ ul.check ul{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}
 <section id="steps" class="doc">
   <h2>Steps and PRs</h2>
   <ol class="steps">
-    <li><span><span class="step-file">docs/week-5.html</span>This plan; hub, CLAUDE.md and README point at it.</span><span class="step-pr">PR 5.0 · in review</span></li>
-    <li><span><span class="step-file">src/cia/chat.py · slack.py</span>Talk to the bot: a LangGraph chat graph (model → tools → model, 6-step cap) on <code>LLMClient</code>; read-only tools <code>who_left</code>, <code>profile</code>, <code>change_status</code>, <code>can_delete</code> (in code: guardrails, workflow state, quiet-period end, blockers), <code>report</code>, <code>audit</code>; memory per Slack thread; replies escaped, the guardrail line added by code. Works on the demo org first; without a chat key the bot falls back to cards.</span><span class="step-pr">PR 5.1</span></li>
+    <li><span><span class="step-file">docs/week-5.html</span>This plan; hub, CLAUDE.md and README point at it.</span><span class="step-pr done">PR 5.0 · merged</span></li>
+    <li><span><span class="step-file">src/cia/chat.py · slack.py</span>Talk to the bot: a LangGraph chat graph (model → tools → model, 6-step cap) on <code>LLMClient</code>; read-only tools <code>who_left</code>, <code>profile</code>, <code>change_status</code>, <code>can_delete</code> (in code: guardrails, workflow state, quiet-period end, blockers), <code>report</code>, <code>audit</code>; memory per Slack thread; replies escaped, the guardrail line added by code. Works on the demo org first; without a chat key the bot falls back to cards. <em>Built: <code>src/cia/chat.py</code>, a <code>StateGraph</code> (model → tools → model, answer, cap at 6 model turns) on <code>LLMClient</code>; six read-only tools over <code>Desk</code>; <code>Desk.can_delete</code> decides in code from the workflow state, the allowed and approved actions, the quiet period and the blockers (use after the last day, dependencies, tickets by people, MFA off, owner gone). After the model, code escapes the answer and appends "🛡️ Guardrails: …" for every person asked about or named in a question about deleting. Memory per Slack thread in <code>data/chat.db</code>, forgotten after 7 days; one answer at a time per thread; tokens and cost per answer in <code>data/chat.jsonl</code>, never the words. The service turns it on when <code>OPENROUTER_API_KEY</code> is set (<code>CIA_CHAT_LLM=off</code> for cards only); a down model falls back to the cards. Live on the demo org with Gemma 4 26B: "can I delete Noah Novak yet? anything blocking?" → no, used on 2026-10-01 after his last day, a pipeline depends on it, only disable allowed; follow-ups in the thread and Hebrew work; about $0.0001 an answer.</em></span><span class="step-pr">PR 5.1 · in review</span></li>
     <li><span><span class="step-file">src/cia/backends.py · sources.py</span>One seam for real systems: a <code>Directory</code> interface (leavers, profile, find) and <code>open_backend(synthetic | demo | real)</code> → source, target, directory. The service, the workflow and the desk use it; the bench keeps the synthetic org. No behaviour change.</span><span class="step-pr">PR 5.2</span></li>
     <li><span><span class="step-file">compose.yaml · infra/keycloak/ · hr_watch.py</span>Keycloak in Docker, seeded from the demo org (users, groups, HR attributes, real logins); <code>KeycloakSource</code>, <code>KeycloakDirectory</code>, <code>KeycloakTarget</code>; an HR watcher that turns "left" into the signed HR event. Contract test against a Keycloak in CI.</span><span class="step-pr">PR 5.3</span></li>
     <li><span><span class="step-file">infra/aws/ · AwsSource · AwsTarget</span>The AWS sandbox, asked first: 8 IAM users with keys, the nightly Lambda that uses a leaver's key from Secrets Manager, a deny-all quarantine policy, a $5 budget alert, all tagged. <code>AwsSource</code> reads CloudTrail and key last-used and walks user → key → secret → Lambda → team; <code>AwsTarget</code> disables, restores, deletes. <code>make aws-plan</code> (you approve), <code>aws-up</code>, <code>aws-destroy-plan</code>, <code>aws-down</code>, <code>aws-check</code>.</span><span class="step-pr">PR 5.4</span></li>
@@ -418,7 +418,7 @@ ul.check ul{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}
   <h2>Validation</h2>
   <ul class="check">
     <li><span>Every PR: <code>make lint typecheck test</code>, <code>make tui-test</code>, <code>make bench-fake</code> with every gate 0, CI green.</span></li>
-    <li><span>5.1 (scripted model): "can I delete" calls <code>can_delete</code> and the guardrail line is there even when the model says yes; injected ticket text gets no mention or link through; the step cap holds; a follow-up in the thread keeps context; no write tool exists.</span></li>
+    <li class="done"><span>5.1 (scripted model): "can I delete" calls <code>can_delete</code> and the guardrail line is there even when the model says yes; injected ticket text gets no mention or link through; the step cap holds; a follow-up in the thread keeps context; no write tool exists. <em><code>test_chat.py</code>, 10 tests.</em></span></li>
     <li><span>5.1 live on the demo org: "who left this week?", "can I delete Wei Lee yet?", "anything blocking for Noah?" get right answers, each with the guardrail line.</span></li>
     <li><span>5.3: marking a user left in Keycloak brings the Slack card within 10 seconds; the Keycloak contract test passes in CI.</span></li>
     <li><span>5.4: <code>make aws-plan</code> lists only tagged resources; the agent sees the Lambda's real use of the key; an approved disable makes the key Inactive (<code>aws iam list-access-keys</code>); after <code>aws-down</code>, <code>aws-check</code> prints 0.</span></li>

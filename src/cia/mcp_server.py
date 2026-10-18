@@ -21,7 +21,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -287,6 +287,103 @@ class Desk:
                 ("Tickets", tickets),
             ],
         }
+
+    def identities_in(self, text: str) -> list[str]:
+        """Identity ids named in free text: by full name or id, or through a request id."""
+        ids = self.people(text)
+        by_identity = self.changes_by_identity()
+        for rid in self.mentioned(text):
+            ident = next(i for i, r in by_identity.items() if rid in r)
+            if ident not in ids:
+                ids.append(ident)
+        return ids
+
+    def can_delete(self, identity_id: str) -> dict[str, Any]:
+        """May this account be deleted, now or later? Decided here, in code, from the
+        change workflow (what the guardrails allowed, what a person approved, the quiet
+        period) and the evidence; never by a model. ``line`` is what Slack shows under
+        any answer about deleting."""
+        prof = self.profile(identity_id)
+        if prof is None:
+            return {"found": False, "line": f"No identity {identity_id}."}
+        name = prof["name"]
+        sections = dict(prof["sections"])
+        blockers = [w for w in prof["warnings"] if "still active" not in w]
+        deps = [d for d in sections["Depends on it"] if d != "Nothing found"]
+        if deps:
+            blockers.append(f"{len(deps)} thing(s) depend on it: {deps[0]}")
+        people = [
+            t for t in sections["Tickets"] if t != "None" and " · hr-bot: " not in t
+        ]
+        if people:
+            blockers.append(f"ticket by a person: {people[0]}")
+        rids = self.changes_by_identity().get(identity_id, [])
+        out: dict[str, Any] = {
+            "found": True,
+            "name": name,
+            "identity_id": identity_id,
+            "account": prof["account"],
+            "blockers": blockers,
+            "can_delete_now": False,
+            "allowed": [],
+        }
+        if prof["account"] == "deleted":
+            out["line"] = f"{name} is already deleted."
+            return out
+        if not rids:
+            out["line"] = (
+                f"{name}: not investigated yet, so nothing is allowed. The agent "
+                "investigates when HR reports the person as gone."
+            )
+            return out
+        rid = rids[-1]
+        agent = self._agent()
+        out["request_id"] = rid
+        if rid in agent.pending:
+            out["line"] = (
+                f"{name}: the investigation starts shortly; nothing is allowed yet."
+            )
+            return out
+        st = self._flow().status(rid)
+        allowed, approved = list(st["allowed"]), list(st["approved"])
+        out.update(
+            allowed=allowed,
+            approved=approved,
+            verdict=st["verdict"],
+            outcome=st["outcome"],
+        )
+        if st["outcome"] == "deleted":
+            out["line"] = f"{name} is already deleted ({rid})."
+        elif st["outcome"]:
+            out["line"] = (
+                f"{name}: no. The change ended: {st['outcome']} ({st['reason'] or rid})."
+            )
+        elif st["waiting_for"] == "approval":
+            out["line"] = (
+                f"{name}: not yet. Verdict {st['verdict']}; the guardrails allow "
+                f"{', '.join(allowed) or 'nothing'}. "
+                + (
+                    "Approve disable + delete on the change message; the delete runs "
+                    "after the quiet period if nothing uses the account."
+                    if "delete" in allowed
+                    else "Delete is not allowed for this verdict."
+                )
+            )
+        elif st["waiting_for"] == "quiet_period":
+            until = agent.quiet.get(rid)
+            when = (
+                datetime.fromtimestamp(until).isoformat(timespec="minutes")
+                if until
+                else st["until"]
+            )
+            out["line"] = f"{name}: disabled, in the quiet period until {when}. " + (
+                "The approved delete runs then, only if nothing used the account."
+                if "delete" in approved
+                else "Delete was not approved, so the account stays disabled."
+            )
+        else:
+            out["line"] = f"{name}: in progress ({rid}); nothing to approve right now."
+        return out
 
     def mentioned(self, text: str) -> list[str]:
         """Request ids whose request id, identity id or full name appears in free text,

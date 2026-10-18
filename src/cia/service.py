@@ -56,7 +56,13 @@ from .investigator import JsonlEvents
 from .models import ChangeRequest, OffboardingEvent
 from .notify import ConsoleNotifier, Notifier, message
 from .sources import SyntheticSource
-from .workflow import DATA, ChangeWorkflow, events_file, open_workflow
+from .workflow import (
+    DATA,
+    ChangeWorkflow,
+    events_file,
+    open_workflow,
+    sqlite_checkpointer,
+)
 
 PORT = 8790
 SIGNATURE_HEADER = "X-CIA-Signature"
@@ -407,6 +413,30 @@ def _post(url: str, body: dict[str, Any], secret: str | None) -> tuple[int, Any]
         return e.code, json.loads(e.read() or b"null")
 
 
+CHAT_MODEL = "google/gemma-4-26b-a4b-it"
+
+
+def chat_from_env(desk: Any, data: Path) -> tuple[Any, str]:
+    """The Slack chat (week 5): ``CIA_CHAT_LLM`` (default openrouter when its key is
+    set; ``off`` for cards only) and ``CIA_CHAT_MODEL``. Memory in ``data/chat.db``."""
+    llm = os.environ.get("CIA_CHAT_LLM") or (
+        "openrouter" if os.environ.get("OPENROUTER_API_KEY") else "off"
+    )
+    if llm == "off":
+        return None, "off"
+    from .chat import Chat
+    from .llm import make_client
+
+    model = os.environ.get("CIA_CHAT_MODEL") or (
+        CHAT_MODEL if llm == "openrouter" else None
+    )
+    client = make_client(llm, model, max_tokens=2048)
+    chat = Chat(
+        desk, client, sqlite_checkpointer(data / "chat.db"), log=data / "chat.jsonl"
+    )
+    return chat, f"{llm}:{model or 'default'}"
+
+
 def identity_named(db: str, name: str) -> str | None:
     """The identity id for a full name (case ignored), read-only."""
     conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
@@ -459,15 +489,20 @@ def main(argv: list[str] | None = None) -> None:
             from .mcp_server import Desk
             from .slack import socket_mode
 
+            desk = Desk(a.db, a.data, a.runs)
+            chat, chat_name = chat_from_env(desk, Path(a.data))
+
             approvers = approvers_from_env()
             socket_mode(
                 os.environ["SLACK_BOT_TOKEN"],
                 os.environ["SLACK_APP_TOKEN"],
                 approvers,
                 agent.answer,
-                Desk(a.db, a.data, a.runs),
+                desk,
+                chat,
             )
             where += f" with buttons ({len(approvers)} approvers) and @mentions"
+            where += f", chat: {chat_name}" if chat else ", chat off (cards only)"
         print(f"messages: {where}", flush=True)
         print(
             f"agent on http://127.0.0.1:{a.port} · model {agent.llm}{':' + agent.model if agent.model else ''}"
