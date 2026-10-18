@@ -194,8 +194,10 @@ def test_code_refuses_tools_the_phase_does_not_offer(world_dir):
     desk = open_desk(world_dir, PolicyChatModel(policy=pushy), events.append)
     desk.next_day()
     assert not [e for e in events if e["type"] == "action"]
-    assert (
-        desk.case.world.pending_asks((desk.case.world.person("Noah Novak") or {})["id"])
-        == []
+    asked = desk.case.world.pending_asks(
+        (desk.case.world.person("Noah Novak") or {})["id"]
     )
+    assert [a["question"][:24] for a in asked] == [
+        "Today is Noah Novak's la"
+    ]  # only code's question to the manager
     assert all(c["waiting_for"] == "approval" for c in desk.cases())

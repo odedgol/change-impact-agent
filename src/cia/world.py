@@ -58,7 +58,8 @@ CREATE TABLE logs (day INTEGER, ts TEXT, actor_id TEXT, app TEXT, action TEXT,
 CREATE TABLE messages (day INTEGER, sender_id TEXT, to_id TEXT, about_id TEXT,
     text TEXT);
 CREATE TABLE asks (id INTEGER PRIMARY KEY, day INTEGER, owner_id TEXT, about_id TEXT,
-    blocker TEXT, question TEXT, reply_day INTEGER, replied INTEGER DEFAULT 0);
+    blocker TEXT, question TEXT, reply_day INTEGER, replied INTEGER DEFAULT 0,
+    ref TEXT, heard INTEGER);
 CREATE TABLE blockers (id TEXT PRIMARY KEY, person_id TEXT, kind TEXT, owner_id TEXT,
     detail TEXT, resolves TEXT, delay INTEGER, resolved_day INTEGER);
 CREATE TABLE docs (id TEXT PRIMARY KEY, kind TEXT, title TEXT, text TEXT, day INTEGER);
@@ -133,6 +134,11 @@ class World:
         self.db = sqlite3.connect(self.out / "world.db", check_same_thread=False)
         self.db.row_factory = sqlite3.Row
         self._fernet = Fernet((self.out / "vault.key").read_bytes())
+        cols = {r[1] for r in self.db.execute("PRAGMA table_info(asks)")}
+        for col, kind in (("ref", "TEXT"), ("heard", "INTEGER")):  # a week-5.4 world
+            if col not in cols:
+                self.db.execute(f"ALTER TABLE asks ADD COLUMN {col} {kind}")
+        self.db.commit()
 
     # ---- clock ----------------------------------------------------------------------
 
@@ -146,6 +152,20 @@ class World:
 
     def _meta(self, k: str) -> str:
         return self.db.execute("SELECT v FROM meta WHERE k = ?", (k,)).fetchone()[0]
+
+    @property
+    def outreach(self) -> str:
+        """Who answers the agent's questions: ``auto`` (the simulation, on a schedule;
+        tests and the bench) or ``agent`` (the outreach agent asks people and reads
+        their answers; the Slack demo)."""
+        r = self.db.execute("SELECT v FROM meta WHERE k = 'outreach'").fetchone()
+        return r[0] if r else "auto"
+
+    def set_outreach(self, mode: str) -> None:
+        if mode not in ("auto", "agent"):
+            raise ValueError(f"outreach is auto or agent, not {mode!r}")
+        self.db.execute("INSERT OR REPLACE INTO meta VALUES ('outreach', ?)", (mode,))
+        self.db.commit()
 
     def _rows(self, sql: str, *args: Any) -> list[dict[str, Any]]:
         return [dict(r) for r in self.db.execute(sql, args)]
@@ -323,17 +343,24 @@ class World:
         right = b is not None and b["owner_id"] == who["id"]
         asked_works = b is not None and right and b["resolves"] == "ask"
         reply_day = self.day + (b["delay"] if b is not None and asked_works else 1)
-        self.db.execute(
+        if self.outreach == "agent":
+            reply_day = None  # a person (or their persona) answers, not the clock
+        ask_id = self.db.execute(
             "INSERT INTO asks (day, owner_id, about_id, blocker, question, reply_day) "
             "VALUES (?, ?, ?, ?, ?, ?)",
             (self.day, who["id"], about_id, key, question, reply_day),
-        )
+        ).lastrowid
         self.db.execute(
             "INSERT INTO messages VALUES (?, NULL, ?, ?, ?)",
             (self.day, who["id"], about_id, f"[agent to {who['name']}] {question}"),
         )
         self.db.commit()
-        return {"asked": True, "owner": who["name"], "on": self.today}
+        return {
+            "asked": True,
+            "owner": who["name"],
+            "on": self.today,
+            "ask_id": ask_id,
+        }
 
     def _blocker_for(self, about_id: str, thing: str) -> dict[str, Any] | None:
         """The hidden blocker a thing refers to, if any (the simulation's own truth)."""
@@ -365,6 +392,195 @@ class World:
                 about_id,
             )
         ]
+
+    # ---- outreach: the questions, the people asked, and their answers -----------------
+
+    def ask(self, ask_id: int) -> dict[str, Any]:
+        rows = self._rows(
+            "SELECT a.*, p.name AS owner, q.name AS about FROM asks a "
+            "JOIN people p ON p.id = a.owner_id JOIN people q ON q.id = a.about_id "
+            "WHERE a.id = ?",
+            ask_id,
+        )
+        if not rows:
+            raise KeyError(f"no ask {ask_id}")
+        r = rows[0]
+        r["thing"] = r["blocker"].split(":", 2)[-1] if r["blocker"] else ""
+        b = self.db.execute(
+            "SELECT detail, kind FROM blockers WHERE id = ?", (r["blocker"],)
+        ).fetchone()
+        if b:  # a planted blocker: name the thing as the agent asked about it
+            d = json.loads(b[0]) or {
+                "app": "Okta Admin" if b[1] == "break_glass" else ""
+            }
+            r["thing"] = str(
+                d.get("thing") or d.get("job") or d.get("app") or d.get("key") or ""
+            )
+        return r
+
+    def open_asks(self, about_id: str | None = None) -> list[dict[str, Any]]:
+        """Questions nobody has closed yet, oldest first."""
+        ids = [
+            r["id"]
+            for r in self._rows(
+                "SELECT id FROM asks WHERE replied = 0 AND (? IS NULL OR about_id = ?) "
+                "ORDER BY id",
+                about_id,
+                about_id,
+            )
+        ]
+        return [self.ask(i) for i in ids]
+
+    def set_ask_ref(self, ask_id: int, ref: str) -> None:
+        """Where the question was posted (a Slack message ts), to match replies to it."""
+        self.db.execute("UPDATE asks SET ref = ? WHERE id = ?", (ref, ask_id))
+        self.db.commit()
+
+    def ask_by_ref(self, ref: str) -> dict[str, Any] | None:
+        r = self.db.execute("SELECT id FROM asks WHERE ref = ?", (ref,)).fetchone()
+        return self.ask(r[0]) if r else None
+
+    def manager_of(self, person_id: str) -> dict[str, Any] | None:
+        r = self.db.execute(
+            "SELECT m.* FROM people p JOIN people m ON m.id = p.manager_id "
+            "WHERE p.id = ?",
+            (person_id,),
+        ).fetchone()
+        return dict(r) if r else None
+
+    def persona(self, owner_id: str) -> dict[str, Any]:
+        """Who a simulated person is, for their AI stand-in: name, title, what they own."""
+        p = dict(
+            self.db.execute("SELECT * FROM people WHERE id = ?", (owner_id,)).fetchone()
+            or {}
+        )
+        return {
+            "name": p.get("name", owner_id),
+            "title": p.get("title"),
+            "department": p.get("department"),
+            "apps": [
+                r["name"]
+                for r in self._rows(
+                    "SELECT name FROM apps WHERE owner_id = ?", owner_id
+                )
+            ],
+            "jobs": [
+                r["name"]
+                for r in self._rows(
+                    "SELECT name FROM jobs WHERE owner_id = ?", owner_id
+                )
+            ],
+        }
+
+    def persona_truth(self, ask_id: int) -> dict[str, Any]:
+        """What the asked person would answer today, from the simulation's truth: the
+        right owner acts after the blocker's delay; a ticket stays needed until its date;
+        the wrong owner points to the right one. The persona only words it."""
+        a = self.ask(ask_id)
+        about = self._name(a["about_id"])
+        b = self._rows("SELECT * FROM blockers WHERE id = ?", a["blocker"])
+        if b:
+            b0 = b[0]
+            if b0["owner_id"] != a["owner_id"]:
+                return {
+                    "outcome": "not_mine",
+                    "redirect_to": self._name(b0["owner_id"]),
+                    "text": f"Not mine, sorry; {self._name(b0['owner_id'])} owns that.",
+                }
+            if b0["kind"] == "break_glass":
+                return {
+                    "outcome": "keep",
+                    "text": "Keep it. This is a break-glass account, dormant by "
+                    "design; Security owns it. Do not delete it.",
+                }
+            if b0["resolves"] == "ask":
+                if self.day - a["day"] >= b0["delay"]:
+                    return {"outcome": "done", "text": self._done_text(b0)}
+                return {
+                    "outcome": "still_needed",
+                    "text": "On it; I need a day or two and will tell you when it is done.",
+                }
+            if b0["resolved_day"] is not None:
+                return {"outcome": "done", "text": self._done_text(b0)}
+            key = json.loads(b0["detail"]).get("key", "")
+            return {
+                "outcome": "still_needed",
+                "text": f"Still needed until the quarter close ends; I will close {key} then.",
+            }
+        owner = self.owner_of(a["thing"])
+        if owner and owner["owner_id"] == a["owner_id"]:
+            return {
+                "outcome": "done",
+                "text": f"Nothing of ours depends on {about}'s access to {a['thing']}; fine to remove.",
+            }
+        if owner:
+            return {
+                "outcome": "not_mine",
+                "redirect_to": owner["owner"],
+                "text": f"Not mine, sorry; {owner['owner']} owns {a['thing']}.",
+            }
+        return {"outcome": "not_mine", "text": f"I don't know {a['thing']}, sorry."}
+
+    def answer_ask(
+        self, ask_id: int, outcome: str, text: str, by: str | None = None
+    ) -> dict[str, Any]:
+        """A person's answer to the agent's question. It is recorded as a message; it
+        changes a system only when the right owner says ``done`` (the job moves, an
+        admin is added, the ticket closes). ``still_needed`` keeps the question open;
+        the other answers close it. Facts, not words, clear the gate."""
+        a = self.ask(ask_id)
+        day, sender = self.day, by or a["owner_id"]
+        about = self._name(a["about_id"])
+        text = (text or "").strip()[:1000] or {
+            "done": "Done.",
+            "still_needed": "Still needed.",
+            "not_mine": "Not mine.",
+            "keep": "Keep it.",
+        }.get(outcome, "")
+        if outcome == "keep" and "keep it" not in text.lower():
+            text = f"Keep it. {text}"
+        self.db.execute(
+            "INSERT INTO messages VALUES (?, ?, NULL, ?, ?)",
+            (day, sender, a["about_id"], text),
+        )
+        self.db.execute(
+            "UPDATE asks SET heard = ?, replied = ? WHERE id = ?",
+            (day, 0 if outcome in ("still_needed", "unclear") else 1, ask_id),
+        )
+        happened = [f"{self._name(sender)} answered about {about}: {text}"]
+        b = self._rows(
+            "SELECT * FROM blockers WHERE id = ? AND resolved_day IS NULL",
+            a["blocker"],
+        )
+        changed = False
+        if (
+            outcome == "done"
+            and b
+            and b[0]["owner_id"] == sender
+            and b[0]["kind"] != "break_glass"
+        ):
+            happened = self._resolve(b[0], day, sender) + happened
+            changed = True
+        self.db.commit()
+        return {"recorded": True, "changed": changed, "happened": happened}
+
+    def _done_text(self, b: dict[str, Any]) -> str:
+        d, who = json.loads(b["detail"]), self._name(b["person_id"])
+        return {
+            "job_uses_key": f"Done: {d.get('job')} now runs as {d.get('new_account')}; {who}'s key is no longer used.",
+            "sole_admin": f"Done: made {self._name(d.get('new_admin'))} an admin of {d.get('app')}.",
+            "ticket": f"Done: the quarter close is over; I closed {d.get('key')}.",
+            "manager_confirm": f"Done: nothing of {who}'s is still needed on our side.",
+        }.get(b["kind"], "Done.")
+
+    def confirmed_by_manager(self, person_id: str) -> str | None:
+        """None when the manager confirmed (or there is nobody to ask); else their name."""
+        r = self.db.execute(
+            "SELECT owner_id FROM blockers WHERE person_id = ? AND kind = "
+            "'manager_confirm' AND resolved_day IS NULL",
+            (person_id,),
+        ).fetchone()
+        return self._name(r[0]) if r else None
 
     def actions_today(self, about_id: str) -> int:
         """How many safe actions the agent took about a person today."""
@@ -537,6 +753,8 @@ class World:
                 (day, b["owner_id"], b["person_id"], text),
             )
             return [f"{self._name(b['owner_id'])} answered about {who}: {text}"]
+        elif kind == "manager_confirm":
+            text = f"Nothing of {who}'s is still needed on our side."
         else:
             text = "Done."
         self.db.execute(
@@ -633,6 +851,9 @@ def build(out: str | Path = OUT, demo: str | Path = DEMO, seed: int = 7) -> Worl
         "cases.db-shm",
         "slack.json",
         "chat.jsonl",
+        "outreach.db",
+        "outreach.db-wal",
+        "outreach.db-shm",
     ):
         (out / f).unlink(missing_ok=True)
     (out / "audit.jsonl").unlink(missing_ok=True)
@@ -824,6 +1045,21 @@ def build(out: str | Path = OUT, demo: str | Path = DEMO, seed: int = 7) -> Worl
                     "SELECT owner_id FROM apps WHERE name = 'Okta Admin'"
                 ).fetchone()[0]
                 _blocker(db, bid, pid, kind, owner, {}, "ask", 1)
+    for pid in scenario:  # the manager confirms nothing of theirs is still needed
+        manager = db.execute(
+            "SELECT manager_id FROM people WHERE id = ?", (pid,)
+        ).fetchone()[0]
+        if manager:
+            _blocker(
+                db,
+                f"{pid}-manager",
+                pid,
+                "manager_confirm",
+                manager,
+                {"thing": "manager_confirm"},
+                "ask",
+                1,
+            )
     for pid in scenario:  # the HR notice, on the resignation day
         db.execute(
             "INSERT INTO jira VALUES (?, ?, 'open', 'hr-bot', ?, ?, ?)",

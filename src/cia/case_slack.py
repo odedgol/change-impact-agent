@@ -44,6 +44,12 @@ from .slack import escape
 log = logging.getLogger("cia.case_slack")
 STATE_FILE = "slack.json"
 APPROVE, DECLINE, NEXT_DAY = "case_approve", "case_decline", "case_next_day"
+OWNER_ANSWER = "owner_answer"  # a button under a question in #owners
+OWNER_BUTTONS = (
+    ("✅ Done", "done", "primary"),
+    ("⏳ Still needed", "still_needed", ""),
+    ("↪ Not mine", "not_mine", ""),
+)
 MAX_DAYS = 7  # the most the chat may move the demo clock at once
 WATCH_EVENTS = {
     "case_opened",
@@ -149,6 +155,8 @@ class Room:
             self.saved = {"threads": {}, "day_ts": None, "day_text": "", "watch": {}}
         self.lock = threading.RLock()  # one change to the world at a time
         self.desk: Desk | None = None
+        self.outreach: Any = None  # the OutreachDesk, when #owners is set
+        self.owners_channel = ""
         self.drawn: dict[str, list[dict[str, Any]]] = {}  # what each case message shows
 
     # ---- plumbing ---------------------------------------------------------------------
@@ -283,6 +291,8 @@ class Room:
             if e.get("tool") == "open_ticket" and r.get("opened"):
                 return f"↳ I opened {escape(r.get('key', ''))}: {escape(a.get('summary', ''))}"
             return None
+        if kind == "manager_asked" and e.get("asked"):
+            return f"↳ I asked {escape(e.get('owner') or '')}, {who}'s manager: “{escape(e.get('question') or '')}”"
         if kind == "disabled":
             return f"🔒 All of {who}'s access is disabled (approved by {escape(e.get('by') or '')}). Recoverable for {QUIET_DAYS} days; I'll check every day."
         if kind == "declined":
@@ -356,6 +366,20 @@ class Room:
                 out += [f"{self.world.today}: {h}" for h in news]
         return out
 
+    def answer_owner(
+        self, ask_id: int, outcome: str | None, text: str, user: dict[str, Any]
+    ) -> str | None:
+        """Someone playing an owner in #owners: a button or a reply in the thread."""
+        if user.get("id", "") not in self.approvers:
+            return "Only approvers (CIA_SLACK_APPROVERS) play the simulated people."
+        if self.outreach is None:
+            return "Outreach is off (no CIA_SLACK_OWNERS_CHANNEL)."
+        with self.lock:
+            r = self.outreach.reply(ask_id, text=text, outcome=outcome, by=user["id"])
+            if self.desk:
+                self.refresh_all()
+        return None if r.get("applied") else r.get("note")
+
     def answer(self, pid: str, approved: bool, user: dict[str, Any]) -> str | None:
         """A button click. Returns a note for the clicker only, or None when it went through."""
         uid = user.get("id", "")
@@ -372,6 +396,78 @@ class Room:
                 return f"Not applied: {e}"
             self.refresh(pid)
         return None
+
+
+# ---- #owners: the simulated people, as the bot speaking as them -------------------------
+
+
+class SlackPersonaOutreach:
+    """The outreach agent's channel in Slack (``outreach.Outreach``). Each question is a
+    message in #owners with answer buttons; answers show as the person (a username and
+    icon on the bot's message: ``chat:write.customize``), and a note goes to the case."""
+
+    ICON = ":bust_in_silhouette:"
+
+    def __init__(self, client: SlackClient, channel: str, room: Room):
+        self.client, self.channel, self.room = client, channel, room
+
+    def ask(self, ask: dict[str, Any], text: str) -> str:
+        who = escape(ask["owner"])
+        head = f"📨 To *{who}* (simulated) about *{escape(ask['about'])}*:\n“{escape(text)}”"
+        blocks = [
+            _section(head),
+            {
+                "type": "actions",
+                "block_id": f"ask-{ask['id']}",
+                "elements": [
+                    _button(label, OWNER_ANSWER, {"ask": ask["id"], "o": o}, style)
+                    for label, o, style in OWNER_BUTTONS
+                ],
+            },
+            _context(
+                f"You play {who} here: click, or reply in this thread in your own words. "
+                "If nobody answers by the next day, their AI stand-in answers."
+            ),
+        ]
+        ts = self.client.chat_postMessage(
+            channel=self.channel,
+            text=f"To {ask['owner']}: {text}"[:3000],
+            blocks=blocks,
+        )["ts"]
+        self.room.saved.setdefault("asks", {})[str(ask["id"])] = ts
+        self.room.save()
+        return ts
+
+    def say(self, ask: dict[str, Any], text: str, as_owner: bool) -> None:
+        kw: dict[str, Any] = {
+            "channel": self.channel,
+            "thread_ts": ask["ref"],
+            "text": escape(text)[:3000],
+        }
+        if as_owner:
+            kw |= {"username": f"{ask['owner']} (simulated)", "icon_emoji": self.ICON}
+        try:
+            self.client.chat_postMessage(**kw)
+        except Exception:  # noqa: BLE001 - without chat:write.customize, say who it is
+            for k in ("username", "icon_emoji"):
+                kw.pop(k, None)
+            kw["text"] = f"*{escape(ask['owner'])}* (simulated): {kw['text']}"
+            self.client.chat_postMessage(**kw)
+
+    def closed(self, ask: dict[str, Any], text: str) -> None:
+        who = escape(ask["owner"])
+        head = f"📨 To *{who}* (simulated) about *{escape(ask['about'])}*:\n“{escape(ask['question'])}”"
+        self.client.chat_update(
+            channel=self.channel,
+            ts=ask["ref"],
+            text=f"To {ask['owner']}: answered",
+            blocks=[_section(head), _context(f"✅ {escape(text)}")],
+        )
+
+    def note(self, about_id: str, text: str) -> None:
+        thread = self.room.saved["threads"].get(about_id)
+        if thread:
+            self.room.post(text, thread=thread)
 
 
 # ---- the chat's tools over the cases --------------------------------------------------
@@ -621,11 +717,14 @@ def _run(desk: CaseChatDesk, name: str, args: dict[str, Any]) -> Any:
     if name == "ask_owner":
         if not turn.approver:
             return {"done": False, "note": "only approvers ask owners from the chat"}
-        r = w.ask_owner(
-            str(args.get("owner", "")),
-            pid,
-            str(args.get("thing", "")),
-            str(args.get("question", ""))[:500],
+        assert room.desk is not None
+        r = room.desk.case.asked(
+            w.ask_owner(
+                str(args.get("owner", "")),
+                pid,
+                str(args.get("thing", "")),
+                str(args.get("question", ""))[:500],
+            )
         )
         thread = room.saved["threads"].get(pid)
         if r.get("asked") and thread:
@@ -724,6 +823,18 @@ def connect(
         if note:
             respond(text=note, response_type="ephemeral", replace_original=False)
 
+    @app.action(OWNER_ANSWER)
+    def owner_clicked(ack, body, respond):
+        ack()
+        try:
+            v = json.loads(body["actions"][0]["value"])
+            ask_id, outcome = int(v["ask"]), str(v["o"])
+        except (KeyError, ValueError, TypeError):
+            return
+        note = room.answer_owner(ask_id, outcome, "", body.get("user") or {})
+        if note:
+            respond(text=note, response_type="ephemeral", replace_original=False)
+
     @app.action(NEXT_DAY)
     def next_day(ack, body, respond):
         ack()
@@ -768,6 +879,15 @@ def connect(
     @app.event("message")
     def message(event, say):
         if event.get("bot_id") or event.get("subtype") or "<@" in event.get("text", ""):
+            return
+        if room.outreach and event.get("channel") == room.owners_channel:
+            ask_id = room.outreach.by_ref(event.get("thread_ts") or "")
+            if ask_id is not None:  # a reply under a question: the person's words
+                note = room.answer_owner(
+                    ask_id, None, event.get("text", ""), {"id": event.get("user", "")}
+                )
+                if note:
+                    say(text=note, thread_ts=event.get("thread_ts"))
             return
         if event.get("channel_type") == "im" or event.get("thread_ts") in talks:
             say_in_thread(event, say)
@@ -822,6 +942,22 @@ def main(argv: list[str] | None = None) -> None:
     )
     llm, name = case_llm_from_env()
     room.desk = open_desk(out, llm, room.event)
+    owners = os.environ.get("CIA_SLACK_OWNERS_CHANNEL", "")
+    if owners:  # people are asked in #owners; a person or their AI stand-in answers
+        from .outreach import open_outreach
+
+        room.desk.case.world.set_outreach("agent")
+        room.owners_channel = owners
+        room.outreach = open_outreach(
+            room.desk.case.world,
+            SlackPersonaOutreach(room.client, owners, room),
+            None if name == "rule" else llm,
+            os.environ.get("CIA_OUTREACH_PERSONA", "on") != "off",
+            room.desk.case.lock,
+            out,
+        )
+        room.desk.case.on_ask = room.outreach.start
+        room.desk.on_day = room.outreach.tick
     chat = None
     if name != "rule":
         chat_desk = CaseChatDesk(room)
@@ -841,7 +977,8 @@ def main(argv: list[str] | None = None) -> None:
     )
     room.hello()
     print(
-        f"Slack cases on {room.world.today} · model {name} · approvers {len(approvers)}",
+        f"Slack cases on {room.world.today} · model {name} · approvers {len(approvers)}"
+        f" · outreach {'#owners' if room.outreach else 'simulated'}",
         flush=True,
     )
     threading.Event().wait()

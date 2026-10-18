@@ -4,7 +4,7 @@ watchers tagged, and a chat that can read and do safe things but never approve."
 import pytest
 from langchain_core.messages import AIMessage
 
-from cia.case import open_desk, rule_case_model
+from cia.case import gate, open_desk, rule_case_model
 from cia.case_slack import (
     APPROVE,
     TURN,
@@ -156,3 +156,41 @@ def test_the_room_remembers_its_messages(room):
     room.advance(1)
     again = Room(FakeSlack(), "C0CASES", room.path.parent, {ME})
     assert again.saved["threads"] == room.saved["threads"] and again.saved["day_ts"]
+
+
+def test_owners_are_asked_in_their_channel_and_answer_as_themselves(room):
+    from cia.case_slack import OWNER_ANSWER, SlackPersonaOutreach
+    from cia.outreach import open_outreach
+
+    w = room.world
+    w.set_outreach("agent")
+    room.owners_channel = "C0OWNERS"
+    room.outreach = open_outreach(
+        w,
+        SlackPersonaOutreach(room.client, "C0OWNERS", room),
+        None,
+        False,
+        room.desk.case.lock,
+        room.path.parent,
+    )
+    room.desk.case.on_ask = room.outreach.start
+    room.desk.on_day = room.outreach.tick
+    room.advance(1)
+    ask = next(
+        p for p in room.client.posts if p["channel"] == "C0OWNERS" and "blocks" in p
+    )
+    assert OWNER_ANSWER in action_ids(ask["blocks"])  # the manager's question
+    ask_id = room.outreach.by_ref(ask_ts(room, ask))
+    assert "Only approvers" in room.answer_owner(ask_id, "done", "", {"id": OTHER})
+    assert room.answer_owner(ask_id, "done", "", {"id": ME}) is None
+    said = [
+        p for p in room.client.posts if p.get("username", "").endswith("(simulated)")
+    ]
+    assert said and said[0]["thread_ts"] == ask_ts(room, ask)
+    pid = room.world.person("Noah Novak")["id"]
+    assert any("💬" in t for t in texts(room, room.saved["threads"][pid]))
+    assert not any("has not confirmed" in g for g in gate(w, pid, 0))
+
+
+def ask_ts(room, post):
+    return f"{room.client.posts.index(post) + 1}.0"

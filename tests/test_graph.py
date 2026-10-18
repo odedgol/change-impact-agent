@@ -23,6 +23,7 @@ from cia.graph import (
 from cia.investigator import Investigator
 from cia.llm import FakeLLM, LLMTurn, ToolCall
 from cia.models import ChangeRequest, Finding, RiskReport
+from cia.outreach import ROUTE_LABELS as OUTREACH_ROUTES
 from cia.sources import SyntheticSource
 from cia.workflow import ROUTE_LABELS as WORKFLOW_ROUTES
 
@@ -161,6 +162,7 @@ def test_checkpointer_saves_every_step_under_the_request_id(org):
         ("engine-graph", ROUTE_LABELS),
         ("workflow-graph", WORKFLOW_ROUTES),
         ("case-graph", CASE_ROUTES),
+        ("outreach-graph", OUTREACH_ROUTES),
     ],
 )
 def test_every_node_and_route_has_a_drawing_entry(name, labels):

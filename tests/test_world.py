@@ -105,6 +105,7 @@ def test_without_the_agent_nothing_resolves(world):
         "job_uses_key",
         "sole_admin",
         "break_glass",
+        "manager_confirm",  # every leaver's manager is asked on the last day
     }
 
 
