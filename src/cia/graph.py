@@ -46,7 +46,9 @@ REPORT_FIELDS = {
     "verdict",
     "confidence",
     "findings",
-}  # request_id, rejected_citations, incomplete_reason: code
+}  # request_id, rejected_citations, incomplete_reason, overridden: code
+# Automated notices: every leaver gets one, and it says nothing about risk.
+NOTICE_AUTHORS = ("hr-bot",)
 NUDGE = "Call a tool, or call submit_report with your verdict."
 # Short names keep evidence ids readable: ev-deps-3, ev-usage-1.
 EVIDENCE_PREFIX = {
@@ -124,6 +126,50 @@ def finish_report(
             }
         )
     return report
+
+
+def contradictions(evidence: dict[str, Evidence]) -> list[str]:
+    """What in this run's own evidence log speaks against a delete."""
+    found = []
+    for ev in evidence.values():
+        r = ev.result if isinstance(ev.result, dict) else {}
+        if ev.tool == "get_usage" and r.get("event_count"):
+            found.append(f"{ev.id} shows {r['event_count']} usage events")
+        elif ev.tool == "get_dependencies" and r.get("total"):
+            found.append(f"{ev.id} shows {r['total']} dependencies")
+        elif ev.tool == "get_tickets":
+            people = [
+                t for t in r.get("rows", []) if t.get("author") not in NOTICE_AUTHORS
+            ]
+            if people:
+                found.append(f"{ev.id} shows {len(people)} tickets from people")
+    return found
+
+
+def ground_safe(report: RiskReport, evidence: dict[str, Evidence]) -> RiskReport:
+    """A safe_to_delete must agree with the evidence and cite usage, dependencies and
+    tickets. Valid ids are not enough: they must support the verdict. Else ask_owner."""
+    if report.verdict != "safe_to_delete":
+        return report
+    problems = contradictions(evidence)
+    cited = {
+        evidence[i].tool
+        for f in report.findings
+        for i in f.evidence_ids
+        if i in evidence
+    }
+    missing = [t for t in REQUIRED_FOR_DELETE if t not in cited]
+    if missing:
+        problems.append("does not cite " + ", ".join(missing))
+    if not problems:
+        return report
+    return report.model_copy(
+        update={
+            "verdict": "ask_owner",
+            "confidence": "low",
+            "overridden": "safe_to_delete not grounded: " + "; ".join(problems),
+        }
+    )
 
 
 def drop_bad_citations(draft: RiskReport, unknown: set[str]) -> RiskReport:
@@ -356,12 +402,12 @@ def build_graph(inv: Investigator, checkpointer: Any = None):
         }
 
     def finish(state: RunState) -> Update:
-        """Incomplete is never safe: an unverified safe_to_delete becomes insufficient_evidence."""
+        """Incomplete is never safe, and safe must be grounded: an unverified safe_to_delete
+        becomes insufficient_evidence; one its own evidence contradicts becomes ask_owner."""
         report = state["report"]
         assert report is not None, "check routes here only with a report"
-        return {
-            "report": finish_report(report, state["read_ok"], state["unread_pages"])
-        }
+        report = finish_report(report, state["read_ok"], state["unread_pages"])
+        return {"report": ground_safe(report, state["evidence"])}
 
     def cap(state: RunState) -> Update:
         """The step cap: no step is left, so the run ends as insufficient_evidence, never a delete."""

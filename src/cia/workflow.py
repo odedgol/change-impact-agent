@@ -2,10 +2,18 @@
 
 A second LangGraph ``StateGraph`` around the investigator (``cia.graph``):
 
-    investigate -> guard -> approve -> dry_run -> disable -> quiet -> recheck
-                     |         |                               ^  |     |-> delete
-                     +---------+--> stop                       +--+     |-> restore
-                                                                        +-> keep
+    snapshot -> investigate -> guard -> approve -> verify -> dry_run -> disable -> quiet
+       ^                         |         |         |                           ^  |
+       |                         +---------+---------+--> stop                   +--+
+       +--- evidence changed --------------------------+                            |
+                                                         delete <- recheck <--------+
+                                                        restore <-+  keep <-+
+
+No cache: ``snapshot`` fingerprints fresh reads of the five tools before each
+investigation. When the person answers, ``verify`` reads them again: unchanged, the
+same report stands and the model is not called; changed, it investigates again and
+asks again. ``recheck`` compares them once more after the quiet period: any change,
+any use, or a failed read restores the account (``cia.snapshot``).
 
 LangGraph decides the order; the rules are plain functions (``cia.guardrails``) and
 the only writes go through ``cia.executor``. Two waits use ``interrupt()``: the
@@ -37,8 +45,10 @@ from .guardrails import (
 )
 from .investigator import Investigator
 from .models import ChangeRequest, RiskReport
+from .snapshot import changed, fingerprint
 
 QUIET_PERIOD = timedelta(days=14)  # Q14; any use while disabled ends it with a restore
+MAX_RUNS = 3  # investigations per request; evidence that keeps changing needs a person
 
 Outcome = Literal[
     "blocked", "declined", "deleted", "restored", "kept_disabled", "failed"
@@ -55,7 +65,10 @@ class FlowState(TypedDict):
     approved_at: str | None
     disabled_at: str | None
     now: str | None  # the time the quiet period was last resumed at
-    used: bool
+    used: bool  # the recheck found a reason to restore
+    fingerprints: dict[str, str]  # what the current report rests on, per tool
+    changed: list[str]  # tools whose evidence changed since the snapshot
+    runs: int  # investigations so far
     outcome: Outcome | None
     reason: str | None
 
@@ -75,6 +88,9 @@ def initial_state(request: ChangeRequest) -> FlowState:
         "disabled_at": None,
         "now": None,
         "used": False,
+        "fingerprints": {},
+        "changed": [],
+        "runs": 0,
         "outcome": None,
         "reason": None,
     }
@@ -101,7 +117,36 @@ def build_workflow(flow: ChangeWorkflow, checkpointer: Any = None):
             at=datetime.fromisoformat(state["approved_at"] or ""),
         )
 
+    def evidence_changes(state: FlowState) -> tuple[list[str], str | None]:
+        """Fresh reads compared with the snapshot: (changed tools, or why we could not tell)."""
+        try:
+            now = fingerprint(flow.investigator.source, state["request"].identity_id)
+        except Exception as e:  # noqa: BLE001 - could not check is never "unchanged"
+            return [], f"could not re-read the evidence: {type(e).__name__}: {e}"
+        return changed(state["fingerprints"], now), None
+
     # -- nodes
+
+    def snapshot(state: FlowState) -> Update:
+        """Fingerprint fresh reads before investigating, so a change during the run shows later."""
+        if state["runs"] >= MAX_RUNS:
+            return {
+                "outcome": "failed",
+                "reason": f"evidence kept changing; investigated {state['runs']} times",
+            }
+        try:
+            fp = fingerprint(flow.investigator.source, state["request"].identity_id)
+        except Exception as e:  # noqa: BLE001 - a source that cannot be read stops the run
+            return {"outcome": "failed", "reason": f"could not read the evidence: {e}"}
+        return {
+            "fingerprints": fp,
+            "changed": [],
+            "runs": state["runs"] + 1,
+            "allowed": [],
+            "approved": [],
+            "approver": None,
+            "approved_at": None,
+        }
 
     def investigate(state: FlowState) -> Update:
         """Run the investigator graph; the report is the only thing it hands on."""
@@ -177,6 +222,30 @@ def build_workflow(flow: ChangeWorkflow, checkpointer: Any = None):
             "approved_at": flow.clock().isoformat(),
         }
 
+    def verify(state: FlowState) -> Update:
+        """Before acting, read fresh: unchanged keeps the report (no model call); changed
+        investigates again and asks again; unreadable stops."""
+        diff, problem = evidence_changes(state)
+        if problem:
+            ex.log(state["request"], "verify", "unreadable", reason=problem)
+            return {"outcome": "failed", "reason": problem}
+        if diff:
+            ex.log(state["request"], "verify", "changed", tools=diff)
+            emit({"type": "evidence_changed", "tools": diff})
+            return {"changed": diff}
+        assert state["report"] is not None and state["reported_at"] is not None
+        decision = allowed_actions(  # the report-age backstop, at approval time
+            state["request"],
+            state["report"],
+            datetime.fromisoformat(state["reported_at"]),
+            flow.clock(),
+            flow.policy,
+        )
+        ex.log(state["request"], "verify", "unchanged", reasons=list(decision.reasons))
+        if not set(state["approved"]) <= set(decision.allowed):
+            return {"outcome": "blocked", "reason": "; ".join(decision.reasons)}
+        return {}
+
     def dry_run(state: FlowState) -> Update:
         """Plan every approved step first; change nothing."""
         steps = ex.plan(state["request"], tuple(state["approved"]))  # type: ignore[arg-type]
@@ -202,18 +271,21 @@ def build_workflow(flow: ChangeWorkflow, checkpointer: Any = None):
         return {"now": str(answer.get("now") or flow.clock().isoformat())}
 
     def recheck(state: FlowState) -> Update:
-        """Check again: any use since the disable ends it with a restore."""
+        """Check again: use since the disable, changed evidence, or a failed read restores."""
         identity = state["request"].identity_id
         since = datetime.fromisoformat(state["disabled_at"] or "")
         days = max(1, (datetime.fromisoformat(state["now"] or "") - since).days + 1)
-        used = used_since(flow.investigator.source.get_usage(identity, days), since)
-        ex.log(
-            state["request"],
-            "recheck",
-            "used" if used else "quiet",
-            since=state["disabled_at"],
-        )
-        return {"used": used}
+        diff, problem = evidence_changes(state)
+        if problem:
+            outcome, reason = "unreadable", problem
+        elif used_since(flow.investigator.source.get_usage(identity, days), since):
+            outcome, reason = "used", "used while disabled"
+        elif diff:
+            outcome, reason = "changed", f"evidence changed: {', '.join(diff)}"
+        else:
+            outcome, reason = "quiet", None
+        ex.log(state["request"], "recheck", outcome, since=state["disabled_at"])
+        return {"used": reason is not None, "reason": reason}
 
     def delete(state: FlowState) -> Update:
         """Delete: only for safe_to_delete, only after the disable and a quiet period."""
@@ -222,17 +294,17 @@ def build_workflow(flow: ChangeWorkflow, checkpointer: Any = None):
         return {"outcome": "deleted"}
 
     def restore(state: FlowState) -> Update:
-        """Undo the disable: something used the account."""
+        """Undo the disable: something used the account, or the evidence changed."""
         entry = ex.restore(state["request"])
         emit({"type": "action", "action": "restore", "outcome": entry["outcome"]})
-        return {"outcome": "restored", "reason": "used while disabled"}
+        return {"outcome": "restored", "reason": state["reason"]}
 
     def keep(state: FlowState) -> Update:
         """Stays disabled: disable_first never deletes; a new run is needed first."""
         return {"outcome": "kept_disabled"}
 
     def stop(state: FlowState) -> Update:
-        """No change: blocked by the guardrails, declined, or the plan failed."""
+        """No change: blocked by the guardrails, declined, unreadable, or the plan failed."""
         return {}
 
     # -- routes
@@ -240,8 +312,16 @@ def build_workflow(flow: ChangeWorkflow, checkpointer: Any = None):
     def after_guard(state: FlowState) -> str:
         return "approve" if state["allowed"] else "stop"
 
+    def after_snapshot(state: FlowState) -> str:
+        return "stop" if state["outcome"] else "investigate"
+
     def after_approve(state: FlowState) -> str:
-        return "dry_run" if state["approved"] else "stop"
+        return "verify" if state["approved"] else "stop"
+
+    def after_verify(state: FlowState) -> str:
+        if state["outcome"]:
+            return "stop"
+        return "snapshot" if state["changed"] else "dry_run"
 
     def after_dry_run(state: FlowState) -> str:
         return "stop" if state["outcome"] == "failed" else "disable"
@@ -261,9 +341,11 @@ def build_workflow(flow: ChangeWorkflow, checkpointer: Any = None):
 
     g = StateGraph(FlowState)
     for fn in (
+        snapshot,
         investigate,
         guard,
         approve,
+        verify,
         dry_run,
         disable,
         quiet,
@@ -274,10 +356,12 @@ def build_workflow(flow: ChangeWorkflow, checkpointer: Any = None):
         stop,
     ):
         g.add_node(fn.__name__, fn)
-    g.add_edge(START, "investigate")
+    g.add_edge(START, "snapshot")
+    g.add_conditional_edges("snapshot", after_snapshot, ["investigate", "stop"])
     g.add_edge("investigate", "guard")
     g.add_conditional_edges("guard", after_guard, ["approve", "stop"])
-    g.add_conditional_edges("approve", after_approve, ["dry_run", "stop"])
+    g.add_conditional_edges("approve", after_approve, ["verify", "stop"])
+    g.add_conditional_edges("verify", after_verify, ["dry_run", "snapshot", "stop"])
     g.add_conditional_edges("dry_run", after_dry_run, ["disable", "stop"])
     g.add_edge("disable", "quiet")
     g.add_conditional_edges("quiet", after_quiet, ["recheck", "quiet"])

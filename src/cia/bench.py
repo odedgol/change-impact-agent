@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from .env import load_env
+from .graph import NOTICE_AUTHORS
 from .investigator import Investigator, JsonlEvents
 from .llm import (
     LLM_CHOICES,
@@ -50,9 +51,6 @@ ASK_KINDS = {
     "owner_of",
     "owned_by",
 }  # an owned account; a team owns a thing down a chain
-HR_NOTICE = (
-    "hr-bot"  # every leaver gets its "Employee left" ticket; it says nothing about risk
-)
 
 
 class RuleLLM:
@@ -99,7 +97,9 @@ class RuleLLM:
             if r["evidence_id"].startswith("ev-tickets"):
                 data = {
                     **data,
-                    "rows": [t for t in data["rows"] if t.get("author") != HR_NOTICE],
+                    "rows": [
+                        t for t in data["rows"] if t.get("author") not in NOTICE_AUTHORS
+                    ],
                 }
             if data.get("event_count") or data.get("rows"):
                 found[r["evidence_id"]] = data
@@ -186,6 +186,7 @@ def run_case(
             confidence=report.confidence,
             rejected_citations=report.rejected_citations,
             incomplete_reason=report.incomplete_reason,
+            overridden=report.overridden,
         )
     except Exception as e:  # noqa: BLE001 - one failing case is recorded, the bench goes on
         emit({"type": "run_error", "error": f"{type(e).__name__}: {e}"})
@@ -222,6 +223,9 @@ def score(rows: list[dict[str, Any]]) -> dict[str, Any]:
             r["verdict"] == "insufficient_evidence" for r in rows
         ),
         "rejected_citations": sum(r.get("rejected_citations", 0) for r in rows),
+        "overridden": sum(
+            bool(r.get("overridden")) for r in rows
+        ),  # safe, but not grounded
         "errors": sum("error" in r for r in rows),
     }
 

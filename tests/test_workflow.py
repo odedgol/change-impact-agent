@@ -34,6 +34,29 @@ class Clock:
         return self.now
 
 
+class Live(SyntheticSource):
+    """The org, plus tickets written after the report, or a ticket system that is down."""
+
+    def __init__(self, db):
+        super().__init__(str(db))
+        self.new_tickets: list[dict] = []
+        self.down = False
+
+    def get_tickets(self, identity_id):
+        if self.down:
+            raise ConnectionError("ticket system timed out")
+        return [*super().get_tickets(identity_id), *self.new_tickets]
+
+
+def ticket(n, author="finance-lead", text="We still use this login for the close."):
+    return {
+        "id": f"T-NEW-{n}",
+        "ts": "2026-10-02T09:00:00",
+        "author": author,
+        "text": text,
+    }
+
+
 class UsedAfter(SyntheticSource):
     """The org, plus one sign-in at ``when``: something still uses the account."""
 
@@ -54,9 +77,12 @@ class Rig:
         self.target = SyntheticTarget.copy_of(db, tmp_path / "target.db")
         self.audit = JsonlAuditSink(tmp_path / "audit.jsonl")
 
-    def __call__(self, source=None):
+    def __call__(self, source=None, events=None):
         inv = Investigator(
-            source or SyntheticSource(str(self.db)), RuleLLM(), clock=self.clock
+            source or SyntheticSource(str(self.db)),
+            RuleLLM(),
+            clock=self.clock,
+            events=events,
         )
         ex = Executor(self.target, self.audit, clock=self.clock)
         cp = sqlite_checkpointer(self.tmp / "checkpoints.db")
@@ -110,6 +136,7 @@ def test_approved_delete_runs_dry_run_disable_quiet_period_then_delete(org, make
     assert actions(make.audit) == [
         ("guardrail", "allowed"),
         ("approval", "approved"),
+        ("verify", "unchanged"),
         ("plan", "dry_run"),
         ("disable", "done"),
         ("recheck", "quiet"),
@@ -183,3 +210,97 @@ def test_use_counts_only_after_the_disable():
     assert not used_since({"last_seen": None}, since)
     assert not used_since({"last_seen": "2026-09-30T02:00:00"}, since)
     assert used_since({"last_seen": "2026-10-02T02:00:00"}, since)
+
+
+def run_count(events):
+    return sum(e["type"] == "request" for e in events)
+
+
+def test_unchanged_evidence_keeps_the_report_without_calling_the_model(org, make):
+    req = case(org, "decoy_safe")
+    events = []
+    flow = make(events=events.append)
+    flow.start(req)
+    make.clock.now = NOW + timedelta(days=3)  # the person answers three days later
+    s = flow.answer(req.request_id, ["disable"], by="alice")
+    assert s["waiting_for"] == "quiet_period"
+    assert run_count(events) == 1  # one investigation, no second model run
+    assert ("verify", "unchanged") in actions(make.audit)
+
+
+def test_a_new_ticket_before_approval_means_a_new_investigation(org, make):
+    req = case(org, "decoy_safe")
+    live = Live(org[0])
+    events = []
+    flow = make(live, events.append)
+    flow.start(req)
+    live.new_tickets.append(ticket(1))  # finance writes in after the report
+    s = flow.answer(req.request_id, ["disable", "delete"], by="alice")
+    assert s["outcome"] == "blocked" and s["verdict"] == "ask_owner"
+    assert run_count(events) == 2
+    assert {"type": "evidence_changed", "tools": ["get_tickets"]} in events
+    assert make.target.status(req.identity_id) == "active"
+
+
+def test_a_change_that_keeps_the_verdict_still_asks_the_person_again(org, make):
+    req = case(org, "decoy_safe")
+    live = Live(org[0])
+    flow = make(live)
+    flow.start(req)
+    live.new_tickets.append(ticket(1, author="hr-bot", text="Laptop returned."))
+    s = flow.answer(req.request_id, ["disable", "delete"], by="alice")
+    assert s["waiting_for"] == "approval" and s["approved"] == []  # the old yes is void
+    assert make.target.status(req.identity_id) == "active"
+    s = flow.answer(req.request_id, ["disable", "delete"], by="alice")
+    assert s["waiting_for"] == "quiet_period"  # our own disable is not a change
+
+
+def test_evidence_that_cannot_be_read_at_approval_stops_with_no_change(org, make):
+    req = case(org, "decoy_safe")
+    live = Live(org[0])
+    flow = make(live)
+    flow.start(req)
+    live.down = True
+    s = flow.answer(req.request_id, ["disable"], by="alice")
+    assert s["outcome"] == "failed" and "could not re-read" in s["reason"]
+    assert make.target.status(req.identity_id) == "active"
+
+
+@pytest.mark.parametrize("break_it", ["ticket", "down"])
+def test_a_change_or_a_failed_read_during_the_quiet_period_restores(
+    org, make, break_it
+):
+    req = case(org, "decoy_safe")
+    live = Live(org[0])
+    flow = make(live)
+    flow.start(req)
+    flow.answer(req.request_id, ["disable", "delete"], by="alice")
+    if break_it == "ticket":
+        live.new_tickets.append(ticket(1))
+    else:
+        live.down = True
+    s = flow.resume(req.request_id, NOW + timedelta(days=14))
+    assert s["outcome"] == "restored"
+    assert make.target.status(req.identity_id) == "active"
+
+
+def test_an_approval_after_the_7_day_backstop_acts_on_nothing(org, make):
+    req = case(org, "decoy_safe")
+    flow = make()
+    flow.start(req)
+    make.clock.now = NOW + timedelta(days=8)
+    s = flow.answer(req.request_id, ["disable"], by="alice")
+    assert s["outcome"] == "blocked" and "old" in s["reason"]
+    assert make.target.status(req.identity_id) == "active"
+
+
+def test_evidence_that_keeps_changing_stops_after_three_investigations(org, make):
+    req = case(org, "decoy_safe")
+    live = Live(org[0])
+    flow = make(live)
+    s = flow.start(req)
+    for n in range(3):
+        live.new_tickets.append(ticket(n, author="hr-bot", text=f"note {n}"))
+        s = flow.answer(req.request_id, ["disable"], by="alice")
+    assert s["outcome"] == "failed" and "kept changing" in s["reason"]
+    assert make.target.status(req.identity_id) == "active"

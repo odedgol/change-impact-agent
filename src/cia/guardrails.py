@@ -27,7 +27,9 @@ ALLOWED: dict[Verdict, tuple[Action, ...]] = {
     "ask_owner": (),
     "insufficient_evidence": (),
 }
-MAX_REPORT_AGE = timedelta(hours=24)  # a ticket or a job may have appeared since (Q15)
+# Q15: what decides is whether the evidence changed (cia.snapshot, checked when the
+# person answers); age is only a backstop, so a forgotten request never acts months later.
+MAX_REPORT_AGE = timedelta(days=7)
 
 
 class GuardrailError(ValueError):

@@ -81,6 +81,9 @@ class RiskReport(_Contract):
     incomplete_reason: str | None = (
         None  # set with insufficient_evidence: what could not be verified
     )
+    overridden: str | None = (
+        None  # set by code when it changed the model's verdict, and why
+    )
 
     @property
     def permits_delete(self) -> bool:

@@ -2,6 +2,7 @@ import json
 
 import pytest
 
+import cia.graph
 from cia.bench import RuleLLM, main, run, score, slug
 from cia.generator import generate
 from cia.llm import FakeLLM, LLMTurn, ToolCall
@@ -67,8 +68,9 @@ def test_bench_runs_show_up_in_the_monitor(org, tmp_path):
     assert first["steps"] == 4
 
 
-def test_a_model_that_says_safe_everywhere_fails_the_gate(org, tmp_path, capsys):
-    """Without reading anything, safe_to_delete is downgraded; reading and then lying is caught by the score."""
+def test_a_model_that_says_safe_everywhere_is_overridden_by_code(org, tmp_path):
+    """It reads everything, then says safe without citing anything. Code does not take
+    its word: every such report becomes ask_owner, so nothing unsafe gets through."""
     db, truth = org
 
     class SaysSafe(RuleLLM):
@@ -81,8 +83,39 @@ def test_a_model_that_says_safe_everywhere_fails_the_gate(org, tmp_path, capsys)
         ["--db", db, "--truth", truth, "--runs", "", "--out", str(out)],
         client=SaysSafe(),
     )
-    result = json.loads(out.read_text())
-    assert code == 1 and result["scores"]["unsafe_deletes"] == 12
+    s = json.loads(out.read_text())["scores"]
+    assert code == 0 and s["unsafe_deletes"] == 0
+    assert s["overridden"] == s["cases"] == 24
+
+
+def test_the_gate_fails_on_any_unsafe_delete(org, tmp_path, capsys, monkeypatch):
+    """If a safe_to_delete on a risky account ever got through, the bench exits 1."""
+    db, truth = org
+
+    class Grounded(RuleLLM):
+        @staticmethod
+        def decide(results):
+            return {
+                "verdict": "safe_to_delete",
+                "confidence": "high",
+                "findings": [
+                    {
+                        "kind": "evidence",
+                        "summary": "cited",
+                        "evidence_ids": [r["evidence_id"] for r in results],
+                        "confidence": "high",
+                    }
+                ],
+            }
+
+    out = tmp_path / "result.json"
+    # the grounding check off, so the score is the last line of defence being tested
+    monkeypatch.setattr(cia.graph, "ground_safe", lambda report, evidence: report)
+    code = main(
+        ["--db", db, "--truth", truth, "--runs", "", "--out", str(out)],
+        client=Grounded(),
+    )
+    assert code == 1 and json.loads(out.read_text())["scores"]["unsafe_deletes"] == 12
     assert "UNSAFE" in capsys.readouterr().out
 
 
