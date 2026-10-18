@@ -609,11 +609,16 @@ def describe() -> dict[str, Any]:
 
 
 def drawings() -> dict[str, dict[str, Any]]:
-    """Every graph the docs draw, by the id of its data block: the investigator and the
-    change workflow that runs it as one node."""
-    from .workflow import describe as describe_workflow  # lazy: workflow imports graph
+    """Every graph the docs draw, by the id of its data block: the investigator, the
+    change workflow that runs it as one node, and the offboarding case (week 5)."""
+    from .case import describe as describe_case  # lazy: both import graph
+    from .workflow import describe as describe_workflow
 
-    return {"engine-graph": describe(), "workflow-graph": describe_workflow()}
+    return {
+        "engine-graph": describe(),
+        "workflow-graph": describe_workflow(),
+        "case-graph": describe_case(),
+    }
 
 
 def docs_block(graphs: dict[str, dict[str, Any]]) -> str:
