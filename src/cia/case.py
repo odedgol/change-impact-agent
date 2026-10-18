@@ -22,8 +22,10 @@ The model picks which tools to call and what to say; code decides what may happe
   without another admin, no open ticket by a person, no unanswered question, not a
   protected (break-glass) account. A failed gate keeps the case on hold, with reasons.
 
-The model can be a real one (OpenRouter Gemma 4) or ``RuleCaseLLM``, a fixed rule for
-tests, CI and the bench.
+Built on LangChain and LangGraph: the tools are LangChain ``@tool`` functions (the
+person comes from the graph state through ``InjectedState``), each phase runs them in its
+own ``ToolNode``, and the model is any LangChain chat model bound to the phase's tools:
+Gemma 4 on OpenRouter, or ``rule_case_model()``, a fixed rule for tests, CI and the bench.
 """
 
 from __future__ import annotations
@@ -31,30 +33,35 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from collections.abc import Callable, Mapping, Sequence
+import threading
+from collections.abc import Callable, Mapping
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Annotated, Any, Literal, TypedDict
 
+from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import (
+    AIMessage,
+    AnyMessage,
+    BaseMessage,
+    HumanMessage,
+    RemoveMessage,
+    SystemMessage,
+    ToolMessage,
+)
 from langchain_core.runnables import RunnableConfig
+from langchain_core.tools import BaseTool, InjectedToolCallId, tool
 from langgraph.graph import END, START, StateGraph
+from langgraph.graph.message import REMOVE_ALL_MESSAGES, add_messages
+from langgraph.prebuilt import InjectedState, ToolNode
 from langgraph.types import Command, interrupt
+from pydantic import BaseModel, Field
 
 from .audit import JsonlAuditSink
+from .chat_models import PolicyChatModel, calls, make_chat_model, usage_of
 from .docindex import DocIndex, MemoryIndex, index_world
 from .executor import Approval, Executor, ExecutorError
 from .graph import describe_graph
-from .llm import (
-    AssistantTurn,
-    LLMClient,
-    LLMTurn,
-    Message,
-    ToolCall,
-    ToolResult,
-    ToolResults,
-    ToolSpec,
-    UserText,
-)
 from .models import ChangeRequest
 from .world import START as DAY0
 from .world import World
@@ -64,119 +71,220 @@ MAX_STEPS = 16  # model turns per investigation or per day
 MAX_ACTIONS = 3  # safe actions per case per day
 AGENT = "change-impact-agent"
 NOT_PEOPLE = ("hr-bot", AGENT)
-
-# ---- tools -----------------------------------------------------------------------------
-
-
-def _schema(props: dict[str, Any], required: list[str]) -> dict[str, Any]:
-    return {"type": "object", "properties": props, "required": required}
-
-
-S = {"type": "string"}
-BLOCKERS = {
-    "type": "array",
-    "items": {
-        "type": "object",
-        "properties": {
-            "thing": {**S, "description": "the job, app, ticket key or secret path"},
-            "kind": {
-                "type": "string",
-                "enum": ["job", "key", "admin", "ticket", "break_glass", "other"],
-            },
-            "summary": S,
-            "owner": {**S, "description": "who must act, by full name"},
-            "evidence": {"type": "array", "items": S},
-            "status": {"type": "string", "enum": ["open", "resolved"]},
-        },
-        "required": ["thing", "kind", "summary"],
-    },
-}
-READ_TOOLS = (
-    ToolSpec(
-        "hr_record",
-        "The person's HR record: title, manager, resignation, last day.",
-        _schema({}, []),
-    ),
-    ToolSpec(
-        "accounts",
-        "Every account the person has in the identity provider: app, username, role, status, last login.",
-        _schema({}, []),
-    ),
-    ToolSpec(
-        "secrets",
-        "Vault entries the person owns: path, kind, status, which job uses it. Never the value.",
-        _schema({}, []),
-    ),
-    ToolSpec(
-        "owner_of",
-        "Who owns an app (Salesforce) or a job or pipeline (job:nightly-report), and the app's active admins.",
-        _schema({"thing": S}, ["thing"]),
-    ),
-    ToolSpec(
-        "tickets", "Jira tickets about the person, with comments.", _schema({}, [])
-    ),
-    ToolSpec(
-        "logs",
-        "Logins, key use and job runs by the person or with their keys.",
-        _schema(
-            {
-                "days": {
-                    "type": "integer",
-                    "description": "how many days back, default 14",
-                }
-            },
-            [],
-        ),
-    ),
-    ToolSpec(
-        "messages",
-        "Questions the agent sent about this person and the owners' answers.",
-        _schema({}, []),
-    ),
-    ToolSpec(
-        "search_docs",
-        "Search runbooks, tickets, answers and log summaries by meaning or by words.",
-        _schema({"query": S}, ["query"]),
-    ),
+READS = (
+    "hr_record",
+    "accounts",
+    "secrets",
+    "owner_of",
+    "tickets",
+    "logs",
+    "messages",
+    "search_docs",
 )
-ACTION_TOOLS = (
-    ToolSpec(
-        "ask_owner",
-        "Ask an owner to act or confirm, about one thing (a job, app, ticket key). They answer in a few days.",
-        _schema(
-            {"owner": S, "thing": S, "question": S}, ["owner", "thing", "question"]
-        ),
-    ),
-    ToolSpec(
-        "comment_ticket",
-        "Comment on a Jira ticket.",
-        _schema({"key": S, "text": S}, ["key", "text"]),
-    ),
-    ToolSpec(
-        "open_ticket",
-        "Open a Jira ticket about this offboarding.",
-        _schema({"summary": S, "text": S}, ["summary", "text"]),
-    ),
-)
-SUBMIT_FINDINGS = ToolSpec(
-    "submit_findings",
-    "Finish the investigation: a short summary and every blocker to deleting the person's access.",
-    _schema({"summary": S, "blockers": BLOCKERS}, ["summary", "blockers"]),
-)
-SUBMIT_UPDATE = ToolSpec(
-    "submit_update",
-    "Finish today's work: status on_hold, ready (nothing blocks a delete) or keep (must never be deleted), a one-line summary, and the blockers as they stand.",
-    _schema(
-        {
-            "status": {"type": "string", "enum": ["on_hold", "ready", "keep"]},
-            "summary": S,
-            "blockers": BLOCKERS,
-        },
-        ["status", "summary", "blockers"],
-    ),
-)
-ACTIONS = {t.name for t in ACTION_TOOLS}
-SUBMITS = {SUBMIT_FINDINGS.name, SUBMIT_UPDATE.name}
+ACTIONS = ("ask_owner", "comment_ticket", "open_ticket")
+SUBMITS = ("submit_findings", "submit_update")
+
+# ---- tools: LangChain tools over the simulated company --------------------------------
+
+
+class Blocker(BaseModel):
+    """One thing that would break or be lost if the access were deleted."""
+
+    thing: str = Field(description="the job, app, ticket key or secret path")
+    kind: Literal["job", "key", "admin", "ticket", "break_glass", "other"] = "other"
+    summary: str = Field(description="one line: what breaks and why")
+    owner: str | None = Field(default=None, description="who must act, by full name")
+    evidence: list[str] = Field(
+        default_factory=list, description="evidence ids, ev-..."
+    )
+    status: Literal["open", "resolved"] = "open"
+
+
+State = Annotated[dict, InjectedState]
+CallId = Annotated[str, InjectedToolCallId]
+
+
+def evidence_id(tool_name: str, call_id: str) -> str:
+    return f"ev-{tool_name}-{call_id[-6:]}"
+
+
+def case_tools(case: Case) -> dict[str, list[BaseTool]]:
+    """The tools, by phase. The investigation only reads; the daily work may also take
+    safe actions. A ``ToolNode`` per phase runs them, so a tool the phase does not have
+    is refused by construction, and a call with bad arguments gets the schema's error."""
+
+    def read(name: str, call_id: str, fn: Callable[[], Any]) -> dict[str, Any]:
+        with case.lock:  # one SQLite connection: tool calls of one turn run in threads
+            data = fn()
+        return {
+            "evidence_id": evidence_id(name, call_id),
+            "data": json.loads(json.dumps(data, default=str)),
+        }
+
+    @tool
+    def hr_record(state: State, call_id: CallId) -> dict[str, Any]:
+        """The person's HR record: title, manager, resignation, last day."""
+        return read("hr_record", call_id, lambda: case.world.person(state["person_id"]))
+
+    @tool
+    def accounts(state: State, call_id: CallId) -> dict[str, Any]:
+        """Every account the person has in the identity provider: app, username, role, status, last login."""
+        return read(
+            "accounts", call_id, lambda: case.world.accounts(state["person_id"])
+        )
+
+    @tool
+    def secrets(state: State, call_id: CallId) -> dict[str, Any]:
+        """Vault entries the person owns: path, kind, status, which job uses it. Never the value."""
+        return read("secrets", call_id, lambda: case.world.secrets(state["person_id"]))
+
+    @tool
+    def owner_of(thing: str, call_id: CallId) -> dict[str, Any]:
+        """Who owns an app (Salesforce) or a job or pipeline (job:nightly-report), and the app's active admins."""
+        return read(
+            "owner_of", call_id, lambda: case.world.owner_of(thing) or {"found": False}
+        )
+
+    @tool
+    def tickets(state: State, call_id: CallId) -> dict[str, Any]:
+        """Jira tickets about the person, with comments."""
+        return read("tickets", call_id, lambda: case.world.tickets(state["person_id"]))
+
+    @tool
+    def logs(state: State, call_id: CallId, days: int = 14) -> dict[str, Any]:
+        """Logins, key use and job runs by the person or with their keys, the last ``days`` days."""
+        w = case.world
+        return read(
+            "logs",
+            call_id,
+            lambda: w.logs(state["person_id"], w.day - max(1, min(days, 60))),
+        )
+
+    @tool
+    def messages(state: State, call_id: CallId) -> dict[str, Any]:
+        """Questions the agent sent about this person and the owners' answers."""
+        return read(
+            "messages", call_id, lambda: case.world.messages(state["person_id"])
+        )
+
+    @tool
+    def search_docs(query: str, state: State, call_id: CallId) -> dict[str, Any]:
+        """Search runbooks, tickets, answers and log summaries by meaning or by words."""
+        return read(
+            "search_docs",
+            call_id,
+            lambda: [
+                {"id": h.doc.id, "title": h.doc.title, "text": h.doc.text[:600]}
+                for h in case.index.search(query, k=4, about=state["person_id"])
+            ],
+        )
+
+    def act(
+        state: dict[str, Any], name: str, args: dict[str, Any], fn: Callable[[], Any]
+    ) -> dict[str, Any]:
+        """A safe action: at most ``MAX_ACTIONS`` a day per case, counted in the world."""
+        with case.lock:
+            if case.world.actions_today(state["person_id"]) >= MAX_ACTIONS:
+                return {"error": f"at most {MAX_ACTIONS} actions a day; try tomorrow"}
+            result = fn()
+            case.emit(state, "action", tool=name, input=args, result=result)
+        return result
+
+    @tool
+    def ask_owner(
+        owner: str, thing: str, question: str, state: State
+    ) -> dict[str, Any]:
+        """Ask an owner to act or confirm, about one thing (a job, app, ticket key). They answer in a few days."""
+        args = {"owner": owner, "thing": thing, "question": question[:500]}
+        return act(
+            state,
+            "ask_owner",
+            args,
+            lambda: case.world.ask_owner(
+                owner, state["person_id"], thing, question[:500]
+            ),
+        )
+
+    @tool
+    def comment_ticket(key: str, text: str, state: State) -> dict[str, Any]:
+        """Comment on a Jira ticket."""
+        return act(
+            state,
+            "comment_ticket",
+            {"key": key, "text": text[:1000]},
+            lambda: case.world.comment(key, text[:1000]),
+        )
+
+    @tool
+    def open_ticket(summary: str, text: str, state: State) -> dict[str, Any]:
+        """Open a Jira ticket about this offboarding."""
+        args = {"summary": summary[:200], "text": text[:2000]}
+        return act(
+            state,
+            "open_ticket",
+            args,
+            lambda: case.world.open_ticket(
+                state["person_id"], summary[:200], text[:2000]
+            ),
+        )
+
+    def submitted(
+        state: dict[str, Any], call_id: str, blockers: list[Blocker], **update: Any
+    ) -> Command:
+        """The model's word goes into the state; evidence ids it did not get are dropped."""
+        known = {
+            evidence_id(m.name or "", m.tool_call_id)
+            for m in state["messages"]
+            if isinstance(m, ToolMessage)
+        }
+        rows = [
+            {**b.model_dump(), "evidence": [e for e in b.evidence if e in known]}
+            for b in blockers
+        ]
+        return Command(
+            update={
+                "blockers": rows,
+                "submitted": True,
+                **update,
+                "messages": [ToolMessage("Recorded.", tool_call_id=call_id)],
+            }
+        )
+
+    @tool
+    def submit_findings(
+        summary: str, blockers: list[Blocker], state: State, call_id: CallId
+    ) -> Command:
+        """Finish the investigation: a short summary and every blocker to deleting the person's access."""
+        return submitted(state, call_id, blockers, summary=summary[:500], proposal="")
+
+    @tool
+    def submit_update(
+        status: Literal["on_hold", "ready", "keep"],
+        summary: str,
+        blockers: list[Blocker],
+        state: State,
+        call_id: CallId,
+    ) -> Command:
+        """Finish today's work: on_hold, ready (nothing blocks a delete) or keep (must never be deleted), a one-line summary, and the blockers as they stand."""
+        return submitted(
+            state, call_id, blockers, summary=summary[:500], proposal=status
+        )
+
+    reads = [
+        hr_record,
+        accounts,
+        secrets,
+        owner_of,
+        tickets,
+        logs,
+        messages,
+        search_docs,
+    ]
+    return {
+        "investigate": [*reads, submit_findings],
+        "daily": [*reads, ask_owner, comment_ticket, open_ticket, submit_update],
+    }
+
 
 SYSTEM = """You are the Change Impact Agent. You work one offboarding case: an employee whose last
 day has come. Find everything that still depends on their access, and work the case until
@@ -203,7 +311,7 @@ def investigate_prompt(person: dict[str, Any]) -> str:
     )
 
 
-def daily_prompt(state: CaseState, today: str, new: list[str]) -> str:
+def daily_prompt(state: Mapping[str, Any], today: str, new: list[str]) -> str:
     blockers = json.dumps(state["blockers"], ensure_ascii=False)
     since = state["disabled_day"]
     return (
@@ -216,13 +324,6 @@ def daily_prompt(state: CaseState, today: str, new: list[str]) -> str:
     )
 
 
-def offered(phase: str) -> tuple[ToolSpec, ...]:
-    """The tools of a phase: reads always; safe actions only once the case is open."""
-    if phase == "investigate":
-        return READ_TOOLS + (SUBMIT_FINDINGS,)
-    return READ_TOOLS + ACTION_TOOLS + (SUBMIT_UPDATE,)
-
-
 def day_date(day: int) -> str:
     return (DAY0 + timedelta(days=day)).isoformat()
 
@@ -230,123 +331,107 @@ def day_date(day: int) -> str:
 # ---- the rule model: a fixed policy, so tests and the bench run without a model -------
 
 
-class RuleCaseLLM:
+def _result(m: ToolMessage) -> Any:
+    try:
+        return json.loads(str(m.content)).get("data")
+    except (ValueError, AttributeError):
+        return None
+
+
+def rule_policy(messages: list[BaseMessage], names: set[str]) -> AIMessage:
     """Plays the model with a fixed rule. Reads everything, finds each blocker's owner,
     asks each owner once, says ready when nothing is open and nothing ran for the quiet
     period, keep for a break-glass account. A plumbing check, not a quality claim."""
+    results = {
+        m.tool_call_id: _result(m) for m in messages if isinstance(m, ToolMessage)
+    }
+    made = [c for m in messages if isinstance(m, AIMessage) for c in m.tool_calls]
+    done = {c["name"] for c in made}
 
-    model = "rule"
-
-    def converse(
-        self, system: str, messages: Sequence[Message], tools: Sequence[ToolSpec]
-    ) -> LLMTurn:
-        names = {t.name for t in tools}
-        results = {
-            r.tool_call_id: r.content
-            for m in messages
-            if isinstance(m, ToolResults)
-            for r in m.results
-        }
-        calls = [
-            c
-            for m in messages
-            if isinstance(m, AssistantTurn)
-            for c in m.turn.tool_calls
-        ]
-        done = {c.name for c in calls}
-
-        def out(name: str) -> Any:
-            first = next((c.id for c in calls if c.name == name), "")
-            return (results.get(first) or {}).get("data")
-
-        reads = ["hr_record", "accounts", "secrets", "tickets", "logs", "messages"]
-        if not done & set(reads):
-            return _turn([(n, {"days": 14} if n == "logs" else {}) for n in reads])
-        blockers = rule_blockers(
-            out("hr_record"),
-            out("accounts"),
-            out("secrets"),
-            out("tickets"),
-            out("logs"),
-            out("messages"),
-        )
-        need = [
-            b["thing"] for b in blockers if b["status"] == "open" and not b.get("owner")
-        ]
-        asked_owner = {c.input["thing"] for c in calls if c.name == "owner_of"}
-        if need and not set(need) <= asked_owner:
-            return _turn(
-                [("owner_of", {"thing": t}) for t in need if t not in asked_owner]
-            )
-        owners = {
-            c.input["thing"]: (results.get(c.id) or {}).get("data")
-            for c in calls
-            if c.name == "owner_of"
-        }
-        for b in blockers:
-            o = owners.get(b["thing"]) or {}
-            b["owner"] = b.get("owner") or o.get("owner")
-        if "submit_findings" in names:
-            return _turn(
-                [("submit_findings", {"summary": _sum(blockers), "blockers": blockers})]
-            )
-        if "ask_owner" not in done:
-            asks = [
-                (
-                    "ask_owner",
-                    {
-                        "owner": b["owner"],
-                        "thing": b["thing"],
-                        "question": f"{b['summary']}. Can you take care of it, or confirm it is fine?",
-                    },
-                )
-                for b in blockers
-                if b["status"] == "open"
-                and b.get("owner")
-                and not b.get("asked")
-                and b["kind"] != "break_glass"
-            ] + [
-                (
-                    "ask_owner",
-                    {
-                        "owner": b["owner"],
-                        "thing": b["thing"],
-                        "question": f"{b['thing']} is a break-glass account. Should it be kept?",
-                    },
-                )
-                for b in blockers
-                if b["kind"] == "break_glass" and b.get("owner") and not b.get("asked")
-            ]
-            if asks:
-                return _turn(asks[:MAX_ACTIONS])
-        keep = any(b["kind"] == "break_glass" and b.get("keep") for b in blockers)
-        quiet = not out("logs")  # nothing at all in the last 14 days
-        open_ = [
-            b for b in blockers if b["status"] == "open" and b["kind"] != "break_glass"
-        ]
-        status = (
-            "keep"
-            if keep
-            else "ready"
-            if not open_
-            and quiet
-            and not any(b["kind"] == "break_glass" for b in blockers)
-            else "on_hold"
-        )
-        return _turn(
-            [
-                (
-                    "submit_update",
-                    {"status": status, "summary": _sum(blockers), "blockers": blockers},
-                )
-            ]
+    def out(name: str) -> Any:
+        return next(
+            (results.get(c["id"] or "") for c in made if c["name"] == name), None
         )
 
-
-def _turn(calls: list[tuple[str, dict[str, Any]]]) -> LLMTurn:
-    return LLMTurn(
-        tool_calls=tuple(ToolCall(f"r{i}-{n}", n, a) for i, (n, a) in enumerate(calls))
+    reads = ["hr_record", "accounts", "secrets", "tickets", "logs", "messages"]
+    if not done & set(reads):
+        return calls(*[(n, {"days": 14} if n == "logs" else {}) for n in reads])
+    blockers = rule_blockers(
+        out("hr_record"),
+        out("accounts"),
+        out("secrets"),
+        out("tickets"),
+        out("logs"),
+        out("messages"),
     )
+    need = [
+        b["thing"] for b in blockers if b["status"] == "open" and not b.get("owner")
+    ]
+    asked_owner = {c["args"].get("thing") for c in made if c["name"] == "owner_of"}
+    if need and not set(need) <= asked_owner:
+        return calls(
+            *[("owner_of", {"thing": t}) for t in need if t not in asked_owner]
+        )
+    owners = {
+        c["args"].get("thing"): results.get(c["id"] or "")
+        for c in made
+        if c["name"] == "owner_of"
+    }
+    for b in blockers:
+        b["owner"] = b.get("owner") or (owners.get(b["thing"]) or {}).get("owner")
+    if "submit_findings" in names:
+        return calls(
+            ("submit_findings", {"summary": _sum(blockers), "blockers": blockers})
+        )
+    if "ask_owner" not in done:
+        asks = [
+            (
+                "ask_owner",
+                {
+                    "owner": b["owner"],
+                    "thing": b["thing"],
+                    "question": f"{b['summary']}. Can you take care of it, or confirm it is fine?",
+                },
+            )
+            for b in blockers
+            if b["status"] == "open"
+            and b.get("owner")
+            and not b.get("asked")
+            and b["kind"] != "break_glass"
+        ] + [
+            (
+                "ask_owner",
+                {
+                    "owner": b["owner"],
+                    "thing": b["thing"],
+                    "question": f"{b['thing']} is a break-glass account. Should it be kept?",
+                },
+            )
+            for b in blockers
+            if b["kind"] == "break_glass" and b.get("owner") and not b.get("asked")
+        ]
+        if asks:
+            return calls(*asks[:MAX_ACTIONS])
+    keep = any(b["kind"] == "break_glass" and b.get("keep") for b in blockers)
+    quiet = not out("logs")  # nothing at all in the last 14 days
+    open_ = [
+        b for b in blockers if b["status"] == "open" and b["kind"] != "break_glass"
+    ]
+    glass = any(b["kind"] == "break_glass" for b in blockers)
+    status = (
+        "keep" if keep else "ready" if not open_ and quiet and not glass else "on_hold"
+    )
+    return calls(
+        (
+            "submit_update",
+            {"status": status, "summary": _sum(blockers), "blockers": blockers},
+        )
+    )
+
+
+def rule_case_model() -> PolicyChatModel:
+    """The rule as a LangChain chat model."""
+    return PolicyChatModel(policy=rule_policy)
 
 
 def _sum(blockers: list[dict[str, Any]]) -> str:
@@ -460,16 +545,14 @@ class CaseState(TypedDict):
     name: str
     status: str  # investigating | waiting_approval | on_hold | waiting_delete | kept | closed
     phase: str  # investigate | daily
-    messages: list[Message]
+    messages: Annotated[list[AnyMessage], add_messages]
     steps: int
-    evidence: dict[str, dict[str, Any]]
     blockers: list[dict[str, Any]]
     summary: str
     proposal: str
     submitted: bool  # an accepted submit ends the model's turn for today
     gate: list[str]
     disabled_day: int | None
-    actions_today: int
     history: list[dict[str, Any]]
     outcome: str | None
     by: str | None
@@ -481,7 +564,7 @@ class Case:
     def __init__(
         self,
         world: World,
-        llm: LLMClient,
+        llm: BaseChatModel,
         index: DocIndex | None = None,
         audit: str | Path | None = None,
         events: Callable[[dict[str, Any]], None] | None = None,
@@ -489,6 +572,7 @@ class Case:
         checkpointer: Any = None,
     ):
         self.world, self.llm, self.quiet = world, llm, quiet
+        self.lock = threading.RLock()  # the world's one SQLite connection
         self.index = index or MemoryIndex()
         self.audit = JsonlAuditSink(audit or world.out / "audit.jsonl")
         self.executor = Executor(world, self.audit, clock=self._clock)
@@ -503,16 +587,19 @@ class Case:
         )
 
     def emit(self, state: Mapping[str, Any], kind: str, **data: Any) -> None:
-        self.events(
-            {
-                "type": kind,
-                "day": self.world.day,
-                "date": self.world.today,
-                "person_id": state.get("person_id"),
-                "name": state.get("name"),
-                **data,
-            }
-        )
+        """One case event. Under the lock: tool calls run in threads, and listeners
+        (the Slack room) read the world too."""
+        with self.lock:
+            self.events(
+                {
+                    "type": kind,
+                    "day": self.world.day,
+                    "date": self.world.today,
+                    "person_id": state.get("person_id"),
+                    "name": state.get("name"),
+                    **data,
+                }
+            )
 
     def request(self, state: CaseState) -> ChangeRequest:
         return ChangeRequest(
@@ -521,46 +608,10 @@ class Case:
             description=f"Offboarding {state['name']}",
         )
 
-    def run_tool(self, state: CaseState, call: ToolCall) -> Any:
-        w, pid, a = self.world, state["person_id"], call.input
-        if call.name == "hr_record":
-            return w.person(pid)
-        if call.name == "accounts":
-            return w.accounts(pid)
-        if call.name == "secrets":
-            return w.secrets(pid)
-        if call.name == "owner_of":
-            return w.owner_of(str(a.get("thing", ""))) or {"found": False}
-        if call.name == "tickets":
-            return w.tickets(pid)
-        if call.name == "logs":
-            days = a.get("days")
-            days = days if isinstance(days, int) else 14
-            return w.logs(pid, w.day - max(1, min(days, 60)))
-        if call.name == "messages":
-            return w.messages(pid)
-        if call.name == "search_docs":
-            return [
-                {"id": h.doc.id, "title": h.doc.title, "text": h.doc.text[:600]}
-                for h in self.index.search(str(a.get("query", "")), k=4, about=pid)
-            ]
-        if call.name == "ask_owner":
-            return w.ask_owner(
-                str(a.get("owner", "")),
-                pid,
-                str(a.get("thing", "")),
-                str(a.get("question", ""))[:500],
-            )
-        if call.name == "comment_ticket":
-            return w.comment(str(a.get("key", "")), str(a.get("text", ""))[:1000])
-        if call.name == "open_ticket":
-            return w.open_ticket(
-                pid, str(a.get("summary", ""))[:200], str(a.get("text", ""))[:2000]
-            )
-        raise ValueError(f"unknown tool {call.name}")
-
 
 def build_case(case: Case, checkpointer: Any):
+    tools = case_tools(case)
+
     def open_(state: CaseState) -> dict[str, Any]:
         """The last day has come: the case opens and HR hears about it."""
         p = case.world.person(state["person_id"]) or {}
@@ -575,113 +626,30 @@ def build_case(case: Case, checkpointer: Any):
             "status": "investigating",
             "phase": "investigate",
             "messages": [
-                UserText(investigate_prompt({**p, "today": case.world.today}))
+                HumanMessage(investigate_prompt({**p, "today": case.world.today}))
             ],
             "steps": 0,
-            "evidence": {},
             "blockers": [],
             "history": [],
             "disabled_day": None,
-            "actions_today": 0,
             "outcome": None,
             "submitted": False,
         }
 
     def model(state: CaseState) -> dict[str, Any]:
-        """The model reads what it has and calls tools: reads, safe actions, or submit."""
-        tools = offered(state["phase"])
-        turn = case.llm.converse(SYSTEM, state["messages"], tools)
+        """The model reads what it has and calls tools: reads, safe actions, or a submit."""
+        bound = case.llm.bind_tools(tools[state["phase"]])
+        reply = bound.invoke([SystemMessage(SYSTEM), *state["messages"]])
+        calls_ = getattr(reply, "tool_calls", [])
         case.emit(
             state,
             "model_turn",
             phase=state["phase"],
-            text=turn.text[:500],
-            tools=[c.name for c in turn.tool_calls],
-            usage=turn.usage.__dict__ if turn.usage else None,
+            text=str(reply.content)[:500],
+            tools=[c["name"] for c in calls_],
+            usage=usage_of(reply),
         )
-        return {
-            "messages": state["messages"] + [AssistantTurn(turn)],
-            "steps": state["steps"] + 1,
-        }
-
-    def tools(state: CaseState) -> dict[str, Any]:
-        """Runs the tools: every read gets an evidence id; safe actions are capped per day."""
-        turn = _latest(state)
-        evidence, results = dict(state["evidence"]), []
-        acted = state["actions_today"]
-        update: dict[str, Any] = {}
-        allowed = {t.name: t for t in offered(state["phase"])}
-        for call in turn.tool_calls:
-            spec = allowed.get(call.name)
-            missing = [
-                k
-                for k in (spec.input_schema["required"] if spec else [])
-                if k not in call.input
-            ]
-            if spec is None or missing:  # code, not the prompt, decides what runs now
-                why = f"missing {', '.join(missing)}" if spec else "not available now"
-                results.append(
-                    ToolResult(call.id, {"error": f"{call.name}: {why}"}, is_error=True)
-                )
-                continue
-            if call.name in SUBMITS:
-                known = set(evidence)
-                blockers = [
-                    {
-                        **b,
-                        "evidence": [e for e in b.get("evidence", []) if e in known],
-                        "status": b.get("status", "open"),
-                    }
-                    for b in (call.input.get("blockers") or [])
-                    if isinstance(b, dict) and b.get("thing")
-                ]
-                update = {
-                    "blockers": blockers,
-                    "summary": str(call.input.get("summary", ""))[:500],
-                    "proposal": call.input.get("status", ""),
-                    "submitted": True,
-                }
-                results.append(ToolResult(call.id, {"ok": True}))
-                continue
-            if call.name in ACTIONS and acted >= MAX_ACTIONS:
-                results.append(
-                    ToolResult(
-                        call.id,
-                        {"error": f"at most {MAX_ACTIONS} actions a day"},
-                        is_error=True,
-                    )
-                )
-                continue
-            try:
-                data = case.run_tool(state, call)
-                eid = f"ev-{call.name}-{len(evidence) + 1}"
-                evidence[eid] = {
-                    "tool": call.name,
-                    "input": call.input,
-                    "day": case.world.day,
-                }
-                results.append(
-                    ToolResult(
-                        call.id,
-                        {
-                            "evidence_id": eid,
-                            "data": json.loads(json.dumps(data, default=str)),
-                        },
-                    )
-                )
-                if call.name in ACTIONS:
-                    acted += 1
-                    case.emit(
-                        state, "action", tool=call.name, input=call.input, result=data
-                    )
-            except Exception as e:  # noqa: BLE001 - a failing system is a tool error, never empty data
-                results.append(ToolResult(call.id, {"error": str(e)}, is_error=True))
-        return {
-            "messages": state["messages"] + [ToolResults(tuple(results))],
-            "evidence": evidence,
-            "actions_today": acted,
-            **update,
-        }
+        return {"messages": [reply], "steps": state["steps"] + 1}
 
     def findings(state: CaseState) -> dict[str, Any]:
         """The investigation is done: the model's findings and code's facts go to HR and
@@ -744,9 +712,12 @@ def build_case(case: Case, checkpointer: Any):
         return {
             "phase": "daily",
             "steps": 0,
-            "actions_today": 0,
-            "messages": [UserText(daily_prompt(state, w.today, new[:12]))],
-            "evidence": {k: v for k, v in state["evidence"].items()},
+            "messages": [
+                RemoveMessage(
+                    id=REMOVE_ALL_MESSAGES
+                ),  # each day starts a new conversation
+                HumanMessage(daily_prompt(state, w.today, new[:12])),
+            ],
             "proposal": "",
             "submitted": False,
             "history": state["history"] + [{"day": w.day, "indexed": changed}],
@@ -841,23 +812,17 @@ def build_case(case: Case, checkpointer: Any):
         }
 
     def after_model(state: CaseState) -> str:
-        turn = _latest(state)
-        if not turn.tool_calls:
+        made = {c["name"] for c in _latest(state).tool_calls}
+        if not made:
             return "cap" if state["steps"] >= MAX_STEPS else "nudge"
-        return (
-            "cap"
-            if state["steps"] >= MAX_STEPS
-            and not {c.name for c in turn.tool_calls} & SUBMITS
-            else "tools"
-        )
+        if state["steps"] >= MAX_STEPS and not made & set(SUBMITS):
+            return "cap"
+        return "tools" if state["phase"] == "investigate" else "daily_tools"
 
     def nudge(state: CaseState) -> dict[str, Any]:
         """The model answered without a tool: remind it to finish with a submit tool."""
         name = "submit_findings" if state["phase"] == "investigate" else "submit_update"
-        return {
-            "messages": state["messages"]
-            + [UserText(f"Call a tool, or {name} to finish.")]
-        }
+        return {"messages": [HumanMessage(f"Call a tool, or {name} to finish.")]}
 
     def after_tools(state: CaseState) -> str:
         if state.get("submitted"):
@@ -885,7 +850,8 @@ def build_case(case: Case, checkpointer: Any):
     for name, fn in (
         ("open", open_),
         ("model", model),
-        ("tools", tools),
+        ("tools", ToolNode(tools["investigate"], name="tools")),
+        ("daily_tools", ToolNode(tools["daily"], name="daily_tools")),
         ("nudge", nudge),
         ("cap", cap),
         ("findings", findings),
@@ -900,9 +866,12 @@ def build_case(case: Case, checkpointer: Any):
         g.add_node(name, fn)
     g.add_edge(START, "open")
     g.add_edge("open", "model")
-    g.add_conditional_edges("model", after_model, ["tools", "nudge", "cap"])
+    g.add_conditional_edges(
+        "model", after_model, ["tools", "daily_tools", "nudge", "cap"]
+    )
     g.add_edge("nudge", "model")
-    g.add_conditional_edges("tools", after_tools, ["model", "findings", "assess"])
+    g.add_conditional_edges("tools", after_tools, ["model", "findings"])
+    g.add_conditional_edges("daily_tools", after_tools, ["model", "assess"])
     g.add_conditional_edges("cap", after_cap, ["findings", "assess"])
     g.add_edge("findings", "approve")
     g.add_conditional_edges("approve", after_approve, ["disable", END])
@@ -917,16 +886,17 @@ def build_case(case: Case, checkpointer: Any):
     return g.compile(checkpointer=checkpointer)
 
 
-def _latest(state: CaseState) -> LLMTurn:
+def _latest(state: CaseState) -> AIMessage:
     last = state["messages"][-1]
-    assert isinstance(last, AssistantTurn)
-    return last.turn
+    assert isinstance(last, AIMessage)
+    return last
 
 
 NODE_KIND = {
     "open": "node",
     "model": "llm",
     "tools": "tool",
+    "daily_tools": "tool",
     "nudge": "node",
     "cap": "rule",
     "findings": "node",
@@ -941,13 +911,15 @@ NODE_KIND = {
 ROUTE_LABELS = {
     ("__start__", "open"): "last day",
     ("open", "model"): "",
-    ("model", "tools"): "tool calls",
+    ("model", "tools"): "investigation tools",
+    ("model", "daily_tools"): "daily tools",
     ("model", "nudge"): "no tool call",
     ("model", "cap"): "step cap",
     ("nudge", "model"): "reminder",
     ("tools", "model"): "results",
     ("tools", "findings"): "submit_findings",
-    ("tools", "assess"): "submit_update",
+    ("daily_tools", "model"): "results",
+    ("daily_tools", "assess"): "submit_update",
     ("cap", "findings"): "investigation",
     ("cap", "assess"): "daily",
     ("findings", "approve"): "",
@@ -1048,23 +1020,21 @@ class Desk:
         return out
 
 
-def case_llm_from_env() -> tuple[LLMClient, str]:
+def case_llm_from_env() -> tuple[BaseChatModel, str]:
+    """The case model: ``CIA_CASE_LLM`` (openrouter when its key is set, else rule)."""
     llm = os.environ.get("CIA_CASE_LLM") or (
         "openrouter" if os.environ.get("OPENROUTER_API_KEY") else "rule"
     )
     if llm == "rule":
-        return RuleCaseLLM(), "rule"
-    from .llm import make_client
-
-    model = os.environ.get("CIA_CASE_MODEL") or (
-        "google/gemma-4-26b-a4b-it" if llm == "openrouter" else None
-    )
-    return make_client(llm, model, max_tokens=4096), f"{llm}:{model or 'default'}"
+        return rule_case_model(), "rule"
+    model = os.environ.get("CIA_CASE_MODEL")
+    chat = make_chat_model(llm, model, max_tokens=4096)
+    return chat, f"{llm}:{getattr(chat, 'model_name', model) or 'default'}"
 
 
 def open_desk(
     out: str | Path = "data/world",
-    llm: LLMClient | None = None,
+    llm: BaseChatModel | None = None,
     events=None,
     index: DocIndex | None = None,
 ) -> Desk:
@@ -1074,7 +1044,7 @@ def open_desk(
     world = World(out)
     case = Case(
         world,
-        llm or RuleCaseLLM(),
+        llm or rule_case_model(),
         index,
         events=events,
         quiet=int(os.environ.get("CIA_CASE_QUIET_DAYS", QUIET_DAYS)),

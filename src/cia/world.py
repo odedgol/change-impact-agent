@@ -366,6 +366,23 @@ class World:
             )
         ]
 
+    def actions_today(self, about_id: str) -> int:
+        """How many safe actions the agent took about a person today."""
+        q = [
+            ("SELECT COUNT(*) FROM asks WHERE about_id = ? AND day = ?", (about_id,)),
+            (
+                "SELECT COUNT(*) FROM comments c JOIN jira j ON j.key = c.key "
+                "WHERE j.about_id = ? AND c.day = ? AND c.author = 'change-impact-agent'",
+                (about_id,),
+            ),
+            (
+                "SELECT COUNT(*) FROM jira WHERE about_id = ? AND created_day = ? "
+                "AND reporter = 'change-impact-agent'",
+                (about_id,),
+            ),
+        ]
+        return sum(self.db.execute(sql, (*a, self.day)).fetchone()[0] for sql, a in q)
+
     def comment(self, key: str, text: str) -> dict[str, Any]:
         if not self.db.execute("SELECT 1 FROM jira WHERE key = ?", (key,)).fetchone():
             return {"commented": False, "note": f"no ticket {key}"}

@@ -4,10 +4,11 @@ import json
 from datetime import timedelta
 
 import pytest
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
-from cia.chat import FORGET_AFTER, MAX_STEPS, TOOLS, Chat, run_tool
+from cia.chat import FORGET_AFTER, MAX_STEPS, TOOL_NAMES, Chat, run_tool
+from cia.chat_models import PolicyChatModel, ScriptedChatModel, calls
 from cia.generator import generate
-from cia.llm import FakeLLM, LLMTurn, ToolCall, ToolResults, UserText
 from cia.mcp_server import Desk
 from cia.models import OffboardingEvent
 from cia.notify import MemoryNotifier
@@ -38,15 +39,16 @@ def desk(tmp_path):
     return Desk(db, tmp_path / "data", tmp_path / "runs"), ident, tmp_path
 
 
-def turn(text="", *calls):
-    return LLMTurn(
-        text=text,
-        tool_calls=tuple(ToolCall(f"c{i}", n, a) for i, (n, a) in enumerate(calls)),
-    )
+def turn(text="", *named):
+    return calls(*named, text=text) if named else AIMessage(text)
+
+
+def FakeLLM(script):  # noqa: N802 - reads like the scripted model it builds
+    return ScriptedChatModel(script=script)
 
 
 def test_the_chat_has_only_read_only_tools():
-    assert {t.name for t in TOOLS} == {
+    assert set(TOOL_NAMES) == {
         "who_left",
         "profile",
         "can_delete",
@@ -69,8 +71,8 @@ def test_the_guardrail_line_wins_even_when_the_model_says_yes(desk):
     assert "🛡️ *Guardrails:*" in out["text"]
     assert "not yet" in out["text"] and "Delete is not allowed" in out["text"]
     result = llm.calls[1]["messages"][-1]
-    assert isinstance(result, ToolResults)
-    assert result.results[0].content["data"][0]["can_delete_now"] is False
+    assert isinstance(result, ToolMessage)
+    assert json.loads(str(result.content))[0]["can_delete_now"] is False
 
 
 def test_a_delete_question_gets_the_line_even_without_the_tool(desk):
@@ -90,7 +92,7 @@ def test_text_from_the_model_or_a_ticket_pings_nobody(desk):
 
 def test_the_step_cap_holds(desk):
     d, _, _ = desk
-    loop = [turn("", ("who_left", {}))] * (MAX_STEPS + 2)
+    loop = [turn("", ("who_left", {})) for _ in range(MAX_STEPS + 2)]
     llm = FakeLLM(loop)
     out = Chat(d, llm).answer("C1:4", "who left?")
     assert "could not finish" in out["text"]
@@ -104,12 +106,12 @@ def test_a_thread_remembers_and_another_thread_does_not(desk):
     chat = Chat(d, llm, sqlite_checkpointer(tmp / "chat.db"), now=lambda: t[0])
     chat.answer("C1:5", "first question")
     chat.answer("C1:5", "and the next?")
-    seen = [m.text for m in llm.calls[1]["messages"] if isinstance(m, UserText)]
+    seen = [m.content for m in llm.calls[1]["messages"] if isinstance(m, HumanMessage)]
     assert seen == ["first question", "and the next?"]
     chat.answer("C1:6", "other thread")
-    assert [m.text for m in llm.calls[2]["messages"] if isinstance(m, UserText)] == [
-        "other thread"
-    ]
+    assert [
+        m.content for m in llm.calls[2]["messages"] if isinstance(m, HumanMessage)
+    ] == ["other thread"]
 
 
 def test_a_thread_is_forgotten_after_seven_days(desk):
@@ -120,7 +122,7 @@ def test_a_thread_is_forgotten_after_seven_days(desk):
     chat.answer("C1:7", "old question")
     t[0] += FORGET_AFTER + 1
     chat.answer("C1:7", "new question")
-    seen = [m.text for m in llm.calls[1]["messages"] if isinstance(m, UserText)]
+    seen = [m.content for m in llm.calls[1]["messages"] if isinstance(m, HumanMessage)]
     assert seen == ["new question"]
 
 
@@ -149,11 +151,10 @@ def test_a_profiled_person_comes_with_a_card_and_a_down_model_falls_back(desk):
     text, blocks = chat_reply(event, d, Chat(d, llm))
     assert text == "Here." and any(b["type"] == "header" for b in blocks)
 
-    class Down:
-        def converse(self, *a, **k):
-            raise RuntimeError("503")
+    def down(messages, names):
+        raise RuntimeError("503")
 
-    text, blocks = chat_reply(event, d, Chat(d, Down()))
+    text, blocks = chat_reply(event, d, Chat(d, PolicyChatModel(policy=down)))
     assert "not answering" in json.dumps(blocks) and blocks[1]["type"] == "header"
 
 

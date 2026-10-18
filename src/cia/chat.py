@@ -5,7 +5,7 @@
           Guardrails: Noah Novak: not yet. Verdict disable_first; the guardrails allow disable.
 
 A LangGraph ``StateGraph`` (model -> tools -> model ... -> answer, with a step cap) on any
-``LLMClient``. The model only gets read-only tools over ``mcp_server.Desk``: who left,
+LangChain chat model; the tools are LangChain ``@tool`` functions run by a ``ToolNode``. The model only gets read-only tools over ``mcp_server.Desk``: who left,
 a person's profile, a change's state, the report, the audit log, and ``can_delete``,
 which is decided in code from the workflow and the guardrails. It cannot approve,
 disable, delete or start anything; approving stays on the Slack buttons.
@@ -21,7 +21,6 @@ thread (the checkpointer's ``thread_id``) and is forgotten after 7 days (Q25).
 from __future__ import annotations
 
 import json
-import operator
 import re
 import threading
 import time
@@ -29,20 +28,22 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated, Any, Protocol, TypedDict
 
-from langchain_core.runnables import RunnableConfig
-from langgraph.graph import END, START, StateGraph
-
-from .graph import describe_graph, memory_checkpointer
-from .llm import (
-    AssistantTurn,
-    LLMClient,
-    LLMTurn,
-    Message,
-    ToolResult,
-    ToolResults,
-    ToolSpec,
-    UserText,
+from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import (
+    AIMessage,
+    AnyMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolMessage,
 )
+from langchain_core.runnables import RunnableConfig
+from langchain_core.tools import BaseTool, tool
+from langgraph.graph import END, START, StateGraph
+from langgraph.graph.message import add_messages
+from langgraph.prebuilt import ToolNode
+
+from .chat_models import usage_of
+from .graph import describe_graph, memory_checkpointer
 from .mcp_server import Desk
 
 MAX_STEPS = 6  # model turns per answer
@@ -68,54 +69,10 @@ Rules:
 - Answer in the language the person wrote in."""
 
 
-def _schema(props: dict[str, Any], required: list[str]) -> dict[str, Any]:
-    return {"type": "object", "properties": props, "required": required}
-
-
-WHO = {"who": {"type": "string", "description": "a full name, an id or OFF-... id"}}
-RID = {"request_id": {"type": "string", "description": "a change id, OFF-..."}}
-TOOLS = (
-    ToolSpec(
-        "who_left",
-        "People HR marks as gone, newest last day first, with title, last day, "
-        "account state and where their offboarding change stands.",
-        _schema(
-            {"days": {"type": "integer", "description": "only last days this recent"}},
-            [],
-        ),
-    ),
-    ToolSpec(
-        "profile",
-        "Everything known about a person or service account: HR record, warnings, "
-        "access, credentials, activity, what depends on it, tickets.",
-        _schema(WHO, ["who"]),
-    ),
-    ToolSpec(
-        "can_delete",
-        "Whether an account may be deleted now or later, and what blocks it. "
-        "Decided by code and guardrails.",
-        _schema(WHO, ["who"]),
-    ),
-    ToolSpec(
-        "change_status",
-        "The agent's offboarding change for a person: verdict, findings, state.",
-        _schema(WHO, ["who"]),
-    ),
-    ToolSpec(
-        "report",
-        "The agent's full report for one change, with the evidence behind each finding.",
-        _schema(RID, ["request_id"]),
-    ),
-    ToolSpec(
-        "audit",
-        "Every decision and action for one change and who approved it.",
-        _schema(RID, ["request_id"]),
-    ),
-)
 REQUEST_ID = re.compile(r"^[A-Za-z0-9_.-]{1,60}$")
 
 
-def run_tool(desk: Desk, name: str, args: dict[str, Any]) -> Any:
+def run_tool(desk: Any, name: str, args: dict[str, Any]) -> Any:
     """One read-only tool call. Unknown people come back as ``found: false``."""
     if name == "who_left":
         rows = desk.leavers()
@@ -176,8 +133,47 @@ def _ordinal(day: str) -> int | None:
         return None
 
 
+def desk_tools(desk: Any) -> list[BaseTool]:
+    """The read-only tools over ``mcp_server.Desk``, as LangChain tools."""
+
+    @tool
+    def who_left(days: int | None = None) -> Any:
+        """People HR marks as gone, newest last day first, with title, last day, account state and where their offboarding change stands. ``days``: only last days this recent."""
+        return run_tool(desk, "who_left", {"days": days})
+
+    @tool
+    def profile(who: str) -> Any:
+        """Everything known about a person or service account (a full name, an id or OFF-... id): HR record, warnings, access, credentials, activity, what depends on it, tickets."""
+        return run_tool(desk, "profile", {"who": who})
+
+    @tool
+    def can_delete(who: str) -> Any:
+        """Whether an account may be deleted now or later, and what blocks it. Decided by code and guardrails."""
+        return run_tool(desk, "can_delete", {"who": who})
+
+    @tool
+    def change_status(who: str) -> Any:
+        """The agent's offboarding change for a person: verdict, findings, state."""
+        return run_tool(desk, "change_status", {"who": who})
+
+    @tool
+    def report(request_id: str) -> Any:
+        """The agent's full report for one change (OFF-...), with the evidence behind each finding."""
+        return run_tool(desk, "report", {"request_id": request_id})
+
+    @tool
+    def audit(request_id: str) -> Any:
+        """Every decision and action for one change (OFF-...) and who approved it."""
+        return run_tool(desk, "audit", {"request_id": request_id})
+
+    return [who_left, profile, can_delete, change_status, report, audit]
+
+
+TOOL_NAMES = ("who_left", "profile", "can_delete", "change_status", "report", "audit")
+
+
 class ChatState(TypedDict):
-    messages: Annotated[list[Message], operator.add]  # the whole thread
+    messages: Annotated[list[AnyMessage], add_messages]  # the whole thread
     question: str
     steps: int
     answer: str
@@ -188,9 +184,9 @@ class ChatState(TypedDict):
     at: float  # when the question came (wall clock), for forgetting the thread
 
 
-def window(messages: list[Message], keep: int = KEEP_TURNS) -> list[Message]:
+def window(messages: list[AnyMessage], keep: int = KEEP_TURNS) -> list[AnyMessage]:
     """The tail of the thread the model sees: the last ``keep`` questions and after."""
-    starts = [i for i, m in enumerate(messages) if isinstance(m, UserText)]
+    starts = [i for i, m in enumerate(messages) if isinstance(m, HumanMessage)]
     return messages[starts[-keep] :] if len(starts) > keep else messages
 
 
@@ -202,88 +198,72 @@ class ChatDesk(Protocol):
     def can_delete(self, identity_id: str) -> dict[str, Any]: ...
 
 
-Runner = Callable[[Any, str, dict[str, Any]], Any]
+PERSON_TOOLS = ("case", "can_delete", "profile", "change_status")
+
+
+def touched(state: ChatState) -> dict[str, list[str]]:
+    """Who this question's tool calls were about, read from the ToolMessages."""
+    last = max(
+        (i for i, m in enumerate(state["messages"]) if isinstance(m, HumanMessage)),
+        default=0,
+    )
+    asked, profiled, about = [], [], list(state.get("about") or [])
+    for m in state["messages"][last:]:
+        if not isinstance(m, ToolMessage) or m.name not in PERSON_TOOLS:
+            continue
+        try:
+            data = json.loads(str(m.content))
+        except ValueError:
+            continue
+        rows = data if isinstance(data, list) else [data]
+        ids = [
+            str(d.get("identity_id") or d.get("id"))
+            for d in rows
+            if isinstance(d, dict) and (d.get("identity_id") or d.get("id"))
+        ]
+        if not ids:
+            continue
+        about = ids[:3]
+        if m.name == "can_delete":
+            asked += ids
+        if m.name == "profile":
+            profiled = ids
+    return {"asked": asked, "profiled": profiled, "about": about}
 
 
 def build_chat(
     desk: ChatDesk,
-    llm: LLMClient,
+    llm: BaseChatModel,
     checkpointer: Any = None,
-    tools: tuple[ToolSpec, ...] = TOOLS,
+    tools: list[BaseTool] | None = None,
     system: str = SYSTEM,
-    run: Runner = run_tool,
 ):
-    def model(state: ChatState) -> dict[str, Any]:
-        """The chat model reads the thread and calls read-only tools, or answers."""
-        turn = llm.converse(system, window(state["messages"]), tools)
-        u = turn.usage
-        return {
-            "messages": [AssistantTurn(turn)],
-            "steps": state["steps"] + 1,
-            "usage": list(state.get("usage") or [])
-            + (
-                [
-                    {
-                        "input_tokens": u.input_tokens,
-                        "output_tokens": u.output_tokens,
-                        "cost_usd": u.cost_usd,
-                    }
-                ]
-                if u
-                else []
-            ),
-        }
+    tools = tools if tools is not None else desk_tools(desk)
+    bound = llm.bind_tools(tools)
 
-    def run_tools(state: ChatState) -> dict[str, Any]:
-        """Runs the tools the model asked for (read-only, or the safe ones its caller gives); errors go back as data."""
-        turn = latest(state)
-        results: list[ToolResult] = []
-        asked = list(state.get("asked") or [])
-        profiled = list(state.get("profiled") or [])
-        about = list(state.get("about") or [])
-        for call in turn.tool_calls:
-            try:
-                data = run(desk, call.name, call.input)
-                text = json.dumps(data, default=str)
-                results.append(
-                    ToolResult(call.id, {"data": json.loads(text[:MAX_RESULT_CHARS])})
-                    if len(text) <= MAX_RESULT_CHARS
-                    else ToolResult(call.id, {"data_cut": text[:MAX_RESULT_CHARS]})
-                )
-                rows = data if isinstance(data, list) else [data]
-                touched = [
-                    d.get("identity_id") or d.get("id")
-                    for d in rows
-                    if isinstance(d, dict) and (d.get("identity_id") or d.get("id"))
-                ]
-                if call.name in ("case", "can_delete", "profile", "change_status"):
-                    about = touched[:3] or about
-                if call.name == "can_delete" and isinstance(data, dict) and touched:
-                    asked += touched
-                if call.name in ("can_delete", "profile") and isinstance(data, list):
-                    key = "identity_id" if call.name == "can_delete" else "id"
-                    ids = [d[key] for d in data if d and key in d]
-                    if call.name == "can_delete":
-                        asked += ids
-                    else:
-                        profiled = ids
-            except Exception as e:  # noqa: BLE001 - a failing read is data for the model
-                results.append(ToolResult(call.id, {"error": str(e)}, is_error=True))
+    def model(state: ChatState) -> dict[str, Any]:
+        """The chat model reads the thread and calls tools, or answers."""
+        reply = bound.invoke([SystemMessage(system), *window(state["messages"])])
+        u = usage_of(reply)
         return {
-            "messages": [ToolResults(tuple(results))],
-            "asked": asked,
-            "profiled": profiled,
-            "about": about,
+            "messages": [reply],
+            "steps": state["steps"] + 1,
+            "usage": list(state.get("usage") or []) + ([u] if u else []),
         }
 
     def answer(state: ChatState) -> dict[str, Any]:
         """The model's text for Slack: escaped, and the guardrail lines appended by code."""
-        return {"answer": finish(desk, state, latest(state).text)}
+        seen = touched(state)
+        return {
+            **seen,
+            "answer": finish(desk, {**state, **seen}, str(latest(state).content)),
+        }
 
     def cap(state: ChatState) -> dict[str, Any]:
         """Too many steps: say so, still with the guardrail lines."""
+        seen = touched(state)
         note = "I could not finish looking that up; ask again more narrowly."
-        return {"answer": finish(desk, state, note)}
+        return {**seen, "answer": finish(desk, {**state, **seen}, note)}
 
     def after_model(state: ChatState) -> str:
         if latest(state).tool_calls:
@@ -291,13 +271,10 @@ def build_chat(
         return "answer"
 
     g = StateGraph(ChatState)
-    for name, fn in (
-        ("model", model),
-        ("tools", run_tools),
-        ("answer", answer),
-        ("cap", cap),
-    ):
-        g.add_node(name, fn)
+    g.add_node("model", model)
+    g.add_node("tools", ToolNode(tools, name="tools"))
+    g.add_node("answer", answer)
+    g.add_node("cap", cap)
     g.add_edge(START, "model")
     g.add_conditional_edges("model", after_model, ["tools", "answer", "cap"])
     g.add_edge("tools", "model")
@@ -306,10 +283,10 @@ def build_chat(
     return g.compile(checkpointer=checkpointer)
 
 
-def latest(state: ChatState) -> LLMTurn:
+def latest(state: ChatState) -> AIMessage:
     last = state["messages"][-1]
-    assert isinstance(last, AssistantTurn)
-    return last.turn
+    assert isinstance(last, AIMessage)
+    return last
 
 
 def slack_text(text: str) -> str:
@@ -322,7 +299,7 @@ def slack_text(text: str) -> str:
     return escape(text)[:2800]
 
 
-def finish(desk: ChatDesk, state: ChatState, text: str) -> str:
+def finish(desk: ChatDesk, state: Any, text: str) -> str:
     """Code's last word: escape the answer, then add the guardrail line for every
     person the model asked ``can_delete`` about, or named in a question about deleting
     (or, when it names nobody, the person the thread is about)."""
@@ -358,17 +335,16 @@ class Chat:
     def __init__(
         self,
         desk: ChatDesk,
-        llm: LLMClient,
+        llm: BaseChatModel,
         checkpointer: Any = None,
         log: str | Path | None = None,
         now: Callable[[], float] = time.time,
-        tools: tuple[ToolSpec, ...] = TOOLS,
+        tools: list[BaseTool] | None = None,
         system: str = SYSTEM,
-        run: Runner = run_tool,
     ):
         self.desk, self.now = desk, now
         self.graph = build_chat(
-            desk, llm, checkpointer or memory_checkpointer(), tools, system, run
+            desk, llm, checkpointer or memory_checkpointer(), tools, system
         )
         self.log = Path(log) if log else None
         self._locks: dict[str, threading.Lock] = {}
@@ -388,7 +364,7 @@ class Chat:
                 self.graph.checkpointer.delete_thread(thread)  # type: ignore[union-attr]
             # "about" is left out on purpose: it carries over from the thread's last question
             question_in: Any = {
-                "messages": [UserText(question)],
+                "messages": [HumanMessage(question)],
                 "question": question,
                 "steps": 0,
                 "answer": "",
@@ -422,7 +398,7 @@ class Chat:
 
 def describe() -> dict[str, Any]:
     """The chat graph as data, for drawing."""
-    from .llm import FakeLLM
+    from .chat_models import ScriptedChatModel
 
-    g = build_chat(Desk(), FakeLLM([]))
+    g = build_chat(Desk(), ScriptedChatModel(script=[]))
     return describe_graph(g.get_graph(), NODE_KIND, ROUTE_LABELS)

@@ -582,6 +582,10 @@ def describe_graph(
     for node in g.nodes.values():
         fn = getattr(node.data, "func", None)
         doc = inspect.getdoc(fn) if fn is not None else None
+        if doc is None and node.data is not None and not isinstance(node.data, str):
+            doc = inspect.getdoc(
+                node.data
+            )  # a prebuilt node (ToolNode): its own docstring
         kind = (
             "start"
             if node.id == START

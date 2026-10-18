@@ -36,8 +36,9 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Protocol
 
+from langchain_core.tools import BaseTool, tool
+
 from .case import QUIET_DAYS, Desk, gate
-from .llm import ToolSpec
 from .slack import escape
 
 log = logging.getLogger("cia.case_slack")
@@ -375,63 +376,75 @@ class Room:
 
 # ---- the chat's tools over the cases --------------------------------------------------
 
-S = {"type": "string"}
-WHO = {"who": {**S, "description": "a full name or first name"}}
 
+def case_chat_tools(desk: CaseChatDesk) -> list[BaseTool]:
+    """The chat's tools over the cases, as LangChain tools. Reads for anyone; the safe
+    actions check who asks (``TURN``); none of them approves anything."""
 
-def _schema(props: dict[str, Any], required: list[str]) -> dict[str, Any]:
-    return {"type": "object", "properties": props, "required": required}
+    @tool
+    def who_left() -> Any:
+        """Everyone with a last day: when, where their case stands, and what blocks it."""
+        return run_case_tool(desk, "who_left", {})
 
+    @tool
+    def case(who: str) -> Any:
+        """One person's case (a full or first name): status, what the agent found, what still blocks a delete (checked in code), the agent's questions and the owners' answers, and the daily updates."""
+        return run_case_tool(desk, "case", {"who": who})
 
-CASE_TOOLS = (
-    ToolSpec(
-        "who_left",
-        "Everyone with a last day: when, where their case stands, and what blocks it.",
-        _schema({}, []),
-    ),
-    ToolSpec(
-        "case",
-        "One person's case: status, what the agent found, what still blocks a delete (checked in code), the agent's questions and the owners' answers, and the daily updates.",
-        _schema(WHO, ["who"]),
-    ),
-    ToolSpec(
-        "can_delete",
-        "Whether a person's access may be deleted now, decided by code. Repeat it; never contradict it.",
-        _schema(WHO, ["who"]),
-    ),
-    ToolSpec(
-        "search_docs",
-        "Search runbooks, tickets, owners' answers and activity by meaning or words.",
-        _schema({"query": S}, ["query"]),
-    ),
-    ToolSpec(
-        "watch",
-        "Start watching a person for the asking user: they get tagged on news.",
-        _schema(WHO, ["who"]),
-    ),
-    ToolSpec(
-        "unwatch", "Stop watching a person for the asking user.", _schema(WHO, ["who"])
-    ),
-    ToolSpec("watching", "Who the asking user watches.", _schema({}, [])),
-    ToolSpec(
-        "ask_owner",
-        "Ask an owner again about one thing in a person's case (approvers only).",
-        _schema(
-            {**WHO, "owner": S, "thing": S, "question": S},
-            ["who", "owner", "thing", "question"],
-        ),
-    ),
-    ToolSpec(
-        "next_day",
-        "Move the demo clock forward (approvers only); every case does its daily work.",
-        _schema({"days": {"type": "integer", "description": f"1 to {MAX_DAYS}"}}, []),
-    ),
-    ToolSpec(
-        "offer_approval",
-        "Show the approve buttons for a person's case under your answer, when the user wants to approve. You cannot approve yourself.",
-        _schema(WHO, ["who"]),
-    ),
-)
+    @tool
+    def can_delete(who: str) -> Any:
+        """Whether a person's access may be deleted now, decided by code. Repeat it; never contradict it."""
+        return run_case_tool(desk, "can_delete", {"who": who})
+
+    @tool
+    def search_docs(query: str) -> Any:
+        """Search runbooks, tickets, owners' answers and activity by meaning or words."""
+        return run_case_tool(desk, "search_docs", {"query": query})
+
+    @tool
+    def watch(who: str) -> Any:
+        """Start watching a person for the asking user: they get tagged on news."""
+        return run_case_tool(desk, "watch", {"who": who})
+
+    @tool
+    def unwatch(who: str) -> Any:
+        """Stop watching a person for the asking user."""
+        return run_case_tool(desk, "unwatch", {"who": who})
+
+    @tool
+    def watching() -> Any:
+        """Who the asking user watches."""
+        return run_case_tool(desk, "watching", {})
+
+    @tool
+    def ask_owner(who: str, owner: str, thing: str, question: str) -> Any:
+        """Ask an owner again about one thing in a person's case (approvers only)."""
+        args = {"who": who, "owner": owner, "thing": thing, "question": question}
+        return run_case_tool(desk, "ask_owner", args)
+
+    @tool
+    def next_day(days: int = 1) -> Any:
+        """Move the demo clock forward 1 to 7 days (approvers only); every case does its daily work."""
+        return run_case_tool(desk, "next_day", {"days": days})
+
+    @tool
+    def offer_approval(who: str) -> Any:
+        """Show the approve buttons for a person's case under your answer, when the user wants to approve. You cannot approve yourself."""
+        return run_case_tool(desk, "offer_approval", {"who": who})
+
+    return [
+        who_left,
+        case,
+        can_delete,
+        search_docs,
+        watch,
+        unwatch,
+        watching,
+        ask_owner,
+        next_day,
+        offer_approval,
+    ]
+
 
 CASE_SYSTEM = """You are the Change Impact Agent, an assistant in Slack for IT, security and HR.
 You work offboarding cases: when an employee's last day comes, you find what their access
@@ -811,13 +824,13 @@ def main(argv: list[str] | None = None) -> None:
     room.desk = open_desk(out, llm, room.event)
     chat = None
     if name != "rule":
+        chat_desk = CaseChatDesk(room)
         chat = Chat(
-            CaseChatDesk(room),
+            chat_desk,
             llm,
             log=out / "chat.jsonl",
-            tools=CASE_TOOLS,
+            tools=case_chat_tools(chat_desk),
             system=CASE_SYSTEM,
-            run=run_case_tool,
         )
     connect(
         room,
