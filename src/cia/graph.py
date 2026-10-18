@@ -566,14 +566,15 @@ ROUTE_LABELS = {
     ("cap", "__end__"): "",
 }
 DOCS_BEGIN, DOCS_END = (
-    "<!-- graph:begin (written by `make graph` from src/cia/graph.py; do not edit) -->",
+    "<!-- graph:begin (written by `make graph` from src/cia/graph.py and workflow.py; do not edit) -->",
     "<!-- graph:end -->",
 )
 
 
-def describe() -> dict[str, Any]:
-    """The compiled graph as plain data: nodes with kind and docstring, edges with route labels."""
-    g = drawing_graph()
+def describe_graph(
+    g: Any, kinds: dict[str, str], labels: dict[tuple[str, str], str]
+) -> dict[str, Any]:
+    """A compiled graph as plain data: nodes with kind and docstring, edges with route labels."""
     nodes = []
     for node in g.nodes.values():
         fn = getattr(node.data, "func", None)
@@ -583,34 +584,55 @@ def describe() -> dict[str, Any]:
             if node.id == START
             else "end"
             if node.id == END
-            else NODE_KIND.get(node.id, "")
+            else kinds.get(node.id, "")
         )
-        nodes.append({"id": node.id, "kind": kind, "doc": (doc or "").split("\n")[0]})
+        first = " ".join((doc or "").split("\n\n")[0].split())  # the first paragraph
+        nodes.append({"id": node.id, "kind": kind, "doc": first})
     edges = [
         {
             "source": e.source,
             "target": e.target,
             "conditional": e.conditional,
-            "label": ROUTE_LABELS.get((e.source, e.target), ""),
+            "label": labels.get((e.source, e.target), ""),
         }
         for e in g.edges
     ]
     return {"nodes": nodes, "edges": edges}
 
 
-def docs_block(data: dict[str, Any]) -> str:
-    payload = json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace(
-        "</", "<\\/"
+def describe() -> dict[str, Any]:
+    """The investigator graph as data."""
+    return describe_graph(drawing_graph(), NODE_KIND, ROUTE_LABELS)
+
+
+def drawings() -> dict[str, dict[str, Any]]:
+    """Every graph the docs draw, by the id of its data block: the investigator and the
+    change workflow that runs it as one node."""
+    from .workflow import describe as describe_workflow  # lazy: workflow imports graph
+
+    return {"engine-graph": describe(), "workflow-graph": describe_workflow()}
+
+
+def docs_block(graphs: dict[str, dict[str, Any]]) -> str:
+    scripts = "\n".join(
+        f'<script type="application/json" id="{name}">'
+        + json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace(
+            "</", "<\\/"
+        )
+        + "</script>"
+        for name, data in graphs.items()
     )
-    return f'{DOCS_BEGIN}\n<script type="application/json" id="engine-graph">{payload}</script>\n{DOCS_END}'
+    return f"{DOCS_BEGIN}\n{scripts}\n{DOCS_END}"
 
 
 def write_docs(path: str | Path = "docs/index.html") -> bool:
     """Put the current graph into the docs page between the markers. Returns True if the page changed."""
     p = Path(path)
     page = p.read_text()
-    start, end = page.index(DOCS_BEGIN), page.index(DOCS_END) + len(DOCS_END)
-    new = page[:start] + docs_block(describe()) + page[end:]
+    # found by its start, so a reworded marker is replaced too
+    start = page.index(DOCS_BEGIN.split(" (")[0])
+    end = page.index(DOCS_END) + len(DOCS_END)
+    new = page[:start] + docs_block(drawings()) + page[end:]
     if new != page:
         p.write_text(new)
     return new != page
@@ -618,12 +640,12 @@ def write_docs(path: str | Path = "docs/index.html") -> bool:
 
 def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(
-        description="Print the investigator graph, or write it into the docs."
+        description="Print the investigator graph, or write both graphs into the docs."
     )
     p.add_argument(
         "--json",
         action="store_true",
-        help="print nodes and edges as JSON instead of Mermaid",
+        help="print both graphs' nodes and edges as JSON instead of Mermaid",
     )
     p.add_argument(
         "--write-docs",
@@ -636,7 +658,7 @@ def main(argv: list[str] | None = None) -> None:
             f"{a.write_docs}: {'updated' if write_docs(a.write_docs) else 'already current'}"
         )
     elif a.json:
-        print(json.dumps(describe(), ensure_ascii=False, indent=2))
+        print(json.dumps(drawings(), ensure_ascii=False, indent=2))
     else:
         print(mermaid())
 

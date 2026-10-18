@@ -141,6 +141,8 @@ svg.d{display:block;width:100%;height:auto}
 .legend .k-tool{background:var(--safe-bg);border-color:var(--safe)}
 .legend .k-guard{background:var(--guard-bg);border-color:var(--guard)}
 .legend .k-code{background:var(--bg);border-color:var(--line-2)}
+.legend .k-wait{background:var(--disable-bg);border-color:var(--disable)}
+.legend .k-act{background:var(--ask-bg);border-color:var(--ask)}
 .legend .k-later{background:transparent;border-color:var(--ink-3);border-style:dashed}
 
 /* flow stepper: the one interaction */
@@ -206,15 +208,18 @@ svg.d{display:block;width:100%;height:auto}
 <style>
 .graphfig{padding:0}
 .graphhost{height:980px;min-width:0}
-@media (max-width:700px){.graphhost{height:620px}}
+.graphhost.tall{height:1500px}
+@media (max-width:700px){.graphhost{height:620px}.graphhost.tall{height:900px}}
 .graphmsg{margin:0;padding:24px;color:var(--ink-3);font-size:14px}
 .graphhost .react-flow{--xy-background-color:transparent;--xy-edge-stroke:var(--ink-3);--xy-edge-label-background-color:var(--bg);--xy-edge-label-color:var(--ink-2);--xy-controls-button-background-color:var(--bg);--xy-controls-button-color:var(--ink-2);--xy-controls-button-border-color:var(--line-2)}
 .gn{width:100%;height:100%;border:1.5px solid var(--line-2);background:var(--bg);border-radius:10px;padding:12px 16px;display:flex;flex-direction:column;justify-content:center;gap:6px;color:var(--ink)}
 .gn b{font:600 15px/1.2 var(--m)}
-.gn span{font-size:13px;line-height:1.5;color:var(--ink-2)}
+.gn span{font-size:13px;line-height:1.5;color:var(--ink-2);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .gn-llm{border-color:var(--accent);background:var(--accent-bg)}
 .gn-tool{border-color:var(--safe);background:var(--safe-bg)}
 .gn-rule{border-color:var(--guard);background:var(--guard-bg)}
+.gn-wait{border-color:var(--disable);background:var(--disable-bg)}
+.gn-act{border-color:var(--ask);background:var(--ask-bg)}
 .gn-start,.gn-end{border-radius:999px;align-items:center;background:var(--bg-2)}
 .gn .react-flow__handle{opacity:0;pointer-events:none}
 .gl{position:absolute;pointer-events:none;font:500 12px/1.2 var(--m);color:var(--ink);background:var(--bg);border:1px solid var(--line-2);border-radius:6px;padding:4px 9px;white-space:nowrap}
@@ -250,6 +255,7 @@ svg.d{display:block;width:100%;height:auto}
   <a class="sub" href="#loop">The request loop</a>
   <a class="sub" href="#layers">Five layers</a>
   <a class="sub" href="#engine">LangGraph engine</a>
+  <a class="sub" href="#workflow">Change workflow graph</a>
   <a href="#guardrails">Guardrails and proof</a>
   <h4>Delivery</h4>
   <a href="#roadmap">Roadmap</a>
@@ -277,7 +283,7 @@ svg.d{display:block;width:100%;height:auto}
     <div><dt>Output: one verdict, with confidence</dt><dd class="vs"><span class="v v-safe">safe_to_delete</span><span class="v v-disable">disable_first</span><span class="v v-ask">ask_owner</span><span class="v v-none">insufficient_evidence</span></dd></div>
     <div><dt>Hard gate</dt><dd><b>0</b> unsafe-delete recommendations. Recall ≥ 90%<span class="target">target</span> precision ≥ 80%<span class="target">target</span></dd></div>
   </dl>
-  <div class="note"><p><b>Status, 2026-10-17.</b> Week 1 is done (synthetic org, read-only tools, baseline). Week 2, the investigator loop, is done: the models and the evidence source interface are merged (PR 2.1, 2.2), and so are the LLM client and the generator refactor (PR 2.3, R1). The investigator loop is merged too (PR 2.4, then 2.4b–d: a local model, the run monitor, evidence freshness and incomplete runs). The bench is merged (PR 2.5): gemma4 made 0 unsafe deletes and got 20 of 20 on the synthetic org, locally on Ollama and hosted on OpenRouter (under 1 cent), which proves the plumbing, not production quality. The investigator runs as a LangGraph graph (PR 2.7), a Rust terminal UI replays its events (PR 2.6), the graph drawing below is generated from the code (PR 2.8), and the code has one format (PR 2.9); all merged, 142 tests. Next: week 3, approval and a reversible executor; <a href="week-3.html">read the plan</a> (approved with the recommended answers to Q10 and Q12–Q16). PR 3.1 adds a credential chain case: <code>get_dependencies</code> now follows up to 4 hops, and the naive rule deletes 8 of 12 risky accounts. Numbers marked <span class="target">target</span> are goals, not results.</p></div>
+  <div class="note"><p><b>Status, 2026-10-18.</b> Weeks 1 and 2 are done: synthetic org, read-only tools, the investigator as a LangGraph graph, a run monitor, a Rust terminal UI and a bench (gemma4 made 0 unsafe deletes and got 20 of 20 on the synthetic org, locally and on OpenRouter). Week 3 adds what happens after the report (<a href="week-3.html">plan</a>): a credential-chain case and multi-hop dependencies (PR 3.1), guardrails in code (3.2), a reversible executor with a hash-chained audit log (3.3), the change workflow with human approval and a 14-day quiet period (3.4), grounded verdicts and fresh-evidence checks (3.4b), approval from the command line, the monitor and the Rust UI (3.5), and a bench that runs the whole workflow with an approver that approves everything allowed (3.6). On the rule model: 24 of 24 right, 12 decoys deleted, 0 unapproved actions, 0 wrong deletes. This proves the plumbing and the gates, not production quality. Numbers marked <span class="target">target</span> are goals, not results.</p></div>
 </section>
 
 <section id="system" class="wide">
@@ -290,13 +296,13 @@ svg.d{display:block;width:100%;height:auto}
       <svg class="d" viewBox="0 0 1080 380" style="min-width:880px" role="img" aria-label="System diagram. A change request goes to the ChangeWorkflow, then the Investigator, which produces a RiskReport checked by guardrails, then human approval, then the executor, which writes an audit log. The investigator uses two interfaces, EvidenceSource implemented by SyntheticSource and LLMClient implemented by BedrockClient and FakeLLM.">
         <defs><marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" class="ah"/></marker></defs>
         <rect class="node" x="20" y="40" width="150" height="62" rx="8"/><text class="h" x="36" y="66">Change request</text><text class="s" x="36" y="86">identity_id · action</text>
-        <rect class="node later" x="200" y="40" width="160" height="62" rx="8"/><text class="h" x="216" y="66">ChangeWorkflow</text><text class="s" x="216" y="86">LangGraph · week 3</text>
+        <rect class="node" x="200" y="40" width="160" height="62" rx="8"/><text class="h" x="216" y="66">ChangeWorkflow</text><text class="s" x="216" y="86">LangGraph · workflow.py</text>
         <rect class="llm" x="390" y="40" width="170" height="62" rx="8"/><text class="h" x="406" y="66">Investigator</text><text class="s" x="406" y="86">LangGraph graph · ≤ 8 steps</text>
         <rect class="node" x="590" y="40" width="160" height="62" rx="8"/><text class="h" x="606" y="66">RiskReport</text><text class="s" x="606" y="86">verdict · findings · ev-ids</text>
         <rect class="guard" x="780" y="40" width="170" height="62" rx="8"/><text class="h" x="796" y="66">Guardrails</text><text class="s" x="796" y="86">code decides what may run</text>
-        <rect class="guard later" x="780" y="150" width="170" height="62" rx="8"/><text class="h" x="796" y="176">Human approval</text><text class="s" x="796" y="196">LangGraph interrupt() · wk 3</text>
-        <rect class="tool later" x="780" y="262" width="170" height="62" rx="8"/><text class="h" x="796" y="288">Executor</text><text class="s" x="796" y="308">dry-run · disable · undo</text>
-        <rect class="node later" x="972" y="262" width="96" height="62" rx="8"/><text class="h" x="984" y="288">Audit log</text><text class="s" x="984" y="308">append-only</text>
+        <rect class="guard" x="780" y="150" width="170" height="62" rx="8"/><text class="h" x="796" y="176">Human approval</text><text class="s" x="796" y="196">LangGraph interrupt()</text>
+        <rect class="tool" x="780" y="262" width="170" height="62" rx="8"/><text class="h" x="796" y="288">Executor</text><text class="s" x="796" y="308">dry-run · disable · undo</text>
+        <rect class="node" x="972" y="262" width="96" height="62" rx="8"/><text class="h" x="984" y="288">Audit log</text><text class="s" x="984" y="308">append-only</text>
 
         <rect class="zone-ro" x="290" y="150" width="200" height="200" rx="10"/><text class="t" x="304" y="170">READ-ONLY</text>
         <rect class="iface" x="304" y="182" width="172" height="56" rx="8"/><text class="h" x="318" y="206">EvidenceSource</text><text class="s" x="318" y="225">interface · 5 tools</text>
@@ -315,7 +321,7 @@ svg.d{display:block;width:100%;height:auto}
         <text class="l" x="873" y="130">pass</text><text class="l" x="873" y="240">approved</text>
       </svg>
     </div>
-    <div class="legend"><span><i class="k-llm"></i>LLM</span><span><i class="k-tool"></i>Tools and actions</span><span><i class="k-guard"></i>Guardrail or human gate</span><span><i class="k-code"></i>Code and data</span><span><i class="k-later"></i>Dashed: week 3 or later</span></div>
+    <div class="legend"><span><i class="k-llm"></i>LLM</span><span><i class="k-tool"></i>Tools and actions</span><span><i class="k-guard"></i>Guardrail or human gate</span><span><i class="k-code"></i>Code and data</span></div>
   </figure>
   <div class="doc">
     <h3>Real or simulated</h3>
@@ -323,7 +329,7 @@ svg.d{display:block;width:100%;height:auto}
       <thead><tr><th>System</th><th>Status</th><th>How</th></tr></thead>
       <tbody>
         <tr><td>Claude</td><td>Real (Bedrock)</td><td><code>FakeLLM</code> in unit tests</td></tr>
-        <tr><td>Agent engine</td><td>Real</td><td>LangGraph, in process; checkpoints in memory now, Postgres later</td></tr>
+        <tr><td>Agent engine</td><td>Real</td><td>LangGraph, in process; checkpoints in memory for the investigator, SQLite for the change workflow, Postgres later</td></tr>
         <tr><td>Database</td><td>Real</td><td>SQLite now, Postgres in Docker later</td></tr>
         <tr><td>IAM, logs, tickets</td><td>Simulated</td><td><code>SyntheticSource</code> with planted dependencies</td></tr>
         <tr><td>Internal docs</td><td>Simulated, week 4</td><td>Synthetic runbooks and threads that never name the account id</td></tr>
@@ -375,17 +381,17 @@ svg.d{display:block;width:100%;height:auto}
         <g data-step="4"><rect class="node" x="590" y="58" width="150" height="60" rx="8"/><text class="h" x="606" y="84">RiskReport</text><text class="s" x="606" y="103">verdict · confidence</text>
           <path class="e" d="M530 88H586" marker-end="url(#a2)"/><text class="l" x="546" y="80">yes</text></g>
 
-        <g data-step="5"><path class="guard later" d="M858 38L908 88L858 138L808 88Z"/><text class="h" x="858" y="84" text-anchor="middle">Human</text><text class="s" x="858" y="101" text-anchor="middle">approves?</text>
+        <g data-step="5"><path class="guard" d="M858 38L908 88L858 138L808 88Z"/><text class="h" x="858" y="84" text-anchor="middle">Human</text><text class="s" x="858" y="101" text-anchor="middle">approves?</text>
           <path class="e" d="M740 88H804" marker-end="url(#a2)"/>
-          <rect class="node later" x="790" y="208" width="150" height="62" rx="8"/><text class="h" x="806" y="234">Stop</text><text class="s" x="806" y="253">owner is asked</text>
+          <rect class="node" x="790" y="208" width="150" height="62" rx="8"/><text class="h" x="806" y="234">Stop</text><text class="s" x="806" y="253">owner is asked</text>
           <path class="e" d="M858 138V204" marker-end="url(#a2)"/><text class="l" x="866" y="176">no</text></g>
 
-        <g data-step="6"><rect class="tool later" x="972" y="58" width="160" height="60" rx="8"/><text class="h" x="988" y="84">Executor</text><text class="s" x="988" y="103">dry-run · disable first</text>
+        <g data-step="6"><rect class="tool" x="972" y="58" width="160" height="60" rx="8"/><text class="h" x="988" y="84">Executor</text><text class="s" x="988" y="103">dry-run · disable first</text>
           <path class="e" d="M908 88H968" marker-end="url(#a2)"/><text class="l" x="924" y="80">yes</text>
-          <rect class="tool later" x="972" y="208" width="160" height="62" rx="8"/><text class="h" x="988" y="234">Delete or restore</text><text class="s" x="988" y="253">after a quiet period</text>
+          <rect class="tool" x="972" y="208" width="160" height="62" rx="8"/><text class="h" x="988" y="234">Delete or restore</text><text class="s" x="988" y="253">after a quiet period</text>
           <path class="e" d="M1052 118V204" marker-end="url(#a2)"/><text class="l" x="1060" y="166">quiet period</text></g>
 
-        <text class="s" x="30" y="350">Solid boxes and arrows: week 2. Dashed boxes: week 3. Dashed outlines mark zones. Red shapes are gates enforced by code or by a person.</text>
+        <text class="s" x="30" y="350">Solid boxes: built (weeks 2 and 3). Dashed boxes: week 4. Dashed outlines mark zones. Red shapes are gates enforced by code or by a person.</text>
       </svg>
     </div>
     <p class="say" id="say" aria-live="polite"><b>Whole loop.</b> Pick a step to see what happens there and which guardrail applies.</p>
@@ -399,8 +405,8 @@ svg.d{display:block;width:100%;height:auto}
         <defs><marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" class="ah"/></marker></defs>
         <rect class="zone" x="10" y="10" width="880" height="120" rx="12"/><text class="t" x="26" y="34">1 · ORCHESTRATION · LANGGRAPH, NO LLM ROUTER</text>
         <rect class="node" x="30" y="52" width="170" height="60" rx="8"/><text class="h" x="115" y="78" text-anchor="middle">ChangeRequest</text><text class="s" x="115" y="96" text-anchor="middle">identity_id · action</text>
-        <rect class="node later" x="350" y="52" width="200" height="60" rx="8"/><text class="h" x="450" y="78" text-anchor="middle">ChangeWorkflow</text><text class="s" x="450" y="96" text-anchor="middle">supervisor · LangGraph · week 3</text>
-        <rect class="node later" x="690" y="52" width="180" height="60" rx="8"/><text class="h" x="780" y="78" text-anchor="middle">Fixed DAG</text><text class="s" x="780" y="96" text-anchor="middle">check → approve → act</text>
+        <rect class="node" x="350" y="52" width="200" height="60" rx="8"/><text class="h" x="450" y="78" text-anchor="middle">ChangeWorkflow</text><text class="s" x="450" y="96" text-anchor="middle">supervisor · LangGraph · workflow.py</text>
+        <rect class="node" x="690" y="52" width="180" height="60" rx="8"/><text class="h" x="780" y="78" text-anchor="middle">Fixed DAG</text><text class="s" x="780" y="96" text-anchor="middle">check → approve → act</text>
         <path class="e" d="M200 82H346" marker-end="url(#a3)"/><path class="e" d="M550 82H686" marker-end="url(#a3)"/><path class="e" d="M450 112V156" marker-end="url(#a3)"/>
 
         <rect class="zone" x="10" y="160" width="250" height="220" rx="12"/><text class="t" x="26" y="184">3 · MEMORY AND STATE</text>
@@ -429,13 +435,13 @@ svg.d{display:block;width:100%;height:auto}
         <rect class="tool" x="447" y="474" width="92" height="36" rx="6"/><text class="s" x="493" y="497" text-anchor="middle">get_owner</text>
         <text class="s" x="41" y="540">No web, file writes or code exec. Rows capped; ticket text is data, never instructions.</text>
         <path class="e" d="M340 366V470" marker-end="url(#a3)"/><path class="e" d="M450 470V370" marker-end="url(#a3)"/>
-        <rect class="zone" x="562" y="438" width="316" height="128" rx="10"/><text class="t" x="578" y="460">WRITE PATH · WEEK 3</text>
-        <rect class="guard later" x="578" y="474" width="136" height="68" rx="8"/><text class="h" x="646" y="502" text-anchor="middle">HITL approval</text><text class="s" x="646" y="522" text-anchor="middle">human + guardrails</text>
-        <rect class="tool later" x="732" y="474" width="132" height="68" rx="8"/><text class="h" x="798" y="502" text-anchor="middle">Executor</text><text class="s" x="798" y="522" text-anchor="middle">disable · undo · audit</text>
+        <rect class="zone" x="562" y="438" width="316" height="128" rx="10"/><text class="t" x="578" y="460">WRITE PATH · CHANGE WORKFLOW</text>
+        <rect class="guard" x="578" y="474" width="136" height="68" rx="8"/><text class="h" x="646" y="502" text-anchor="middle">HITL approval</text><text class="s" x="646" y="522" text-anchor="middle">human + guardrails</text>
+        <rect class="tool" x="732" y="474" width="132" height="68" rx="8"/><text class="h" x="798" y="502" text-anchor="middle">Executor</text><text class="s" x="798" y="522" text-anchor="middle">disable · undo · audit</text>
         <path class="e" d="M714 508H728" marker-end="url(#a3)"/><path class="e" d="M770 366V384H646V470" marker-end="url(#a3)"/>
       </svg>
     </div>
-    <div class="legend"><span><i class="k-llm"></i>LLM call</span><span><i class="k-code"></i>Code or state</span><span><i class="k-tool"></i>Tool or action</span><span><i class="k-guard"></i>Guardrail or human</span><span><i class="k-later"></i>Dashed: week 3 or later</span></div>
+    <div class="legend"><span><i class="k-llm"></i>LLM call</span><span><i class="k-code"></i>Code or state</span><span><i class="k-tool"></i>Tool or action</span><span><i class="k-guard"></i>Guardrail or human</span><span><i class="k-later"></i>Dashed: week 4</span></div>
   </figure>
 
   <h3 id="engine">LangGraph engine</h3>
@@ -451,8 +457,23 @@ svg.d{display:block;width:100%;height:auto}
       <div class="tbl"><table><thead><tr><th>From</th><th>To</th><th>Route</th><th>Kind</th></tr></thead><tbody id="engineroutes"></tbody></table></div>
     </details>
   </figure>
-<!-- graph:begin (written by `make graph` from src/cia/graph.py; do not edit) -->
-<script type="application/json" id="engine-graph">{"nodes":[{"id":"__start__","kind":"start","doc":""},{"id":"model","kind":"llm","doc":"Ask the model for its next turn; it only proposes tool calls."},{"id":"nudge","kind":"node","doc":"A turn with no tool call costs a step and gets a reminder."},{"id":"tools","kind":"tool","doc":"Run this turn's read-only calls in order, up to a submit_report or the step cap."},{"id":"check","kind":"rule","doc":"The citation check: accept the report, or send it back once with the unknown ids."},{"id":"finish","kind":"rule","doc":"Incomplete is never safe, and safe must be grounded: an unverified safe_to_delete"},{"id":"cap","kind":"rule","doc":"The step cap: no step is left, so the run ends as insufficient_evidence, never a delete."},{"id":"__end__","kind":"end","doc":""}],"edges":[{"source":"__start__","target":"model","conditional":false,"label":""},{"source":"check","target":"finish","conditional":true,"label":"accepted"},{"source":"check","target":"tools","conditional":true,"label":"sent back ×1"},{"source":"model","target":"cap","conditional":true,"label":"step cap"},{"source":"model","target":"nudge","conditional":true,"label":"no tool call"},{"source":"model","target":"tools","conditional":true,"label":"tool calls"},{"source":"nudge","target":"model","conditional":false,"label":"reminder"},{"source":"tools","target":"cap","conditional":true,"label":"step cap"},{"source":"tools","target":"check","conditional":true,"label":"submit_report"},{"source":"tools","target":"model","conditional":true,"label":"results"},{"source":"cap","target":"__end__","conditional":false,"label":""},{"source":"finish","target":"__end__","conditional":false,"label":""}]}</script>
+
+  <h3 id="workflow">Change workflow graph</h3>
+  <div class="doc">
+    <p>The investigator above is one node, <code>investigate</code>, of a second <code>StateGraph</code> (<code>src/cia/workflow.py</code>) that carries a change from request to outcome. It stops twice with <code>interrupt()</code>: for a person's answer, and for the 14-day quiet period. Each wait is checkpointed, so it survives a restart. <code>make graph</code> draws it from the compiled graph too.</p>
+  </div>
+  <figure>
+    <div class="fig graphfig">
+      <div id="workflowgraph" class="graphhost tall" role="img" aria-label="The change workflow graph, drawn from src/cia/workflow.py. The table below lists every route."><p class="graphmsg">Loading the graph…</p></div>
+    </div>
+    <div class="legend"><span><i class="k-llm"></i>Runs the investigator</span><span><i class="k-tool"></i>Reads fresh evidence</span><span><i class="k-guard"></i>Rule in code</span><span><i class="k-wait"></i>Waits: interrupt()</span><span><i class="k-act"></i>Acts on the target</span><span><i class="k-later"></i>Dashed: conditional route</span></div>
+    <details class="routes"><summary>Every route, as data from <code>workflow.py</code></summary>
+      <div class="tbl"><table><thead><tr><th>From</th><th>To</th><th>Route</th><th>Kind</th></tr></thead><tbody id="workflowroutes"></tbody></table></div>
+    </details>
+  </figure>
+<!-- graph:begin (written by `make graph` from src/cia/graph.py and workflow.py; do not edit) -->
+<script type="application/json" id="engine-graph">{"nodes":[{"id":"__start__","kind":"start","doc":""},{"id":"model","kind":"llm","doc":"Ask the model for its next turn; it only proposes tool calls."},{"id":"nudge","kind":"node","doc":"A turn with no tool call costs a step and gets a reminder."},{"id":"tools","kind":"tool","doc":"Run this turn's read-only calls in order, up to a submit_report or the step cap."},{"id":"check","kind":"rule","doc":"The citation check: accept the report, or send it back once with the unknown ids."},{"id":"finish","kind":"rule","doc":"Incomplete is never safe, and safe must be grounded: an unverified safe_to_delete becomes insufficient_evidence; one its own evidence contradicts becomes ask_owner."},{"id":"cap","kind":"rule","doc":"The step cap: no step is left, so the run ends as insufficient_evidence, never a delete."},{"id":"__end__","kind":"end","doc":""}],"edges":[{"source":"__start__","target":"model","conditional":false,"label":""},{"source":"check","target":"finish","conditional":true,"label":"accepted"},{"source":"check","target":"tools","conditional":true,"label":"sent back ×1"},{"source":"model","target":"cap","conditional":true,"label":"step cap"},{"source":"model","target":"nudge","conditional":true,"label":"no tool call"},{"source":"model","target":"tools","conditional":true,"label":"tool calls"},{"source":"nudge","target":"model","conditional":false,"label":"reminder"},{"source":"tools","target":"cap","conditional":true,"label":"step cap"},{"source":"tools","target":"check","conditional":true,"label":"submit_report"},{"source":"tools","target":"model","conditional":true,"label":"results"},{"source":"cap","target":"__end__","conditional":false,"label":""},{"source":"finish","target":"__end__","conditional":false,"label":""}]}</script>
+<script type="application/json" id="workflow-graph">{"nodes":[{"id":"__start__","kind":"start","doc":""},{"id":"snapshot","kind":"tool","doc":"Fingerprint fresh reads before investigating, so a change during the run shows later."},{"id":"investigate","kind":"llm","doc":"Run the investigator graph; the report is the only thing it hands on."},{"id":"guard","kind":"rule","doc":"Code decides which actions the verdict allows (guardrails.py)."},{"id":"approve","kind":"wait","doc":"Wait for a person (interrupt). They may approve less than allowed, never more."},{"id":"verify","kind":"tool","doc":"Before acting, read fresh: unchanged keeps the report (no model call); changed investigates again and asks again; unreadable stops."},{"id":"dry_run","kind":"act","doc":"Plan every approved step first; change nothing."},{"id":"disable","kind":"act","doc":"Disable: reversible, and the start of the quiet period."},{"id":"quiet","kind":"wait","doc":"Wait out the quiet period (interrupt); a scheduler resumes with the time."},{"id":"recheck","kind":"tool","doc":"Check again: use since the disable, changed evidence, or a failed read restores."},{"id":"delete","kind":"act","doc":"Delete: only for safe_to_delete, only after the disable and a quiet period."},{"id":"restore","kind":"act","doc":"Undo the disable: something used the account, or the evidence changed."},{"id":"keep","kind":"node","doc":"Stays disabled: disable_first never deletes; a new run is needed first."},{"id":"stop","kind":"node","doc":"No change: blocked by the guardrails, declined, unreadable, or the plan failed."},{"id":"__end__","kind":"end","doc":""}],"edges":[{"source":"__start__","target":"snapshot","conditional":false,"label":""},{"source":"approve","target":"stop","conditional":true,"label":"declined"},{"source":"approve","target":"verify","conditional":true,"label":"approved"},{"source":"disable","target":"quiet","conditional":false,"label":""},{"source":"dry_run","target":"disable","conditional":true,"label":"plan ok"},{"source":"dry_run","target":"stop","conditional":true,"label":"plan fails"},{"source":"guard","target":"approve","conditional":true,"label":"something allowed"},{"source":"guard","target":"stop","conditional":true,"label":"nothing allowed"},{"source":"investigate","target":"guard","conditional":false,"label":"report"},{"source":"quiet","target":"quiet","conditional":true,"label":"not yet"},{"source":"quiet","target":"recheck","conditional":true,"label":"14 days"},{"source":"recheck","target":"delete","conditional":true,"label":"quiet, delete approved"},{"source":"recheck","target":"keep","conditional":true,"label":"quiet, disable only"},{"source":"recheck","target":"restore","conditional":true,"label":"used or changed"},{"source":"snapshot","target":"investigate","conditional":true,"label":"read"},{"source":"snapshot","target":"stop","conditional":true,"label":"unreadable or 3 runs"},{"source":"verify","target":"dry_run","conditional":true,"label":"unchanged"},{"source":"verify","target":"snapshot","conditional":true,"label":"changed: again"},{"source":"verify","target":"stop","conditional":true,"label":"unreadable or too old"},{"source":"delete","target":"__end__","conditional":false,"label":""},{"source":"keep","target":"__end__","conditional":false,"label":""},{"source":"restore","target":"__end__","conditional":false,"label":""},{"source":"stop","target":"__end__","conditional":false,"label":""}]}</script>
 <!-- graph:end -->
   <div class="doc">
     <h3 class="engine-after">Why LangGraph</h3>
@@ -498,7 +519,7 @@ svg.d{display:block;width:100%;height:auto}
     <li><b>What a verdict may do</b><span>Code, not the model, turns the verdict into actions: <code>safe_to_delete</code> → disable then delete, <code>disable_first</code> → disable, anything else → nothing. Protected identities allow nothing. A person can approve less, never more (<code>guardrails.py</code>, PR 3.2).</span></li>
     <li><b>Grounded, not just cited</b><span>Valid ids are not enough. A <span class="v v-safe">safe_to_delete</span> must agree with the run's own evidence (0 usage, 0 dependencies, no ticket from a person) and cite usage, dependencies and tickets; otherwise code makes it <span class="v v-ask">ask_owner</span> and records why in <code>overridden</code> (PR 3.4b).</span></li>
     <li><b>Fresh evidence before acting</b><span>No cache. Fresh reads of the five tools are fingerprinted before each investigation and compared again when the person answers and after the quiet period. Unchanged: the same report, no model call. Changed: investigate and ask again. Unreadable: no action. A 7-day backstop on report age (PR 3.4b).</span></li>
-    <li><b>Human approval, disable first</b><span>Nothing runs without a person. The executor dry-runs, disables, waits, and can undo. Week 3.</span></li>
+    <li><b>Human approval, disable first</b><span>Nothing runs without a person. The executor dry-runs, disables, waits, and can undo (PR 3.3–3.5). The bench approves everything allowed and still finds 0 wrong deletes (PR 3.6).</span></li>
   </ul>
   <h3>How it's measured</h3>
   <div class="tbl"><table>
@@ -556,7 +577,8 @@ svg.d{display:block;width:100%;height:auto}
       <tr><td class="n"><a href="https://github.com/odedgol/change-impact-agent/pull/25">3.3</a></td><td><code>w3/executor</code></td><td><code>src/cia/executor.py</code>: <code>TargetSystem</code> interface and <code>SyntheticTarget</code> (a writable copy, <code>data/target.db</code>; evidence stays <code>mode=ro</code>); <code>Executor</code> with <code>plan</code> (dry run), <code>disable</code>, <code>delete</code> (only after this request's own disable), <code>restore</code> (undo), an idempotency key per action, an <code>Approval</code> check on every action. <code>src/cia/audit.py</code>: <code>AuditSink</code>, <code>JsonlAuditSink</code> hash-chained, <code>verify()</code> (Q16). Refusals are logged too</td><td><code>test_executor.py</code> (14), <code>test_audit.py</code> (5); the evidence database hash is unchanged</td><td><span class="st st-done">merged</span></td></tr>
       <tr><td class="n"><a href="https://github.com/odedgol/change-impact-agent/pull/26">3.4</a></td><td><code>w3/workflow</code></td><td><code>src/cia/workflow.py</code>: <code>ChangeWorkflow</code>, a second LangGraph <code>StateGraph</code>: <code>investigate</code> (the investigator graph) → <code>guard</code> → <code>approve</code> (<code>interrupt()</code>) → <code>dry_run</code> → <code>disable</code> → <code>quiet</code> (<code>interrupt()</code>, loops until 14 days) → <code>recheck</code> (any use since the disable?) → <code>delete</code>, <code>restore</code> or <code>keep</code>; <code>stop</code> when blocked or declined. <code>SqliteSaver</code> checkpointer (Q13, new dependency <code>langgraph-checkpoint-sqlite</code>). Events <code>guardrail</code>, <code>approval_requested</code>, <code>approval</code>, <code>action</code>; guardrail decisions and approvals go to the audit log</td><td><code>test_workflow.py</code> (11, rule model, fake clock): nothing changes before approval; decline and blocked change nothing; use while disabled restores; only <code>safe_to_delete</code> deletes; a restart resumes without acting twice</td><td><span class="st st-done">merged</span></td></tr>
       <tr><td class="n"><a href="https://github.com/odedgol/change-impact-agent/pull/27">3.4b</a></td><td><code>w3/grounding</code></td><td>Grounding: <code>ground_safe</code> in <code>graph.py</code> checks a <code>safe_to_delete</code> against the run's own evidence and its citations, else <code>ask_owner</code> with <code>RiskReport.overridden</code>. Fresh evidence: <code>src/cia/snapshot.py</code> fingerprints fresh reads of the five tools (no cache; <code>account_status</code> left out, usage over the longest window); new workflow nodes <code>snapshot</code> and <code>verify</code>, and <code>recheck</code> compares too. Q15 revised: evidence unchanged, with a 7-day backstop. Bench counts <code>overridden</code></td><td><code>test_investigator.py</code> (+5), <code>test_workflow.py</code> (+8), <code>test_bench.py</code>: the gate still fails with grounding off; <code>make bench-fake</code> 24/24, <code>overridden: 0</code></td><td><span class="st st-done">merged</span></td></tr>
-      <tr><td class="n">3.5</td><td><code>w3/approve-ui</code></td><td>Approve from three places. Command line: <code>make change</code>, <code>approve</code>, <code>decline</code>, <code>resume</code>, <code>changes</code>, <code>change-reset</code> (<code>python -m cia.workflow</code>), one trace per change in <code>runs/change-REQ.jsonl</code>, new <code>outcome</code> event. Monitor: <b>Start change</b>, a Change panel (Approve, Decline, End quiet period), <code>GET /api/changes</code> and <code>POST /api/changes/&lt;REQ&gt;/&lt;command&gt;</code>, JSON-only POSTs from the same Origin, one change command at a time; Flow lights Executor and HITL. Rust UI: workflow steps and outcomes. Smoke adds two change runs</td><td><code>test_monitor.py</code> (+6), <code>test_workflow.py</code> (+1), <code>test_smoke.py</code>; Rust replay (+1): 217 tests + 11 Rust</td><td><span class="st st-now">in review</span></td></tr>
+      <tr><td class="n"><a href="https://github.com/odedgol/change-impact-agent/pull/28">3.5</a></td><td><code>w3/approve-ui</code></td><td>Approve from three places. Command line: <code>make change</code>, <code>approve</code>, <code>decline</code>, <code>resume</code>, <code>changes</code>, <code>change-reset</code> (<code>python -m cia.workflow</code>), one trace per change in <code>runs/change-REQ.jsonl</code>, new <code>outcome</code> event. Monitor: <b>Start change</b>, a Change panel (Approve, Decline, End quiet period), <code>GET /api/changes</code> and <code>POST /api/changes/&lt;REQ&gt;/&lt;command&gt;</code>, JSON-only POSTs from the same Origin, one change command at a time; Flow lights Executor and HITL. Rust UI: workflow steps and outcomes. Smoke adds two change runs</td><td><code>test_monitor.py</code> (+6), <code>test_workflow.py</code> (+1), <code>test_smoke.py</code>; Rust replay (+1): 217 tests + 11 Rust</td><td><span class="st st-done">merged</span></td></tr>
+      <tr><td class="n">3.6</td><td><code>w3/bench-workflow</code></td><td>The bench runs every case through the change workflow on a throwaway copy of the org. An auto-approver approves everything the guardrails allow (the widest answer a person can give), and the quiet period ends at once. New gates: <code>unapproved_actions</code> (a disable or delete no approval names, from the audit log) and <code>wrong_deletes</code> (a risky account really gone from the copy). <code>make graph</code> draws both graphs: the change workflow joins the investigator on this page (<a href="#workflow">#workflow</a>)</td><td><code>test_bench.py</code>: outcomes per case type, the gate test now also sees 12 wrong deletes, <code>unapproved()</code> unit test; <code>test_graph.py</code>: both graphs have a kind and a label per node and route, and the page matches both: 220 tests. <code>make bench-fake</code>: 24/24, 12 deleted, 0 unapproved, 0 wrong</td><td><span class="st st-now">in review</span></td></tr>
     </tbody>
   </table></div>
   <h3>Next sprints</h3>
@@ -638,7 +660,7 @@ svg.d{display:block;width:100%;height:auto}
   <div class="tbl"><table>
     <thead><tr><th>Gate</th><th>Checked by</th><th>Fails when</th></tr></thead>
     <tbody>
-      <tr><td>Tested</td><td><code>test (3.12)</code>, <code>test (3.13)</code></td><td>Any pytest test fails, <code>ruff check</code> reports an issue, <code>ruff format --check</code> finds unformatted code, <code>pyright</code> reports a type error, or <code>make bench-fake</code> reports <code>unsafe_deletes &gt; 0</code></td></tr>
+      <tr><td>Tested</td><td><code>test (3.12)</code>, <code>test (3.13)</code></td><td>Any pytest test fails, <code>ruff check</code> reports an issue, <code>ruff format --check</code> finds unformatted code, <code>pyright</code> reports a type error, or <code>make bench-fake</code> reports <code>unsafe_deletes</code>, <code>unapproved_actions</code> or <code>wrong_deletes</code> above 0</td></tr>
       <tr><td>Tested (UI)</td><td><code>tui</code>, from PR 2.6</td><td><code>cargo fmt --check</code>, <code>cargo clippy -D warnings</code> or <code>cargo test</code> fails, or the smoke run piped into the UI shows an unsafe delete</td></tr>
       <tr><td>Explained</td><td><code>pr-description</code></td><td>No <code>## What changed</code>, no <code>## How to test</code>, or no link to a <code>docs/*.html</code> page</td></tr>
       <tr><td>Reviewed</td><td>Branch protection</td><td>A review comment is unresolved. Review today: <code>/code-review --comment</code>; 1 approval once a teammate joins</td></tr>
@@ -711,7 +733,7 @@ gh pr merge --squash --delete-branch</code></pre>
     "<b>2 · Investigate.</b> Claude calls read-only tools, at most 8 times. Each result is logged with an id code assigns, such as <span class=\"ev\">ev-deps-3</span>.",
     "<b>3 · Check citations.</b> Code compares every cited id with the evidence log. Unknown ids drop the finding, the model gets one retry, and a safe_to_delete with any rejection becomes ask_owner.",
     "<b>4 · Report.</b> A Pydantic RiskReport: one verdict, a confidence, and findings that each cite at least one evidence id.",
-    "<b>5 · Approve.</b> A person reads the report. If they decline, nothing changes and the owner is asked. LangGraph <code>interrupt()</code> holds the wait, week 3.",
+    "<b>5 · Approve.</b> A person reads the report. If they decline, nothing changes and the owner is asked. LangGraph <code>interrupt()</code> holds the wait (<code>workflow.py</code>).",
     "<b>6 · Execute.</b> Only after approval: dry-run, disable first, wait a quiet period, then delete or restore. Every step goes to an append-only audit log."
   ];
   function go(n){
@@ -726,13 +748,15 @@ gh pr merge --squash --delete-branch</code></pre>
 <script>
 /* The routes table: built from the graph data, works offline. */
 (function(){
-  var data=JSON.parse(document.getElementById("engine-graph").textContent),tb=document.getElementById("engineroutes");
   function name(id){return id==="__start__"?"START":id==="__end__"?"END":id}
-  data.edges.forEach(function(e){
-    var tr=document.createElement("tr");
-    [name(e.source),name(e.target),e.label||"—",e.conditional?"conditional":"always"].forEach(function(t,i){
-      var td=document.createElement("td");if(i<2){var c=document.createElement("code");c.textContent=t;td.appendChild(c)}else td.textContent=t;tr.appendChild(td)});
-    tb.appendChild(tr);
+  [["engine-graph","engineroutes"],["workflow-graph","workflowroutes"]].forEach(function(g){
+    var data=JSON.parse(document.getElementById(g[0]).textContent),tb=document.getElementById(g[1]);
+    data.edges.forEach(function(e){
+      var tr=document.createElement("tr");
+      [name(e.source),name(e.target),e.label||"—",e.conditional?"conditional":"always"].forEach(function(t,i){
+        var td=document.createElement("td");if(i<2){var c=document.createElement("code");c.textContent=t;td.appendChild(c)}else td.textContent=t;tr.appendChild(td)});
+      tb.appendChild(tr);
+    });
   });
 })();
 </script>
@@ -742,7 +766,7 @@ gh pr merge --squash --delete-branch</code></pre>
   "@xyflow/react":"https://esm.sh/@xyflow/react@12.11.6?external=react,react-dom",
   "@dagrejs/dagre":"https://esm.sh/@dagrejs/dagre@1.1.4"}}</script>
 <script type="module">
-// The investigator graph from src/cia/graph.py: nodes and routes come from the embedded data,
+// The investigator graph (src/cia/graph.py) and the change workflow (src/cia/workflow.py): nodes and routes come from the embedded data,
 // dagre lays them out top to bottom (as LangGraph's own Mermaid does) and routes every edge around the
 // boxes with room for its label; React Flow draws the result.
 // Nothing here is hand-placed, so a new node or route shows up after `make graph`.
@@ -751,8 +775,6 @@ import {createRoot} from "react-dom/client";
 import {ReactFlow, Controls, Handle, Position, MarkerType, BaseEdge, EdgeLabelRenderer} from "@xyflow/react";
 import dagre from "@dagrejs/dagre";
 
-const host = document.getElementById("enginegraph");
-const data = JSON.parse(document.getElementById("engine-graph").textContent);
 const SIZE = {start: [120, 44], end: [120, 44]}, BOX = [270, 104];
 const SIDES = {t: Position.Top, b: Position.Bottom, l: Position.Left, r: Position.Right};
 const name = id => id === "__start__" ? "START" : id === "__end__" ? "END" : id;
@@ -761,7 +783,7 @@ function GraphNode({data: d}) {
   const handles = Object.entries(SIDES).flatMap(([k, pos]) => [
     e(Handle, {key: "s" + k, id: "s" + k, type: "source", position: pos, isConnectable: false}),
     e(Handle, {key: "t" + k, id: "t" + k, type: "target", position: pos, isConnectable: false})]);
-  return e("div", {className: "gn gn-" + (d.kind || "node")}, ...handles, e("b", null, d.label), d.doc ? e("span", null, d.doc) : null);
+  return e("div", {className: "gn gn-" + (d.kind || "node"), title: d.doc || undefined}, ...handles, e("b", null, d.label), d.doc ? e("span", null, d.doc) : null);
 }
 
 // A route: dagre's points joined with rounded corners, its label as HTML at the spot dagre kept free.
@@ -783,7 +805,7 @@ function Route({id, markerEnd, style, data: d}) {
       style: {transform: `translate(-50%, -50%) translate(${d.lx}px, ${d.ly}px)`}}, d.label)) : null);
 }
 
-function layout() {
+function layout(data) {
   const g = new dagre.graphlib.Graph({multigraph: true});
   g.setGraph({rankdir: "TB", nodesep: 90, ranksep: 84, edgesep: 36, marginx: 28, marginy: 28});
   g.setDefaultEdgeLabel(() => ({}));
@@ -796,6 +818,11 @@ function layout() {
     return {id: n.id, type: "graph", position: {x: p.x - p.width / 2, y: p.y - p.height / 2},
             style: {width: p.width, height: p.height}, data: {label: name(n.id), kind: n.kind, doc: n.doc},
             draggable: false, selectable: false}});
+  // fitView fits nodes, not routes: two invisible corners at dagre's full size keep a route
+  // that loops around the outside (verify -> snapshot) in view
+  const {width, height} = g.graph();
+  [[0, 0], [width, height]].forEach(([x, y], i) => nodes.push({id: "corner" + i, type: "corner",
+    position: {x, y}, style: {width: 1, height: 1}, data: {}, draggable: false, selectable: false}));
   const edges = data.edges.map((x, i) => {
     const r = g.edge({v: x.source, w: x.target, name: "e" + i});
     return {id: "e" + i, source: x.source, target: x.target, sourceHandle: "sb", targetHandle: "tt", type: "route",
@@ -806,22 +833,27 @@ function layout() {
   return {nodes, edges};
 }
 
-const {nodes, edges} = layout();
 const dark = () => {const t = document.documentElement.getAttribute("data-theme");
   return t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches};
-const root = createRoot(host);
-const draw = () => root.render(e(ReactFlow, {nodes, edges, nodeTypes: {graph: GraphNode}, edgeTypes: {route: Route},
-  fitView: true, fitViewOptions: {padding: 0.06}, minZoom: 0.3, colorMode: dark() ? "dark" : "light",
-  nodesDraggable: false, nodesConnectable: false, elementsSelectable: false, zoomOnScroll: false, preventScrolling: false},
-  e(Controls, {showInteractive: false, position: "bottom-right"})));
-draw();
-new MutationObserver(draw).observe(document.documentElement, {attributes: true, attributeFilter: ["data-theme"]});
-matchMedia("(prefers-color-scheme: dark)").addEventListener("change", draw);
+function drawGraph(hostId, dataId) {
+  const {nodes, edges} = layout(JSON.parse(document.getElementById(dataId).textContent));
+  const root = createRoot(document.getElementById(hostId));
+  const draw = () => root.render(e(ReactFlow, {nodes, edges, nodeTypes: {graph: GraphNode, corner: () => null}, edgeTypes: {route: Route},
+    fitView: true, fitViewOptions: {padding: 0.06}, minZoom: 0.3, colorMode: dark() ? "dark" : "light",
+    nodesDraggable: false, nodesConnectable: false, elementsSelectable: false, zoomOnScroll: false, preventScrolling: false},
+    e(Controls, {showInteractive: false, position: "bottom-right"})));
+  draw();
+  new MutationObserver(draw).observe(document.documentElement, {attributes: true, attributeFilter: ["data-theme"]});
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", draw);
+}
+for (const [hostId, dataId] of [["enginegraph", "engine-graph"], ["workflowgraph", "workflow-graph"]]) {
+  try { drawGraph(hostId, dataId); } catch (err) { console.error(hostId, err); }  // one never blocks the other
+}
 window.ciaGraphReady = true;
 </script>
 <script>
-setTimeout(function(){if(!window.ciaGraphReady){var h=document.getElementById("enginegraph");h.textContent="";
-  var p=document.createElement("p");p.className="graphmsg";p.textContent="The drawing needs internet (React Flow loads from a CDN). Every route is in the table below.";h.appendChild(p)}},10000);
+setTimeout(function(){if(!window.ciaGraphReady)["enginegraph","workflowgraph"].forEach(function(id){var h=document.getElementById(id);h.textContent="";
+  var p=document.createElement("p");p.className="graphmsg";p.textContent="The drawing needs internet (React Flow loads from a CDN). Every route is in the table below.";h.appendChild(p)})},10000);
 </script>
 </body>
 </html>

@@ -10,8 +10,8 @@ from cia.graph import (
     REQUIRED_FOR_DELETE,
     ROUTE_LABELS,
     coverage,
-    describe,
     docs_block,
+    drawings,
     drop_bad_citations,
     finish_report,
     memory_checkpointer,
@@ -23,6 +23,7 @@ from cia.investigator import Investigator
 from cia.llm import FakeLLM, LLMTurn, ToolCall
 from cia.models import ChangeRequest, Finding, RiskReport
 from cia.sources import SyntheticSource
+from cia.workflow import ROUTE_LABELS as WORKFLOW_ROUTES
 
 
 @pytest.fixture(scope="module")
@@ -153,22 +154,39 @@ def test_checkpointer_saves_every_step_under_the_request_id(org):
     )  # start, model, tools, model, check, finish
 
 
-def test_every_node_and_route_has_a_drawing_entry():
-    """Adding a node or a route to the graph fails here until it has a kind or a label for the docs."""
-    data = describe()
+@pytest.mark.parametrize(
+    "name, labels",
+    [("engine-graph", ROUTE_LABELS), ("workflow-graph", WORKFLOW_ROUTES)],
+)
+def test_every_node_and_route_has_a_drawing_entry(name, labels):
+    """Adding a node or a route to either graph fails here until it has a kind or a label for the docs."""
+    data = drawings()[name]
     assert all(n["kind"] for n in data["nodes"])
-    assert {(e["source"], e["target"]) for e in data["edges"]} == set(ROUTE_LABELS)
+    assert {(e["source"], e["target"]) for e in data["edges"]} == set(labels)
     assert all(
         n["doc"] for n in data["nodes"] if n["kind"] not in ("start", "end")
     )  # each node has a docstring
 
 
+def test_the_workflow_drawing_has_the_agreed_nodes():
+    nodes = {n["id"]: n["kind"] for n in drawings()["workflow-graph"]["nodes"]}
+    assert nodes["investigate"] == "llm"  # the investigator graph, as one node
+    assert nodes["approve"] == nodes["quiet"] == "wait"  # the two interrupt() waits
+    assert {k for k, v in nodes.items() if v == "act"} == {
+        "dry_run",
+        "disable",
+        "delete",
+        "restore",
+    }
+
+
 def test_the_docs_drawing_matches_the_code():
-    """docs/index.html#engine draws the embedded data; run `make graph` after changing graph.py."""
+    """docs/index.html#engine and #workflow draw the embedded data; run `make graph` after
+    changing graph.py or workflow.py."""
     page = (Path(__file__).resolve().parents[1] / "docs" / "index.html").read_text()
     embedded = page[page.index(DOCS_BEGIN) : page.index(DOCS_END) + len(DOCS_END)]
-    assert embedded == docs_block(describe()), (
-        "docs/index.html is behind src/cia/graph.py: run `make graph`"
+    assert embedded == docs_block(drawings()), (
+        "docs/index.html is behind graph.py or workflow.py: run `make graph`"
     )
 
 
@@ -181,4 +199,5 @@ def test_write_docs_replaces_only_the_marked_block(tmp_path):
         text.startswith("<p>before</p>")
         and text.endswith("<p>after</p>\n")
         and '"model"' in text
+        and 'id="workflow-graph"' in text
     )

@@ -382,6 +382,61 @@ def build_workflow(flow: ChangeWorkflow, checkpointer: Any = None):
     return g.compile(checkpointer=checkpointer)
 
 
+# ---- the graph as data, for the drawing in docs/index.html#workflow (same rules as graph.py)
+
+NODE_KIND = {
+    "snapshot": "tool",
+    "investigate": "llm",
+    "guard": "rule",
+    "approve": "wait",
+    "verify": "tool",
+    "dry_run": "act",
+    "disable": "act",
+    "quiet": "wait",
+    "recheck": "tool",
+    "delete": "act",
+    "restore": "act",
+    "keep": "node",
+    "stop": "node",
+}
+ROUTE_LABELS = {
+    ("__start__", "snapshot"): "",
+    ("snapshot", "investigate"): "read",
+    ("snapshot", "stop"): "unreadable or 3 runs",
+    ("investigate", "guard"): "report",
+    ("guard", "approve"): "something allowed",
+    ("guard", "stop"): "nothing allowed",
+    ("approve", "verify"): "approved",
+    ("approve", "stop"): "declined",
+    ("verify", "dry_run"): "unchanged",
+    ("verify", "snapshot"): "changed: again",
+    ("verify", "stop"): "unreadable or too old",
+    ("dry_run", "disable"): "plan ok",
+    ("dry_run", "stop"): "plan fails",
+    ("disable", "quiet"): "",
+    ("quiet", "quiet"): "not yet",
+    ("quiet", "recheck"): "14 days",
+    ("recheck", "delete"): "quiet, delete approved",
+    ("recheck", "restore"): "used or changed",
+    ("recheck", "keep"): "quiet, disable only",
+    ("delete", "__end__"): "",
+    ("restore", "__end__"): "",
+    ("keep", "__end__"): "",
+    ("stop", "__end__"): "",
+}
+
+
+def describe() -> dict[str, Any]:
+    """The change workflow as data. Compiled around stand-ins: drawing it calls nothing."""
+    from types import SimpleNamespace
+
+    from .graph import describe_graph
+
+    stub = SimpleNamespace(executor=None, investigator=None, events=None)
+    graph = build_workflow(stub, None)  # type: ignore[arg-type]
+    return describe_graph(graph.get_graph(), NODE_KIND, ROUTE_LABELS)
+
+
 class ChangeWorkflow:
     """Starts, answers and resumes change requests; each one is a checkpointed thread."""
 
@@ -438,6 +493,10 @@ class ChangeWorkflow:
             )
         self.graph.invoke(Command(resume=value), self._config(request_id))
         return self.status(request_id)
+
+    def report(self, request_id: str) -> RiskReport | None:
+        """The latest report of this change (after a re-investigation, the new one)."""
+        return self.graph.get_state(self._config(request_id)).values.get("report")
 
     def status(self, request_id: str) -> dict[str, Any]:
         snap = self.graph.get_state(self._config(request_id))
