@@ -12,6 +12,9 @@ display_information:
   description: Investigates a leaver's account before anything is deleted; asks before acting.
   background_color: "#2f52e0"
 features:
+  app_home:
+    messages_tab_enabled: true  # DMs with the bot
+    messages_tab_read_only_enabled: false
   bot_user:
     display_name: Change Impact Agent
     always_online: false
@@ -20,10 +23,14 @@ oauth_config:
     bot:
       - chat:write   # post and update its own messages
       - app_mentions:read  # only messages that @mention the app, to answer questions
+      - channels:history   # replies in a thread the bot answered in, without an @mention
+      - im:history         # direct messages to the bot
 settings:
   event_subscriptions:
     bot_events:
       - app_mention  # "@Change Impact Agent what's going on with Noah Novak?"
+      - message.channels  # follow-ups in the bot's own threads (others are ignored)
+      - message.im        # talk to the bot in a DM
   interactivity:
     is_enabled: true # the Approve and Decline buttons
   org_deploy_enabled: false

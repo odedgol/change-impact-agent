@@ -10,7 +10,7 @@ permits a delete. Execution is a separate, reversible step that needs human appr
 
 ## Status
 
-Week 5 in progress (`docs/week-5.html`): the real-life offboarding flow on a simulated company. The last day opens a case; the agent investigates, a person approves the disable, then each ▶ Next day (`make next-day`) the agent reads the systems, asks owners and proposes "ready", which code checks before anyone is asked to approve the delete. Week 4 (plan: `docs/week-4.html`): proof and launch. Week 3 added approval and a reversible executor. Done: synthetic org, read-only evidence tools, naive baseline, the
+Week 5 in progress (`docs/week-5.html`): the real-life offboarding flow on a simulated company. The last day opens a case; the agent investigates, a person approves the disable, then each ▶ Next day (`make next-day`) the agent reads the systems, asks owners and proposes "ready", which code checks before anyone is asked to approve the delete. In Slack it is an assistant you talk to (`make case-bot`): ask "who is leaving?", "why is Gal on hold?", "watch Noah Novak", "next day"; approvals stay on buttons for approvers. Week 4 (plan: `docs/week-4.html`): proof and launch. Week 3 added approval and a reversible executor. Done: synthetic org, read-only evidence tools, naive baseline, the
 `EvidenceSource` and `LLMClient` interfaces, and the investigator as a LangGraph state
 graph (code-assigned evidence ids, an 8-step cap, citation check; `make graph` draws it). It runs on a local model through Ollama, a
 hosted open model through OpenRouter, or on Bedrock, and a local run monitor shows each run live, plus a benchmark. Week 3 added a credential

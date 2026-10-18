@@ -1,7 +1,7 @@
 # The project's .venv when it exists (no need to activate it), else the active Python (CI).
 PY := $(if $(wildcard .venv/bin/python),$(CURDIR)/.venv/bin/python,python)
 
-.PHONY: seed test lint format typecheck smoke tui-test tui-fixture baseline run-local monitor graph bench-fake bench-local bench-openrouter bench-bedrock change approve decline resume changes change-reset agent hr-event agent-approve agent-decline agent-changes mcp demo-org demo world next-day cases case-approve case-decline db-up db-down
+.PHONY: seed test lint format typecheck smoke tui-test tui-fixture baseline run-local monitor graph bench-fake bench-local bench-openrouter bench-bedrock change approve decline resume changes change-reset agent hr-event agent-approve agent-decline agent-changes mcp demo-org demo world next-day cases case-approve case-decline case-bot db-up db-down
 
 seed:
 	PYTHONPATH=src $(PY) -m cia.generator --identities 500 --out data/org.db --truth bench/ground_truth.json
@@ -91,6 +91,9 @@ cases:
 	PYTHONPATH=src $(PY) -m cia.case list
 case-approve:  # WHO="Noah Novak" BY=dana: approve offboarding (disable) or, when ready, the delete
 	PYTHONPATH=src $(PY) -m cia.case approve "$(WHO)" --by "$(or $(BY),$(USER))"
+# Cases in Slack (week 5): the assistant you talk to; FRESH=1 starts a new company.
+case-bot:
+	PYTHONPATH=src $(PY) -m cia.case_slack $(if $(FRESH),--fresh,)
 case-decline:
 	PYTHONPATH=src $(PY) -m cia.case decline "$(WHO)" --by "$(or $(BY),$(USER))"
 # Postgres + pgvector in Docker for the document index (compose.yaml); embeddings from Ollama nomic-embed-text.
