@@ -680,9 +680,7 @@ def run_command(
                     "expected_verdict": case["expected_verdict"],
                 }
             )
-            return flow.start(
-                ChangeRequest(request_id=request_id, identity_id=case["identity_id"])
-            )
+            return flow.start(ChangeRequest.from_case(case))
         if command == "approve":
             return flow.answer(request_id, actions or [], by)
         if command == "decline":

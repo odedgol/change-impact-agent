@@ -105,9 +105,15 @@ def test_page_and_cases(server):
     assert status == 200 and ctype.startswith("text/html") and b"Run Monitor" in body
     cases = json.loads(get(base + "/api/cases")[2])
     assert len(cases) == len(truth["cases"])
-    assert {"request_id", "identity_id", "case_type", "expected_verdict"} <= set(
-        cases[0]
-    )
+    assert {
+        "request_id",
+        "identity_id",
+        "description",
+        "case_type",
+        "expected_verdict",
+    } <= set(cases[0])
+    assert cases[0]["description"].startswith("Offboarding cleanup")
+    assert b'class:"desc"' in body  # the launcher and the run header show it
 
 
 def test_start_run_stream_and_list(server):

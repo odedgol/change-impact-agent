@@ -133,3 +133,18 @@ def test_naive_policy_deletes_every_credential_chain(org):
     db, truth, truth_path = org
     chains = sum(c["case_type"] == "credential_chain" for c in truth["cases"])
     assert run_baseline(db, truth_path)["by_type"]["credential_chain"] == chains
+
+
+def test_every_request_has_a_description_that_gives_nothing_away(org):
+    """A change request says what the requester wants. The words are the same for
+    every leaver, so the description never hints at the expected verdict."""
+    _, truth, _ = org
+    for c in truth["cases"]:
+        assert c["description"].startswith("Offboarding cleanup: delete user-")
+        name = c["description"].split("delete ")[1].split(" (")[0]
+        generic = c["description"].replace(name, "NAME")
+        dept = generic.split("(")[1].split(")")[0]
+        assert generic.replace(dept, "DEPT") == (
+            "Offboarding cleanup: delete NAME (DEPT). HR says the person has left; "
+            "the account is still active."
+        )

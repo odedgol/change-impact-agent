@@ -107,7 +107,10 @@ class Monitor:
             truth = json.load(f)
         keep = ("request_id", "identity_id", "action", "case_type", "expected_verdict")
         return sorted(
-            ({k: c[k] for k in keep} for c in truth["cases"]),
+            (
+                {**{k: c[k] for k in keep}, "description": c.get("description", "")}
+                for c in truth["cases"]
+            ),
             key=lambda c: c["request_id"],
         )
 
@@ -167,6 +170,7 @@ class Monitor:
             "run_id": run_id,
             "request_id": req.get("request_id"),
             "identity_id": req.get("identity_id"),
+            "description": req.get("description") or "",
             "model": head.get("model"),
             "llm": head.get("llm"),
             "case_type": head.get("case_type"),
@@ -238,11 +242,7 @@ class Monitor:
                 source = SyntheticSource(self.db)
                 Investigator(
                     source, client, events=sink, clock=lambda: source.now
-                ).investigate(
-                    ChangeRequest(
-                        request_id=case["request_id"], identity_id=case["identity_id"]
-                    )
-                )
+                ).investigate(ChangeRequest.from_case(case))
             except Exception as e:  # noqa: BLE001 - any failure is shown in the UI, never swallowed
                 sink({"type": "run_error", "error": f"{type(e).__name__}: {e}"})
             finally:

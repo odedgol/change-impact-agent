@@ -57,3 +57,10 @@ def test_the_ui_parses_every_event_type():
     variants = set(re.findall(r"^    (\w+)[ ({]", source, re.M))
     for t in EVENT_TYPES:
         assert "".join(part.title() for part in t.split("_")) in variants, t
+
+
+def test_every_request_event_carries_its_description(events):
+    requests = [e for e in events if e["type"] == "request"]
+    assert requests and all(
+        e["description"].startswith("Offboarding cleanup") for e in requests
+    )

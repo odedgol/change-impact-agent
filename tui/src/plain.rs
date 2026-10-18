@@ -65,6 +65,9 @@ pub fn verdict_line(run: &Run) -> String {
 
 fn render_run(out: &mut String, run: &Run) {
     let _ = writeln!(out, "{}", header(run));
+    if !run.description.is_empty() {
+        let _ = writeln!(out, "  \"{}\"", run.description);
+    }
     for s in &run.steps {
         let _ = writeln!(out, "  [{}] {:<6} {}", s.n, s.node, s.text);
     }

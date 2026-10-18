@@ -256,9 +256,7 @@ def run_case(
             policy=desk.policy,
             clock=clock,
         )
-        status = flow.start(
-            ChangeRequest(request_id=rid, identity_id=case["identity_id"])
-        )
+        status = flow.start(ChangeRequest.from_case(case))
         if case.get(
             "reveal_after_hours"
         ):  # evidence that arrives while a person decides
