@@ -90,6 +90,22 @@ class Desk:
                 hits.append(rid)
         return hits
 
+    def mentioned(self, text: str) -> list[str]:
+        """Request ids whose request id, identity id or full name appears in free text,
+        found in code (no model). Whole words only, case ignored: "N0ah Smith" is not
+        "Noah Smith"."""
+        agent = self._agent()
+        low = text.lower()
+        hits = []
+        for rid, identity_id in agent.identities.items():
+            name = (agent.identity(identity_id) or {}).get("name") or ""
+            if any(
+                key and re.search(rf"(?<!\w){re.escape(key.lower())}(?!\w)", low)
+                for key in (rid, identity_id, name)
+            ):
+                hits.append(rid)
+        return hits
+
     def status(self, who: str) -> dict[str, Any]:
         rids = self.find(who)
         if not rids:

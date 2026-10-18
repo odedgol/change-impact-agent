@@ -1,4 +1,4 @@
-.PHONY: seed test lint format typecheck smoke tui-test tui-fixture baseline run-local monitor graph bench-fake bench-local bench-openrouter bench-bedrock change approve decline resume changes change-reset agent hr-event agent-approve agent-decline agent-changes mcp
+.PHONY: seed test lint format typecheck smoke tui-test tui-fixture baseline run-local monitor graph bench-fake bench-local bench-openrouter bench-bedrock change approve decline resume changes change-reset agent hr-event agent-approve agent-decline agent-changes mcp demo-org
 
 seed:
 	PYTHONPATH=src python -m cia.generator --identities 500 --out data/org.db --truth bench/ground_truth.json
@@ -56,15 +56,27 @@ change-reset:
 
 # The agent as a service (src/cia/service.py): an HR event starts the workflow on its own, a message
 # says what it found, a person answers. Demo timings by default; production: START_DELAY=60s QUIET=14d.
+# ORG=demo uses the realistic demo org (make demo-org): its own data/demo/ and runs/demo/.
+ORG ?=
+ORG_DB = $(if $(ORG),data/$(ORG)/org.db,data/org.db)
+ORG_DATA = $(if $(ORG),data/$(ORG),data)
+ORG_RUNS = $(if $(ORG),runs/$(ORG),runs)
+ORG_TRUTH = $(if $(ORG),data/$(ORG)/truth.json,bench/ground_truth.json)
 AGENT_LLM ?= fake
 AGENT_MODEL ?=
 START_DELAY ?= 5s
 QUIET ?= 2m
 agent:
 	CIA_AGENT_LLM=$(AGENT_LLM) CIA_AGENT_MODEL=$(AGENT_MODEL) CIA_START_DELAY=$(START_DELAY) \
-	  CIA_QUIET_PERIOD=$(QUIET) PYTHONPATH=src python -m cia.service serve
-hr-event:  # ID=u00034, or CASE=nightly_job (the first identity of that planted case type)
-	PYTHONPATH=src python -m cia.service event $(ID) $(if $(CASE),--case $(CASE))
+	  CIA_QUIET_PERIOD=$(QUIET) PYTHONPATH=src python -m cia.service serve \
+	  --db $(ORG_DB) --data $(ORG_DATA) --runs $(ORG_RUNS)
+hr-event:  # ID=u00034, CASE=nightly_job (first identity of that case type) or WHO="Noah Novak"
+	PYTHONPATH=src python -m cia.service event $(ID) $(if $(CASE),--case $(CASE)) \
+	  $(if $(WHO),--who "$(WHO)") --db $(ORG_DB) --truth $(ORG_TRUTH)
+# The realistic demo org: 120 people with names, the same traps. Starts over (drops data/demo, runs/demo).
+demo-org:
+	rm -rf data/demo runs/demo
+	PYTHONPATH=src python -m cia.demo_org --out data/demo
 agent-approve:
 	PYTHONPATH=src python -m cia.service approve $(ID) --actions $(ACTIONS) --by $(BY)
 agent-decline:
@@ -74,7 +86,7 @@ agent-changes:
 
 # MCP server (src/cia/mcp_server.py), read-only: prints the command that adds it to Claude Code.
 mcp:
-	@echo 'claude mcp add cia -- $(CURDIR)/.venv/bin/python -m cia.mcp_server --db $(CURDIR)/data/org.db --data $(CURDIR)/data --runs $(CURDIR)/runs'
+	@echo 'claude mcp add cia -- $(CURDIR)/.venv/bin/python -m cia.mcp_server --db $(CURDIR)/$(ORG_DB) --data $(CURDIR)/$(ORG_DATA) --runs $(CURDIR)/$(ORG_RUNS)'
 
 # Rust terminal UI (tui/): offline smoke runs piped in live. Interactive on a terminal; SMOKE_FLAGS=--plain
 # prints text and fails if any run recommended an unsafe delete (CI). Replay a saved run:

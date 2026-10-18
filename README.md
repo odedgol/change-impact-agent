@@ -60,11 +60,24 @@ make agent-approve ID=OFF-<event> ACTIONS=disable,delete BY=dana
 # 2 minutes later (14 days in production): deleted, kept disabled, or restored if it was used
 ```
 
-To ask about a person from Claude Code, run `make mcp` and paste the command it prints;
-then ask "what is going on with user-00034?". The MCP tools only read.
+For a demo that reads like a real company, build the demo org: 120 people with names,
+services such as `svc-billing-export`, and the same traps (the lookalike "N0ah Smith"
+sits next to the decoy "Noah Smith"). The bench org is unchanged.
+
+```bash
+make demo-org                                  # data/demo/: prints who is who
+make agent ORG=demo
+make hr-event ORG=demo WHO="Noah Novak"        # by name
+```
+
+Ask in Slack: "@Change Impact Agent what's going on with Noah Novak?" or "who left?".
+The bot answers in the thread; it finds the person in code, never through the model,
+and only reads. Approving stays on the message's buttons. From Claude Code, run
+`make mcp ORG=demo` and paste the command it prints. The MCP tools only read.
 
 For Slack, create the app from `infra/slack/manifest.yaml` and set `SLACK_BOT_TOKEN`,
-`SLACK_APP_TOKEN`, `CIA_SLACK_CHANNEL` and `CIA_SLACK_APPROVERS` in `.env`.
+`SLACK_APP_TOKEN`, `CIA_SLACK_CHANNEL` (the channel id, C0...) and `CIA_SLACK_APPROVERS`
+in `.env`.
 
 On all 44 synthetic cases, Gemma 4 26B on OpenRouter made 0 unsafe deletes, 0
 unapproved actions and 0 wrong deletes, and got 40 right, for $0.018.

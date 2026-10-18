@@ -18,9 +18,12 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Callable
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from .notify import Message
+
+if TYPE_CHECKING:
+    from .mcp_server import Desk
 
 APPROVE, DECLINE = "cia_approve", "cia_decline"
 
@@ -154,13 +157,58 @@ def answer_from_click(
     return None
 
 
+MENTION = re.compile(r"<@[A-Z0-9]+>")
+WHO_LEFT = re.compile(r"\bwho\b.*\b(left|gone)\b|\blist\b|\bchanges\b", re.I)
+HELP = (
+    "Ask me about someone who left: `@Change Impact Agent what's going on with "
+    "Dana Levi?`, by identity id (`u00034`) or request (`OFF-...`). "
+    "`@Change Impact Agent who left?` lists every change."
+)
+
+
+def reply(text: str, desk: Desk) -> str:
+    """Answer an @mention from the read-only desk. The person is found in code (request
+    id, identity id or full name), so Slack text never reaches the model; what comes
+    back is escaped. Approving stays on the message's buttons."""
+    question = MENTION.sub("", text).strip()
+    rids = desk.mentioned(question) if question else []
+    if not rids and WHO_LEFT.search(question):
+        rows = desk.who_left()
+        if not rows:
+            return "Nobody so far: no offboarding event has arrived."
+        return "\n".join(
+            f"• *{escape(r['name'] or r['identity_id'])}* ({escape(r['request_id'])}): "
+            f"{escape(r.get('state') or '')}"
+            for r in rows
+        )
+    if not rids:
+        return f"I found no offboarding change in that question.\n{HELP}"
+    out = []
+    for rid in rids:
+        for change in desk.status(rid)["changes"]:
+            lines = [f"*{escape(change.get('who') or rid)}* · {escape(rid)}"]
+            lines += [f"• {escape(f)}" for f in change.get("findings", [])]
+            lines.append(escape(change["state"]))
+            by = [
+                e["by"]
+                for e in desk.audit(rid)["entries"]
+                if e["action"] == "approval" and e.get("by")
+            ]
+            if by:
+                lines.append(f"Answered by {escape(by[-1])}")
+            out.append("\n".join(lines))
+    return "\n\n".join(out)
+
+
 def socket_mode(
     bot_token: str,
     app_token: str,
     approvers: set[str],
     answer: Callable[[str, list[str], str], dict[str, Any]],
+    desk: Desk | None = None,
 ):
-    """Start listening for button clicks over Socket Mode (a background websocket)."""
+    """Listen for button clicks, and for @mentions when a desk is given, over Socket
+    Mode (a background websocket)."""
     from slack_bolt import App
     from slack_bolt.adapter.socket_mode import SocketModeHandler
 
@@ -172,6 +220,15 @@ def socket_mode(
         note = answer_from_click(body, approvers, answer)
         if note:
             respond(text=note, response_type="ephemeral", replace_original=False)
+
+    if desk is not None:
+
+        @app.event("app_mention")
+        def mentioned(event, say):
+            say(
+                text=reply(event.get("text", ""), desk),
+                thread_ts=event.get("thread_ts") or event.get("ts"),
+            )
 
     handler = SocketModeHandler(app, app_token)
     handler.connect()  # returns at once; the websocket runs on its own thread
