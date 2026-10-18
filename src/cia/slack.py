@@ -160,9 +160,9 @@ def answer_from_click(
 MENTION = re.compile(r"<@[A-Z0-9]+>")
 WHO_LEFT = re.compile(r"\bwho\b.*\b(left|gone)\b|\blist\b|\bchanges\b", re.I)
 HELP = (
-    "Ask me about someone who left: `@Change Impact Agent what's going on with "
-    "Dana Levi?`, by identity id (`u00034`) or request (`OFF-...`). "
-    "`@Change Impact Agent who left?` lists every change."
+    "Ask me: `@Change Impact Agent who left?` lists everyone HR marks as gone; "
+    "`@Change Impact Agent what's going on with Noah Novak?` (a full name, an id "
+    "like `u00034`, or a request `OFF-...`) shows the facts and the agent's verdict."
 )
 
 
@@ -171,23 +171,44 @@ def reply(text: str, desk: Desk) -> str:
     id, identity id or full name), so Slack text never reaches the model; what comes
     back is escaped. Approving stays on the message's buttons."""
     question = MENTION.sub("", text).strip()
-    rids = desk.mentioned(question) if question else []
-    if not rids and WHO_LEFT.search(question):
-        rows = desk.who_left()
+    if not question:
+        return HELP
+    ids = desk.people(question)
+    agent_ids = desk.changes_by_identity()
+    for rid in desk.mentioned(question):
+        ident = next(i for i, r in agent_ids.items() if rid in r)
+        if ident not in ids:
+            ids.append(ident)
+    if not ids and WHO_LEFT.search(question):
+        rows = desk.leavers()
         if not rows:
-            return "Nobody so far: no offboarding event has arrived."
+            return "HR marks nobody as gone."
+        head = f"*{len(rows)} people HR marks as gone:*"
         return "\n".join(
-            f"• *{escape(r['name'] or r['identity_id'])}* ({escape(r['request_id'])}): "
-            f"{escape(r.get('state') or '')}"
-            for r in rows
+            [head]
+            + [
+                f"• *{escape(r['name'])}* · {escape(r['department'] or '-')} · "
+                f"account {escape(r['account_status'])} · {escape(r['state'])}"
+                for r in rows
+            ]
         )
+    if not ids:
+        return f"I found no person in that question.\n{HELP}"
+    return "\n\n".join(person(desk, i, agent_ids.get(i, [])) for i in ids[:5])
+
+
+def person(desk: Desk, identity_id: str, rids: list[str]) -> str:
+    """One person: the org's facts, then each change the agent made for them."""
+    facts = desk.facts(identity_id)
+    name = desk.name(identity_id)
+    lines = [f"*{escape(name)}* ({escape(identity_id)})"]
+    lines += [f"• {escape(f)}" for f in facts]
     if not rids:
-        return f"I found no offboarding change in that question.\n{HELP}"
-    out = []
+        lines.append("_No offboarding change for this person yet._")
     for rid in rids:
         for change in desk.status(rid)["changes"]:
-            lines = [f"*{escape(change.get('who') or rid)}* · {escape(rid)}"]
-            lines += [f"• {escape(f)}" for f in change.get("findings", [])]
+            lines.append(f"*Agent:* {escape(change.get('who') or rid)} · {escape(rid)}")
+            lines += [f"   ◦ {escape(f)}" for f in change.get("findings", [])]
             lines.append(escape(change["state"]))
             by = [
                 e["by"]
@@ -196,8 +217,7 @@ def reply(text: str, desk: Desk) -> str:
             ]
             if by:
                 lines.append(f"Answered by {escape(by[-1])}")
-            out.append("\n".join(lines))
-    return "\n\n".join(out)
+    return "\n".join(lines)
 
 
 def socket_mode(

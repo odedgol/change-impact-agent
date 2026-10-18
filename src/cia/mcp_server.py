@@ -30,6 +30,7 @@ from mcp.types import ToolAnnotations
 from .audit import JsonlAuditSink, verify
 from .notify import message
 from .service import Agent
+from .sources import SyntheticSource
 from .workflow import DATA, events_file, open_workflow
 
 MAX_RESULT_CHARS = 1500  # one evidence result, cut for the chat
@@ -89,6 +90,85 @@ class Desk:
             if who in (identity_id, name):
                 hits.append(rid)
         return hits
+
+    def changes_by_identity(self) -> dict[str, list[str]]:
+        out: dict[str, list[str]] = {}
+        for rid, identity_id in self._agent().identities.items():
+            out.setdefault(identity_id, []).append(rid)
+        return out
+
+    def name(self, identity_id: str) -> str:
+        who = SyntheticSource(self.db).get_identity(identity_id) or {}
+        return who.get("name") or identity_id
+
+    def leavers(self) -> list[dict[str, Any]]:
+        """Everyone HR marks as gone, from the org itself, with their change if any."""
+        agent = self._agent()
+        change = {i: rid for rid, i in agent.identities.items()}
+        states = {r["request_id"]: r.get("state") for r in self.who_left()}
+        src = SyntheticSource(self.db)
+        rows = src._rows(
+            "SELECT id, name, department, account_status FROM identities "
+            "WHERE hr_status = 'left' ORDER BY name"
+        )
+        for r in rows:
+            r["request_id"] = change.get(r["id"])
+            r["state"] = states.get(r["request_id"]) or "not investigated yet"
+        return rows
+
+    def people(self, text: str) -> list[str]:
+        """Identity ids whose id or full name appears in free text (whole words, case
+        ignored), found in code."""
+        low = text.lower()
+        src = SyntheticSource(self.db)
+        return [
+            r["id"]
+            for r in src._rows("SELECT id, name FROM identities ORDER BY id")
+            if any(
+                re.search(rf"(?<!\w){re.escape(k.lower())}(?!\w)", low)
+                for k in (r["id"], r["name"])
+            )
+        ]
+
+    def facts(self, identity_id: str) -> list[str]:
+        """What the org data says about one identity, read-only: who, use, what depends
+        on it, tickets, owner. Plain facts, no model."""
+        src = SyntheticSource(self.db)
+        who = src.get_identity(identity_id)
+        if not who:
+            return []
+        out = [
+            f"{who['kind']} · {who['department'] or 'no department'} · "
+            f"HR: {who['hr_status'] or 'n/a'} · account {who['account_status']}"
+        ]
+        use = src.get_usage(identity_id)
+        if use["event_count"]:
+            callers = ", ".join(f"{c} ({n})" for c, n in use["callers"].items())
+            out.append(
+                f"Used {use['event_count']} times in {use['window_days']} days, "
+                f"last {str(use['last_seen'])[:10]}, by {callers}"
+            )
+        else:
+            out.append(f"Not used in the last {use['window_days']} days")
+        deps = src.get_dependencies(identity_id, depth=4)
+        if deps:
+            shown = "; ".join(
+                f"{d['source']} ({d['kind']}{', hop ' + str(d['hop']) if d['hop'] > 1 else ''})"
+                for d in deps[:3]
+            )
+            more = f" +{len(deps) - 3} more" if len(deps) > 3 else ""
+            out.append(f"Depends on it: {shown}{more}")
+        else:
+            out.append("Nothing depends on it")
+        tickets = src.get_tickets(identity_id)
+        for t in tickets[:2]:
+            out.append(f"Ticket {t['id']} {t['ts'][:10]} by {t['author']}: {t['text']}")
+        if not tickets:
+            out.append("No tickets")
+        owner = src.get_owner(identity_id)
+        if owner:
+            out.append(f"Owner: {owner['name']} (HR: {owner['hr_status'] or 'n/a'})")
+        return out
 
     def mentioned(self, text: str) -> list[str]:
         """Request ids whose request id, identity id or full name appears in free text,

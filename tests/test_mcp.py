@@ -124,12 +124,30 @@ def test_mentioned_finds_people_in_free_text_whole_words_only(desk):
 def test_a_slack_mention_is_answered_from_the_desk(desk):
     from cia.slack import reply
 
-    d, _ = desk
+    d, ident = desk
     deleted = reply("<@U0BOT> what happened to OFF-d1?", d)
     assert "Outcome: deleted" in deleted and "Answered by dana" in deleted
+    assert "Not used in the last 90 days" in deleted  # facts from the org, no model
     waiting = reply("<@U0BOT> OFF-j1", d)
     assert "disable_first" in waiting and "ev-" in waiting
+    assert "Used " in waiting and "Depends on it:" in waiting
+    assert "rule: used" in waiting  # the rule model says what it saw
     listed = reply("<@U0BOT> who left?", d)
-    assert listed.count("•") == 3 and "waiting to start" in listed
-    assert "found no offboarding change" in reply("<@U0BOT> <!channel> hi", d)
-    assert "Ask me about" in reply("<@U0BOT>", d)
+    leavers = d.leavers()
+    assert f"{len(leavers)} people HR marks as gone" in listed
+    assert listed.count("•") == len(leavers) and "not investigated yet" in listed
+    states = {r["id"]: r["state"] for r in leavers}
+    assert states[ident("decoy_safe")] == "Outcome: deleted"
+    assert "found no person" in reply("<@U0BOT> <!channel> hi", d)
+    assert "who left?" in reply("<@U0BOT>", d)
+
+
+def test_a_person_without_a_change_still_gets_the_facts(desk):
+    from cia.slack import reply
+
+    d, ident = desk
+    chain = ident("credential_chain")
+    out = reply(f"<@U0BOT> {chain}", d)
+    assert "No offboarding change for this person yet" in out
+    assert "hop 2" in out  # the chain is shown, hop by hop
+    assert d.facts("nobody") == []
