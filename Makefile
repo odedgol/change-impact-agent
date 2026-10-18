@@ -1,7 +1,7 @@
 # The project's .venv when it exists (no need to activate it), else the active Python (CI).
 PY := $(if $(wildcard .venv/bin/python),$(CURDIR)/.venv/bin/python,python)
 
-.PHONY: seed test lint format typecheck smoke tui-test tui-fixture baseline run-local monitor graph bench-fake bench-local bench-openrouter bench-bedrock change approve decline resume changes change-reset agent hr-event agent-approve agent-decline agent-changes mcp demo-org demo world next-day
+.PHONY: seed test lint format typecheck smoke tui-test tui-fixture baseline run-local monitor graph bench-fake bench-local bench-openrouter bench-bedrock change approve decline resume changes change-reset agent hr-event agent-approve agent-decline agent-changes mcp demo-org demo world next-day db-up db-down
 
 seed:
 	PYTHONPATH=src $(PY) -m cia.generator --identities 500 --out data/org.db --truth bench/ground_truth.json
@@ -86,6 +86,11 @@ world:
 	PYTHONPATH=src $(PY) -m cia.world build
 next-day:  # DAYS=3 to move three days
 	PYTHONPATH=src $(PY) -m cia.world next-day --days $(or $(DAYS),1)
+# Postgres + pgvector in Docker for the document index (compose.yaml); embeddings from Ollama nomic-embed-text.
+db-up:
+	docker compose up -d --wait pgvector
+db-down:
+	docker compose down
 # The realistic demo org: 120 people with names, the same traps. Starts over (drops data/demo, runs/demo).
 demo-org:
 	rm -rf data/demo runs/demo
