@@ -69,7 +69,9 @@ make changes                 # every change and what it waits for; make change-r
 # (fails on an unsafe delete verdict, an action without approval, or a risky account really deleted)
 make bench-fake             # offline plumbing check, also in CI
 make bench-local MAX_TOKENS=8192   # Ollama; results in bench/results/
-make bench-openrouter OR_MODEL=google/gemma-4-26b-a4b-it   # OpenRouter; key in .env
+make bench-openrouter OR_MODEL=google/gemma-4-26b-a4b-it   # OpenRouter; key in .env; reports its cost
+make bench-bedrock PRICE_IN=3 PRICE_OUT=15   # Bedrock reports tokens; prices are USD per million
+# every run prints tokens per case and in total, and the cost when it is known
 ```
 
 `python -m cia.generator --identities 20000` builds the 20,000-identity org in a few seconds.

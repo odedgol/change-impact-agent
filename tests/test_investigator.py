@@ -333,3 +333,24 @@ def test_jsonl_events_and_cli(org, tmp_path):
 def test_bad_step_cap_is_rejected(org):
     with pytest.raises(ValueError):
         Investigator(SyntheticSource(org[0]), FakeLLM([]), max_steps=0)
+
+
+def test_model_turn_events_carry_the_tokens_the_provider_reported(org):
+    from dataclasses import replace
+
+    from cia.llm import Usage
+
+    db, truth = org
+    target = _case(truth, "break_glass")["identity_id"]
+    script = [
+        replace(call("get_tickets", 1, identity_id=target), usage=Usage(700, 30)),
+        submit("ask_owner", "ev-tickets-1"),  # this turn reports nothing
+    ]
+    _, events, _, _ = run(org, script, "break_glass")
+    turns = [e for e in events if e["type"] == "model_turn"]
+    assert turns[0]["usage"] == {
+        "input_tokens": 700,
+        "output_tokens": 30,
+        "cost_usd": None,
+    }
+    assert turns[1]["usage"] is None

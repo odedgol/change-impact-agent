@@ -130,3 +130,32 @@ def test_monitor_lists_openrouter_only_with_a_key(monkeypatch, tmp_path):
     assert not [m for m in mon.models() if m["llm"] == "openrouter"]
     monkeypatch.setenv("OPENROUTER_API_KEY", "k")
     assert {"llm": "openrouter", "model": DEFAULT_OPENROUTER_MODEL} in mon.models()
+
+
+# -- tokens and cost (PR 4.1) ------------------------------------------------------------
+
+
+def test_openrouter_asks_for_usage_and_reads_the_cost():
+    used = {"prompt_tokens": 1200, "completion_tokens": 80, "cost": 0.00042}
+    stub = Stub({**OK, "usage": used})
+    turn = OpenRouterClient(api_key="k", transport=stub).converse(
+        "s", [UserText("hi")], []
+    )
+    assert stub.requests[0]["body"]["usage"] == {"include": True}
+    assert (turn.usage.input_tokens, turn.usage.output_tokens) == (1200, 80)  # type: ignore[union-attr]
+    assert turn.usage.cost_usd == 0.00042  # type: ignore[union-attr]
+
+
+def test_ollama_reports_tokens_but_no_cost_and_sends_no_usage_flag():
+    stub = Stub({**OK, "usage": {"prompt_tokens": 10, "completion_tokens": 2}})
+    turn = OpenAICompatClient(model="m", transport=stub).converse(
+        "s", [UserText("hi")], []
+    )
+    assert "usage" not in stub.requests[0]["body"]
+    assert turn.usage is not None and turn.usage.cost_usd is None
+    assert (
+        OpenAICompatClient(model="m", transport=Stub(OK))
+        .converse("s", [UserText("hi")], [])
+        .usage
+        is None
+    )  # nothing reported: unknown, not zero

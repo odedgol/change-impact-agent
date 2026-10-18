@@ -18,6 +18,7 @@ import argparse
 import inspect
 import json
 from collections.abc import Callable
+from dataclasses import asdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypedDict
 
@@ -253,6 +254,7 @@ def build_graph(inv: Investigator, checkpointer: Any = None):
                 "tool_calls": [
                     {"name": c.name, "input": c.input} for c in turn.tool_calls
                 ],
+                "usage": asdict(turn.usage) if turn.usage else None,
             },
         )
         return {
@@ -484,6 +486,7 @@ STATE_TYPES = [
         "UserText",
         "ToolCall",
         "LLMTurn",
+        "Usage",
         "AssistantTurn",
         "ToolResult",
         "ToolResults",
