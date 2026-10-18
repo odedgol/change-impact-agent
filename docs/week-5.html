@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <script>try{var t=localStorage.getItem("cia-theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
 <title>Week 5 Plan</title>
-<meta name="description" content="Plan 004: the real demo. Talk to the bot in Slack in your own words, on real sandbox systems: Keycloak as the identity provider and HR, a sandbox AWS account with real keys and a real job, and GitHub Issues as tickets.">
+<meta name="description" content="Plan 004: the real-life offboarding flow. The last day triggers an agentic case: investigate, approve, then a daily loop that collects, learns and asks owners until code confirms the account is ready to delete.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
@@ -266,9 +266,9 @@ ul.check ul{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}
   <h4>Week 5 plan</h4>
   <a href="#goal">Goal</a>
   <a href="#story">The demo</a>
-  <a href="#systems">Real systems</a>
+  <a href="#systems">The case</a>
   <a href="#decisions">Decisions</a>
-  <a href="#questions">Open questions</a>
+  <a href="#questions">Questions</a>
   <a href="#steps">Steps and PRs</a>
   <a href="#you">What you provide</a>
   <a href="#validation">Validation</a>
@@ -279,71 +279,81 @@ ul.check ul{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}
 <main>
 
 <section id="goal" class="doc">
-  <h1>Week 5: the real demo</h1>
-  <p class="lead">Talk to the bot in Slack in your own words, and let it answer from real systems: a real identity provider, a real AWS account with real keys and a real job, real tickets.</p>
+  <h1>Week 5: the real-life offboarding flow</h1>
+  <p class="lead">An employee's last day arrives; the agent starts by itself, collects everything about the person, asks for approval, then works the case every day (collecting, learning, asking owners) until it can tell HR the account is ready to delete.</p>
   <dl class="contract">
-    <div><dt>Status</dt><dd><span class="st st-now">active</span> · plan approved (2026-10-18), Q25–Q28 with the recommended answers; PR 5.0 merged, PR 5.1 in review · updated 2026-10-18</dd></div>
-    <div><dt>Delivers</dt><dd>A chat bot with read-only tools; Keycloak, AWS and GitHub adapters; one end-to-end demo on them</dd></div>
-    <div><dt>Done when</dt><dd>The recorded demo runs on real systems, every gate is 0, and <code>make aws-check</code> prints 0 afterwards</dd></div>
+    <div><dt>Status</dt><dd><span class="st st-now">active</span> · replanned with you on 2026-10-18 (Q29–Q32); PR 5.0 and 5.1 merged, PR 5.0b in review · updated 2026-10-18</dd></div>
+    <div><dt>Delivers</dt><dd>A simulated company that reacts, a vector DB, a case workflow with a daily agentic loop, Slack for HR and approvers</dd></div>
+    <div><dt>Done when</dt><dd>The recorded demo goes from last day to "ready for delete" with every gate 0 and every action approved</dd></div>
   </dl>
-  <p style="margin-top:22px">Week 4 ended with a Slack demo on a mocked org: the bot matched names in code and showed cards. That proves the flow, not real life. In real life an IT or security person asks "who left this week?", "can I delete Noah yet?", "anything blocking?", and the answers come from the systems the company runs. Week 5 builds exactly that. What does not change: the investigator, the change workflow, the guardrails, the executor, the audit log and the bench gates. Approval stays on the Slack buttons, for allow-listed approvers only.</p>
-  <div class="note"><p>The people are invented, even inside the real systems, so a hosted chat model (OpenRouter Gemma 4) is fine. With real employee data the chat would move to Bedrock in the company's own account; the code takes either through <code>LLMClient</code>.</p></div>
+  <p style="margin-top:22px">Weeks 1–4 built one investigation and one approval. Real offboarding is a case that lasts weeks: the last day is known in advance, blockers appear (a job still uses the person's key, a team still needs a role), owners have to act, and only when everything is resolved should anyone delete. Week 5 builds that case as an agentic process. The world is simulated but realistic, and every system sits behind an interface, so a real Okta, Jira, Vault or AWS can replace it later (week 6 option).</p>
+  <div class="note"><p>Unchanged: the investigator's guardrails, the executor (disable first, undo, idempotency), the hash-chained audit log, the bench gates, approval on Slack buttons by allow-listed people. The chat from PR 5.1 stays and gets case tools.</p></div>
 </section>
 
 <section id="story" class="doc">
   <h2>The demo</h2>
-  <p>HR marks Noah Novak as gone in Keycloak. Nobody presses Start.</p>
+  <p>Dana Levi resigned two weeks ago; HR recorded her last day. Each ▶ Next day click moves the simulated calendar one day.</p>
   <div class="chatlog">
-    <p><span class="who">HR</span> Keycloak: Noah Novak · <code>hr_status=left</code> · <code>last_day=today</code></p>
-    <p><span class="who">agent</span> <span class="bot">reads Keycloak logins, CloudTrail use of his AWS key, the Lambda that holds it, the GitHub issues; posts a card in #it-offboarding: <b>disable_first</b> · [Approve disable] [Decline]</span></p>
-    <p><span class="who">you</span> @agent who left this week?</p>
-    <p><span class="who">bot</span> <span class="bot">Three people: Noah Novak (legal; his key was used 2 hours ago by a Lambda), Wei Lee (finance; owns an API key used by a log pipeline), Noah Smith (data; nothing found).</span></p>
-    <p><span class="who">you</span> can I delete Noah yet?</p>
-    <p><span class="who">bot</span> <span class="bot">No. The <code>nightly-report</code> Lambda used his access key AKIA…3GXC at 02:00 today (CloudTrail), and the secret <code>prod/nightly-report</code> holds it.</span><span class="code-line">Guardrails: allowed = disable only. Approve on the change message.</span></p>
-    <p><span class="who">you</span> [Approve disable] → the key goes Inactive in AWS, the Keycloak user is disabled</p>
-    <p><span class="who">bot</span> <span class="bot">Next night: the Lambda failed with InvalidClientTokenId. Use seen during the quiet period → restore offered.</span></p>
+    <p><span class="who">day 0</span> <span class="bot">⏰ trigger: Dana's last day. #hr-offboarding: "Dana Levi (Data Engineer) leaves today. Collecting her accounts and activity…"</span></p>
+    <p><span class="who">agent</span> <span class="bot">investigates on its own: HR record, 12 accounts in the identity provider, 3 vault secrets (metadata only), app owners, Jira, logs, the vector DB. Card: <b>3 blockers</b>: the nightly job uses her key (owner Mia Kim), she is the only Snowflake admin, ticket FIN-221 open · [Approve offboarding] [Decline]</span></p>
+    <p><span class="who">HR</span> [Approve offboarding] → her accounts are disabled (reversible); the case is <b>on hold</b></p>
+    <p><span class="who">day 1</span> <span class="bot">🟡 On hold: the nightly job tried her key at 02:00. Asked Mia Kim to move it; commented on FIN-221.</span></p>
+    <p><span class="who">day 3</span> <span class="bot">Mia Kim: "moved the job to svc-reports". Indexed. Blocker resolved; 2 left.</span></p>
+    <p><span class="who">you</span> @agent why is Dana still on hold?</p>
+    <p><span class="who">bot</span> <span class="bot">Two blockers: she is the only Snowflake admin (asked Omer Cohen, no answer yet), FIN-221 is open.</span><span class="code-line">Guardrails: Dana Levi: not yet. 2 blockers open; 11 days left of the 14-day quiet period.</span></p>
+    <p><span class="who">day 14</span> <span class="bot">🟢 Ready for delete: no use for 14 days, every owner confirmed, no open tickets. → HR alert · [Approve delete]</span></p>
+    <p><span class="who">HR</span> [Approve delete] → deleted, audit log, case closed</p>
   </div>
-  <p style="margin-top:14px">The guardrail line is added by code under the model's answer. The model cannot change it, and it cannot approve, disable or delete anything: it only has read-only tools.</p>
+  <p style="margin-top:14px">"Ready" is the model's proposal; code checks it (no use for 14 days, every blocker resolved with evidence, every owner confirmed, no open ticket by a person). If a check fails, the case stays on hold and the reason is shown.</p>
 </section>
 
 <section id="systems" class="doc">
-  <h2>Real systems</h2>
+  <h2>The case, step by step</h2>
   <figure>
     <div class="fig">
-      <svg class="d" viewBox="0 0 820 470" role="img" aria-labelledby="sy-t sy-d">
-        <title id="sy-t">Week 5 systems</title>
-        <desc id="sy-d">Slack on the left: people ask in their own words and approve with buttons. In the middle, the agent service on your Mac: a chat graph with read-only tools, the investigator, the change workflow and the guardrails in code. On the right, the real systems behind the existing interfaces: Keycloak in Docker for identities, HR status and logins; a sandbox AWS account with IAM users, access keys, CloudTrail, Secrets Manager and a nightly Lambda; GitHub Issues for tickets. Below, OpenRouter answers the chat. The HR watcher turns a Keycloak change into an HR event.</desc>
+      <svg class="d" viewBox="0 0 820 520" role="img" aria-labelledby="sy-t sy-d">
+        <title id="sy-t">The offboarding case</title>
+        <desc id="sy-d">A case starts when the last day arrives. The agent investigates with read tools over the simulated HR system, identity provider, credential vault, app catalog, Jira, logs and the vector DB. A person approves offboarding, and the accounts are disabled. Then each day the agent collects new evidence, indexes it, assesses each blocker, takes safe actions such as asking an owner or commenting on a ticket, and updates the case: on hold, or ready. Code checks a ready proposal; when it passes, HR is alerted and a person approves the delete. The case closes after the delete.</desc>
         <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker></defs>
-        <rect class="zone" x="12" y="12" width="200" height="300" rx="10"/><text class="t" x="28" y="36">SLACK</text>
-        <rect class="node" x="28" y="52" width="168" height="64" rx="8"/><text class="h" x="42" y="76">@agent, in words</text><text class="s" x="42" y="95">"can I delete Noah yet?"</text>
-        <rect class="guard" x="28" y="132" width="168" height="64" rx="8"/><text class="h" x="42" y="156">Approve / Decline</text><text class="s" x="42" y="175">buttons, approvers only</text>
-        <rect class="node" x="28" y="212" width="168" height="64" rx="8"/><text class="h" x="42" y="236">Card + verdict</text><text class="s" x="42" y="255">posted by the agent</text>
+        <rect class="zone-ro" x="560" y="12" width="248" height="380" rx="10"/><text class="t" x="576" y="36">SIMULATED COMPANY · READ</text>
+        <text class="s" x="576" y="64">HR system · resignations, last days</text>
+        <text class="s" x="576" y="90">Identity provider · accounts per app</text>
+        <text class="s" x="576" y="116">Credential vault · encrypted, metadata</text>
+        <text class="s" x="576" y="142">App catalog · owners</text>
+        <text class="s" x="576" y="168">Jira · tickets and comments</text>
+        <text class="s" x="576" y="194">Logs · logins, key use, jobs</text>
+        <rect class="llm" x="576" y="214" width="216" height="52" rx="8"/><text class="h" x="590" y="236">Vector DB (pgvector)</text><text class="s" x="590" y="254">runbooks, tickets, replies</text>
+        <text class="s" x="576" y="296">People who answer the agent</text>
+        <text class="s" x="576" y="322">▶ Next day: the world moves</text>
 
-        <rect class="zone" x="250" y="12" width="290" height="300" rx="10"/><text class="t" x="266" y="36">AGENT SERVICE · YOUR MAC</text>
-        <rect class="llm" x="266" y="52" width="258" height="64" rx="8"/><text class="h" x="280" y="76">Chat graph (LangGraph)</text><text class="s" x="280" y="95">read-only tools · memory per thread</text>
-        <rect class="node" x="266" y="132" width="258" height="64" rx="8"/><text class="h" x="280" y="156">Investigator + change workflow</text><text class="s" x="280" y="175">unchanged · interrupt() for approval</text>
-        <rect class="guard" x="266" y="212" width="258" height="64" rx="8"/><text class="h" x="280" y="236">Guardrails, executor, audit</text><text class="s" x="280" y="255">code decides what is allowed</text>
+        <rect class="node" x="20" y="20" width="230" height="52" rx="8"/><text class="h" x="34" y="42">⏰ Last day arrives</text><text class="s" x="34" y="60">daily trigger, no click</text>
+        <rect class="llm" x="20" y="96" width="230" height="52" rx="8"/><text class="h" x="34" y="118">Investigate (agentic)</text><text class="s" x="34" y="136">the model picks the tools</text>
+        <rect class="guard" x="20" y="172" width="230" height="52" rx="8"/><text class="h" x="34" y="194">Approve offboarding</text><text class="s" x="34" y="212">a person · Slack button</text>
+        <rect class="node" x="20" y="248" width="230" height="52" rx="8"/><text class="h" x="34" y="270">Disable (reversible)</text><text class="s" x="34" y="288">executor · audit log</text>
 
-        <rect class="zone-ro" x="578" y="12" width="230" height="300" rx="10"/><text class="t" x="594" y="36">REAL SYSTEMS</text>
-        <rect class="tool" x="594" y="52" width="198" height="64" rx="8"/><text class="h" x="608" y="76">Keycloak (Docker)</text><text class="s" x="608" y="95">people · HR status · logins</text>
-        <rect class="tool" x="594" y="132" width="198" height="64" rx="8"/><text class="h" x="608" y="156">AWS sandbox</text><text class="s" x="608" y="175">IAM · CloudTrail · Lambda</text>
-        <rect class="tool" x="594" y="212" width="198" height="64" rx="8"/><text class="h" x="608" y="236">GitHub Issues</text><text class="s" x="608" y="255">tickets</text>
+        <rect class="zone" x="280" y="160" width="250" height="230" rx="10"/><text class="t" x="296" y="184">EVERY DAY · AGENTIC</text>
+        <rect class="tool" x="296" y="196" width="218" height="40" rx="8"/><text class="h" x="310" y="221">Collect + index</text>
+        <rect class="llm" x="296" y="246" width="218" height="40" rx="8"/><text class="h" x="310" y="271">Assess each blocker</text>
+        <rect class="tool" x="296" y="296" width="218" height="40" rx="8"/><text class="h" x="310" y="321">Safe actions: ask, ticket</text>
+        <rect class="node" x="296" y="346" width="218" height="34" rx="8"/><text class="h" x="310" y="368">🟡 on hold · update case</text>
 
-        <path class="e" d="M196 84 H266" marker-end="url(#ah)"/>
-        <path class="e" d="M196 164 H266" marker-end="url(#ah)"/>
-        <path class="e" d="M266 244 H196" marker-end="url(#ah)"/>
-        <path class="e" d="M524 84 H594" marker-end="url(#ah)"/><text class="l" x="532" y="76">read</text>
-        <path class="e" d="M524 164 H594" marker-end="url(#ah)"/><text class="l" x="532" y="156">read</text>
-        <path class="e dash" d="M524 244 H594" marker-end="url(#ah)"/><text class="l" x="530" y="236">act*</text>
+        <rect class="guard" x="20" y="330" width="230" height="52" rx="8"/><text class="h" x="34" y="352">Ready? checked in code</text><text class="s" x="34" y="370">14 days quiet, blockers gone</text>
+        <rect class="guard" x="20" y="406" width="230" height="52" rx="8"/><text class="h" x="34" y="428">🟢 Alert HR · Approve delete</text><text class="s" x="34" y="446">a person · Slack button</text>
+        <rect class="node" x="296" y="420" width="218" height="40" rx="8"/><text class="h" x="310" y="445">Delete · case closed</text>
 
-        <rect class="llm" x="266" y="350" width="258" height="56" rx="8"/><text class="h" x="280" y="373">OpenRouter · Gemma 4</text><text class="s" x="280" y="392">chat and investigation models</text>
-        <path class="e" d="M395 312 V350" marker-end="url(#ah)"/>
-        <rect class="node" x="594" y="350" width="198" height="56" rx="8"/><text class="h" x="608" y="373">HR watcher</text><text class="s" x="608" y="392">left in Keycloak → HR event</text>
-        <path class="e" d="M594 378 H560 V292 H524" marker-end="url(#ah)"/>
-        <text class="s" x="28" y="446">* act = disable, restore or delete, only after an approval the guardrails allow; every action is in the hash-chained audit log.</text>
+        <path class="e" d="M135 72 V96" marker-end="url(#ah)"/>
+        <path class="e" d="M135 148 V172" marker-end="url(#ah)"/>
+        <path class="e" d="M135 224 V248" marker-end="url(#ah)"/>
+        <path class="e" d="M250 274 H280" marker-end="url(#ah)"/>
+        <path class="e" d="M296 363 H250 V356" marker-end="url(#ah)"/><text class="l" x="254" y="398">propose ready</text>
+        <path class="e dash" d="M135 330 V310 H296" /><text class="l" x="150" y="300">fails → stay on hold</text>
+        <path class="e" d="M135 382 V406" marker-end="url(#ah)"/>
+        <path class="e" d="M250 440 H296" marker-end="url(#ah)"/>
+        <path class="e dash" d="M514 216 H560" marker-end="url(#ah)"/><path class="e dash" d="M560 120 H250" marker-end="url(#ah)"/>
+        <text class="s" x="20" y="500">Slack: HR alerts, one thread per case with daily updates, the buttons, and the chat ("why is Dana on hold?").</text>
       </svg>
     </div>
-    <figcaption>Each real system sits behind an interface that already exists (<code>EvidenceSource</code>, <code>TargetSystem</code>) or a new one (<code>Directory</code>). The synthetic org stays for the bench.</figcaption>
+    <figcaption>LangGraph runs the case; every wait (approval, next day) is an <code>interrupt()</code>, so a case survives a restart. The model decides what to read and what to say; code decides what may happen.</figcaption>
   </figure>
 </section>
 
@@ -352,52 +362,40 @@ ul.check ul{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}
   <div class="tbl"><table>
     <thead><tr><th>Question</th><th>Decision</th></tr></thead>
     <tbody>
-      <tr><td>What is "real data"?</td><td>Real sandbox systems with invented people: Keycloak in Docker (identity provider and HR record), a sandbox AWS account (IAM users, keys, a real Lambda that uses a leaver's key, CloudTrail), GitHub Issues (tickets)</td></tr>
-      <tr><td>Which model answers in Slack?</td><td>OpenRouter Gemma 4, the model the demos already use (about $0.001 an answer). Bedrock in the account for real employee data</td></tr>
-      <tr><td>Can the chat act?</td><td>No. Read-only tools only; "can I delete?" is answered by the guardrails in code; approval stays on the buttons</td></tr>
-      <tr><td>How do people match across systems?</td><td>By handle (<code>noah.novak</code>): Keycloak username, IAM user name, GitHub label</td></tr>
-      <tr><td>What happens to week 4?</td><td>4.8 (AWS) is pulled into 5.4. 4.6 (doc search) and 4.7 (OpenSearch, Postgres) follow week 5</td></tr>
+      <tr><td>What starts a case?</td><td>The last day recorded in HR. A daily trigger asks "whose last day is today?"; nobody clicks Start</td></tr>
+      <tr><td>Which model?</td><td>OpenRouter Gemma 4 for the investigation, the daily assessment and the chat; the rule model offline and in CI</td></tr>
+      <tr><td>What may the agent do alone?</td><td>Read every system, add to the vector DB, update the case, ask owners in Slack, open or comment on Jira tickets, alert HR. Disable and delete need a person's click</td></tr>
+      <tr><td>Who decides "ready for delete"?</td><td>The model proposes it; code checks it (14 days without use, every blocker resolved with evidence, every owner confirmed, no open ticket by a person)</td></tr>
+      <tr><td>Secrets?</td><td>The vault stores values encrypted; no tool returns a value, only name, owner, last rotated, who uses it</td></tr>
+      <tr><td>Keycloak, AWS?</td><td>Week 6 option: real adapters behind the same interfaces</td></tr>
     </tbody>
   </table></div>
 </section>
 
 <section id="questions" class="doc">
-  <h2>Open questions</h2>
-  <p>All answered on 2026-10-18: the recommended answer was taken for each.</p>
+  <h2>Questions</h2>
+  <p>All answered on 2026-10-18.</p>
   <div class="qs">
-    <article class="q">
-      <div class="q-head"><span class="q-id">Q25</span><span class="st st-done">decided</span></div>
-      <p class="q-title">How long does the bot remember a Slack thread?</p>
-      <p class="rec"><b>Decided (recommended):</b> 7 days, per thread, in the local checkpointer; then it starts fresh. Nothing from a thread ever reaches the investigator.</p>
-    </article>
-    <article class="q">
-      <div class="q-head"><span class="q-id">Q26</span><span class="st st-done">decided</span></div>
-      <p class="q-title">Can someone ask the bot to investigate a person HR has not reported yet?</p>
-      <p class="rec"><b>Decided (recommended):</b> yes, but not by the model. The answer shows a "Start investigation" button; only approvers can click it, and it sends the same signed HR event. The chat itself stays read-only.</p>
-    </article>
-    <article class="q">
-      <div class="q-head"><span class="q-id">Q27</span><span class="st st-done">decided</span></div>
-      <p class="q-title">What do disable and delete do in AWS and Keycloak?</p>
-      <p class="rec"><b>Decided (recommended):</b> disable = access keys Inactive and a deny-all <code>cia-quarantine</code> policy attached in AWS, user <code>enabled=false</code> in Keycloak (all undone by restore). Delete, only after the quiet period: keys deleted, policies detached, IAM user deleted, Keycloak user deleted.</p>
-    </article>
-    <article class="q">
-      <div class="q-head"><span class="q-id">Q28</span><span class="st st-done">decided</span></div>
-      <p class="q-title">How many people go into the real systems?</p>
-      <p class="rec"><b>Decided (recommended):</b> Keycloak gets the demo org's 103 people (free and local). AWS gets 8 IAM users: the traps that need the cloud (the nightly job, the credential chain, the break-glass account, a lookalike) and four plain leavers, so it stays small and cheap.</p>
-    </article>
+    <article class="q"><div class="q-head"><span class="q-id">Q25</span><span class="st st-done">decided</span></div><p class="q-title">How long does the bot remember a Slack thread?</p><p class="rec"><b>Decided:</b> 7 days per thread; nothing from a thread reaches an investigation.</p></article>
+    <article class="q"><div class="q-head"><span class="q-id">Q26</span><span class="st st-done">decided</span></div><p class="q-title">Can someone start a case for a person HR has not reported?</p><p class="rec"><b>Decided:</b> only with a button that approvers can click; the chat stays read-only.</p></article>
+    <article class="q"><div class="q-head"><span class="q-id">Q29</span><span class="st st-done">decided</span></div><p class="q-title">Real systems or a simulation?</p><p class="rec"><b>Decided:</b> a rich simulation: HR system, identity provider, credential vault, app catalog, Jira, logs, and people who answer the agent; each behind an interface.</p></article>
+    <article class="q"><div class="q-head"><span class="q-id">Q30</span><span class="st st-done">decided</span></div><p class="q-title">What may the agent do on its own?</p><p class="rec"><b>Decided:</b> safe actions only: read, index, update the case, ask owners, open or comment on tickets, alert HR. Disable and delete always need a click.</p></article>
+    <article class="q"><div class="q-head"><span class="q-id">Q31</span><span class="st st-done">decided</span></div><p class="q-title">How does time move in the demo?</p><p class="rec"><b>Decided:</b> a ▶ Next day button (Slack and <code>make next-day</code>); nothing moves until you click. Production runs on the calendar, each morning.</p></article>
+    <article class="q"><div class="q-head"><span class="q-id">Q32</span><span class="st st-done">decided</span></div><p class="q-title">Which vector DB?</p><p class="rec"><b>Decided:</b> pgvector (Postgres in Docker) behind a <code>DocIndex</code> interface; embeddings from Ollama <code>nomic-embed-text</code>; a hashing embedder offline and in CI.</p></article>
   </div>
 </section>
 
 <section id="steps" class="doc">
   <h2>Steps and PRs</h2>
   <ol class="steps">
-    <li><span><span class="step-file">docs/week-5.html</span>This plan; hub, CLAUDE.md and README point at it.</span><span class="step-pr done">PR 5.0 · merged</span></li>
-    <li><span><span class="step-file">src/cia/chat.py · slack.py</span>Talk to the bot: a LangGraph chat graph (model → tools → model, 6-step cap) on <code>LLMClient</code>; read-only tools <code>who_left</code>, <code>profile</code>, <code>change_status</code>, <code>can_delete</code> (in code: guardrails, workflow state, quiet-period end, blockers), <code>report</code>, <code>audit</code>; memory per Slack thread; replies escaped, the guardrail line added by code. Works on the demo org first; without a chat key the bot falls back to cards. <em>Built: <code>src/cia/chat.py</code>, a <code>StateGraph</code> (model → tools → model, answer, cap at 6 model turns) on <code>LLMClient</code>; six read-only tools over <code>Desk</code>; <code>Desk.can_delete</code> decides in code from the workflow state, the allowed and approved actions, the quiet period and the blockers (use after the last day, dependencies, tickets by people, MFA off, owner gone). After the model, code escapes the answer and appends "🛡️ Guardrails: …" for every person asked about or named in a question about deleting. Memory per Slack thread in <code>data/chat.db</code>, forgotten after 7 days; one answer at a time per thread; tokens and cost per answer in <code>data/chat.jsonl</code>, never the words. The service turns it on when <code>OPENROUTER_API_KEY</code> is set (<code>CIA_CHAT_LLM=off</code> for cards only); a down model falls back to the cards. Live on the demo org with Gemma 4 26B: "can I delete Noah Novak yet? anything blocking?" → no, used on 2026-10-01 after his last day, a pipeline depends on it, only disable allowed; follow-ups in the thread and Hebrew work; about $0.0001 an answer.</em></span><span class="step-pr">PR 5.1 · in review</span></li>
-    <li><span><span class="step-file">src/cia/backends.py · sources.py</span>One seam for real systems: a <code>Directory</code> interface (leavers, profile, find) and <code>open_backend(synthetic | demo | real)</code> → source, target, directory. The service, the workflow and the desk use it; the bench keeps the synthetic org. No behaviour change.</span><span class="step-pr">PR 5.2</span></li>
-    <li><span><span class="step-file">compose.yaml · infra/keycloak/ · hr_watch.py</span>Keycloak in Docker, seeded from the demo org (users, groups, HR attributes, real logins); <code>KeycloakSource</code>, <code>KeycloakDirectory</code>, <code>KeycloakTarget</code>; an HR watcher that turns "left" into the signed HR event. Contract test against a Keycloak in CI.</span><span class="step-pr">PR 5.3</span></li>
-    <li><span><span class="step-file">infra/aws/ · AwsSource · AwsTarget</span>The AWS sandbox, asked first: 8 IAM users with keys, the nightly Lambda that uses a leaver's key from Secrets Manager, a deny-all quarantine policy, a $5 budget alert, all tagged. <code>AwsSource</code> reads CloudTrail and key last-used and walks user → key → secret → Lambda → team; <code>AwsTarget</code> disables, restores, deletes. <code>make aws-plan</code> (you approve), <code>aws-up</code>, <code>aws-destroy-plan</code>, <code>aws-down</code>, <code>aws-check</code>.</span><span class="step-pr">PR 5.4</span></li>
-    <li><span><span class="step-file">GitHubTickets</span>Tickets as GitHub Issues in a private demo repo, one label per person; the "keep this account" and the injected-instruction tickets are real issues.</span><span class="step-pr">PR 5.5</span></li>
-    <li><span><span class="step-file">make real-demo · docs</span>The demo end to end on the real systems, recorded; results here and in the hub; then the destroy plan and <code>aws-check</code> prints 0.</span><span class="step-pr">PR 5.6</span></li>
+    <li><span><span class="step-file">docs/week-5.html</span>First plan (real systems).</span><span class="step-pr done">PR 5.0 · merged</span></li>
+    <li><span><span class="step-file">src/cia/chat.py</span>Talk to the bot in Slack: chat graph, read-only tools, the guardrail line added by code.</span><span class="step-pr done">PR 5.1 · merged</span></li>
+    <li><span><span class="step-file">docs/week-5.html</span>This plan: the real-life flow, replanned with you.</span><span class="step-pr">PR 5.0b · in review</span></li>
+    <li><span><span class="step-file">src/cia/world.py</span>The simulated company: HR (resignations, last days), identity provider (accounts per app), credential vault (encrypted values, metadata only), app catalog (owners), Jira, logs; a day clock with ▶ Next day; scripted events; simulated people who answer the agent's questions after a few days. Built from the demo org's people. Read tools for each system.</span><span class="step-pr">PR 5.2</span></li>
+    <li><span><span class="step-file">src/cia/docindex.py · compose.yaml</span>Vector DB: <code>DocIndex</code> with <code>PgVectorIndex</code> (Docker) and an in-memory twin for tests; <code>Embedder</code> with Ollama and a hashing fallback; <code>search_docs</code>; runbooks, tickets, owner replies and daily log summaries indexed.</span><span class="step-pr">PR 5.3</span></li>
+    <li><span><span class="step-file">src/cia/case.py</span>The case workflow (LangGraph): last-day trigger → investigate → approve → disable → every day: collect, index, assess, safe actions, update → ready checked in code → alert HR → approve delete → close. Reuses guardrails, executor and audit. Bench scenarios with the rule model.</span><span class="step-pr">PR 5.4</span></li>
+    <li><span><span class="step-file">src/cia/slack.py · chat.py</span>Slack for cases: HR alerts, one thread per case with daily updates, ▶ Next day, the agent asking owners, Approve offboarding and Approve delete; chat tools for cases ("why is Dana on hold?").</span><span class="step-pr">PR 5.5</span></li>
+    <li><span><span class="step-file">make case-demo · docs</span>The demo end to end, recorded; results here and in the hub.</span><span class="step-pr">PR 5.6</span></li>
   </ol>
 </section>
 
@@ -406,10 +404,8 @@ ul.check ul{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}
   <div class="tbl"><table>
     <thead><tr><th>When</th><th>What</th><th>Cost</th></tr></thead>
     <tbody>
-      <tr><td>5.1</td><td>Nothing new: the OpenRouter key is already in <code>.env</code></td><td class="cost">about $0.001 an answer</td></tr>
-      <tr><td>5.3</td><td>Docker Desktop running</td><td class="cost">$0</td></tr>
-      <tr><td>5.4</td><td>A sandbox AWS account with a CLI profile; your approval of the init plan</td><td class="cost">under $1</td></tr>
-      <tr><td>5.5</td><td>A GitHub fine-grained token for one new private repo</td><td class="cost">$0</td></tr>
+      <tr><td>5.3</td><td>Docker running (it is); Ollama with <code>nomic-embed-text</code> (<code>ollama pull nomic-embed-text</code>)</td><td class="cost">$0</td></tr>
+      <tr><td>5.4–5.6</td><td>Nothing new: OpenRouter key and Slack app already set</td><td class="cost">cents for a whole demo</td></tr>
     </tbody>
   </table></div>
 </section>
@@ -418,11 +414,11 @@ ul.check ul{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}
   <h2>Validation</h2>
   <ul class="check">
     <li><span>Every PR: <code>make lint typecheck test</code>, <code>make tui-test</code>, <code>make bench-fake</code> with every gate 0, CI green.</span></li>
-    <li class="done"><span>5.1 (scripted model): "can I delete" calls <code>can_delete</code> and the guardrail line is there even when the model says yes; injected ticket text gets no mention or link through; the step cap holds; a follow-up in the thread keeps context; no write tool exists. <em><code>test_chat.py</code>, 10 tests.</em></span></li>
-    <li><span>5.1 live on the demo org: "who left this week?", "can I delete Wei Lee yet?", "anything blocking for Noah?" get right answers, each with the guardrail line.</span></li>
-    <li><span>5.3: marking a user left in Keycloak brings the Slack card within 10 seconds; the Keycloak contract test passes in CI.</span></li>
-    <li><span>5.4: <code>make aws-plan</code> lists only tagged resources; the agent sees the Lambda's real use of the key; an approved disable makes the key Inactive (<code>aws iam list-access-keys</code>); after <code>aws-down</code>, <code>aws-check</code> prints 0.</span></li>
-    <li><span>5.6: one recorded run of the whole demo; the audit chain verifies.</span></li>
+    <li class="done"><span>5.1 (scripted model): the guardrail line wins over a "yes"; no pings; step cap; thread memory; no write tool. <em><code>test_chat.py</code>, 10 tests.</em></span></li>
+    <li><span>5.2: the world is reproducible from a seed; Next day moves logs, tickets and replies as scripted; no tool returns a secret value.</span></li>
+    <li><span>5.3: the same contract tests pass on the in-memory index and on pgvector (CI service); a paraphrase finds the right runbook.</span></li>
+    <li><span>5.4: on the scenarios, no case is deleted before code's ready check passes; a model that says "ready" too early is held; every disable and delete was approved; the audit chain verifies.</span></li>
+    <li><span>5.6: one recorded demo from last day to deleted.</span></li>
   </ul>
 </section>
 
@@ -431,20 +427,19 @@ ul.check ul{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}
   <div class="tbl"><table>
     <thead><tr><th>Risk</th><th>Mitigation</th></tr></thead>
     <tbody>
-      <tr><td>Someone talks the chat model into an action</td><td>It has no write tools; approval is a button checked against the allow-list and the guardrails</td></tr>
-      <tr><td>The model says "yes, delete" when the guardrails say no</td><td>The guardrail line is added by code under every delete answer and wins; a test proves it</td></tr>
-      <tr><td>A ticket or Slack text carries instructions</td><td>Tool results are data; replies are escaped; the investigator never reads Slack</td></tr>
-      <tr><td>Real employee data reaches a hosted model</td><td>Only invented people exist in the sandbox; real data would use Bedrock in the company account</td></tr>
-      <tr><td>AWS costs run on</td><td>Init plan approved first, $5 budget alert, destroy plan after the demo, <code>aws-check</code> prints 0</td></tr>
-      <tr><td>A real system is down during the demo</td><td>A failing source is a tool error: the verdict becomes <code>insufficient_evidence</code>, never safe</td></tr>
-      <tr><td>Keys end up in git</td><td><code>.env</code> and Terraform state are git-ignored; AWS through a named profile; the GitHub token is read-only on one repo</td></tr>
+      <tr><td>The model declares "ready" too early</td><td>Code checks every ready proposal; a test with a model that always says ready deletes nothing</td></tr>
+      <tr><td>The agent spams owners</td><td>At most one ask per owner per blocker every 3 days, in code</td></tr>
+      <tr><td>A ticket or reply carries instructions</td><td>Tool results are data; actions come only from the allow-listed safe tools; destructive tools do not exist for the model</td></tr>
+      <tr><td>A secret leaks into a prompt or Slack</td><td>No tool returns a value; a test scans prompts and messages for the vault's values</td></tr>
+      <tr><td>The simulation looks scripted</td><td>Owners answer after a random delay from a seed; blockers differ per person; the demo uses the real model</td></tr>
+      <tr><td>Docker or Ollama is down</td><td>Search fails as a tool error, never "no docs"; CI uses the in-memory index and hashing embedder</td></tr>
     </tbody>
   </table></div>
 </section>
 
 <section id="rollback" class="doc">
   <h2>Rollout and rollback</h2>
-  <p>PRs merge in order 5.0 → 5.6, each small. The chat falls back to cards without a key, and <code>BACKEND=demo</code> keeps the mocked org, so the real systems can be switched off with one setting. Revert a squash commit to roll back code. For AWS, rollback is the destroy plan: <code>make aws-destroy-plan</code>, approve, <code>make aws-down</code>, then <code>make aws-check</code> prints 0. Keycloak: <code>docker compose down -v</code>.</p>
+  <p>PRs merge in order 5.2 → 5.6. The service keeps the week 4 flow (HR event → one change) until the case workflow is switched on with <code>CIA_CASES=on</code>; revert a squash commit to roll back. Docker: <code>docker compose down -v</code>.</p>
 </section>
 
 <p class="foot doc">Plan 004 · owner Oded Goldberg · updated 2026-10-18</p>
