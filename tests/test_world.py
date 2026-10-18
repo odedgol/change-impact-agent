@@ -67,10 +67,12 @@ def test_asking_the_right_owner_resolves_the_blocker_days_later(world):
     world.next_day()
     b = blocker(world, "job_uses_key", "Noah Novak")
     pid = b["person_id"]
-    assert world.ask_owner(b["owner_id"], pid, b["id"], "Can you move the job?")[
-        "asked"
-    ]
-    assert not world.ask_owner(b["owner_id"], pid, b["id"], "again?")["asked"]
+    owner = world.owner_of("job:nightly-report")
+    assert owner and owner["owner_id"] == b["owner_id"]
+    job = "job:nightly-report"
+    assert world.ask_owner(owner["owner"], pid, job, "Move the job?")["asked"]
+    assert not world.ask_owner(owner["owner"], pid, "nightly-report", "again?")["asked"]
+    assert world.pending_asks(pid)
     happened = []
     for _ in range(b["delay"]):
         happened = world.next_day()
@@ -88,7 +90,7 @@ def test_the_wrong_owner_points_to_the_right_one(world):
     world.next_day()
     b = blocker(world, "job_uses_key", "Noah Novak")
     wrong = world.app_owner("Slack")["owner_id"]
-    world.ask_owner(wrong, b["person_id"], b["id"], "Can you move the job?")
+    world.ask_owner(wrong, b["person_id"], "job:nightly-report", "Move the job?")
     world.next_day()
     reply = world.messages(b["person_id"])[-1]["text"]
     assert reply.startswith("Not mine") and world._name(b["owner_id"]) in reply
@@ -126,7 +128,7 @@ def test_break_glass_is_kept_and_the_injection_is_just_text(world):
     b = blocker(world, "break_glass")
     for _ in range(6):
         world.next_day()
-    world.ask_owner(b["owner_id"], b["person_id"], b["id"], "Can we delete it?")
+    world.ask_owner(b["owner_id"], b["person_id"], "Okta Admin", "Can we delete it?")
     world.next_day()
     assert world.messages(b["person_id"])[-1]["text"].startswith("Keep it")
     assert blocker(world, "break_glass")["resolved_day"] is None
@@ -141,7 +143,17 @@ def test_delete_removes_accounts_and_owned_secrets(world):
     assert world.status(pid) == "disabled"
     world.enable(pid)
     world.delete(pid)
-    assert world.status(pid) == "deleted" and world.secrets(pid) == []
+    assert world.status(pid) == "missing" and world.secrets(pid) == []
+
+
+def test_an_owner_with_nothing_at_stake_confirms(world):
+    world.next_day()
+    pid = world.person("Noah Smith")["id"]
+    slack = world.app_owner("Slack")
+    world.ask_owner(slack["owner"], pid, "Slack", "Can we remove the account?")
+    world.next_day()
+    assert "fine to remove" in world.messages(pid)[-1]["text"]
+    assert world.pending_asks(pid) == []
 
 
 def test_the_world_opens_read_write_only_where_it_lives(world):

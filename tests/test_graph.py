@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 from langchain_core.runnables import RunnableConfig
 
+from cia.case import ROUTE_LABELS as CASE_ROUTES
 from cia.generator import generate
 from cia.graph import (
     DOCS_BEGIN,
@@ -156,7 +157,11 @@ def test_checkpointer_saves_every_step_under_the_request_id(org):
 
 @pytest.mark.parametrize(
     "name, labels",
-    [("engine-graph", ROUTE_LABELS), ("workflow-graph", WORKFLOW_ROUTES)],
+    [
+        ("engine-graph", ROUTE_LABELS),
+        ("workflow-graph", WORKFLOW_ROUTES),
+        ("case-graph", CASE_ROUTES),
+    ],
 )
 def test_every_node_and_route_has_a_drawing_entry(name, labels):
     """Adding a node or a route to either graph fails here until it has a kind or a label for the docs."""
